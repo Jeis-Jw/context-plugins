@@ -2,7 +2,7 @@
   "schema": "context-host-evidence/v1",
   "host": "codex",
   "evidence_kind": "live_current_session",
-  "observed_at": "2026-08-14",
+  "observed_at": "2026-08-20",
   "collection_surface": "active_session_inventory",
   "inventory_scope": "installed plugin capabilities exposed to this Codex session",
   "target_selector": "context-core@context-plugins",
