@@ -94,6 +94,7 @@ claude plugin install context-decision@context-plugins
 |---|---|
 | 이전 맥락을 반영해 작업 재개 | “이 repository의 관련 결정과 관찰을 확인하고 이어서 설명해줘.” |
 | 새 선택의 충돌 확인 | “이 선택이 기존 결정과 충돌하는지 먼저 확인해줘.” |
+| scope의 현재 결정을 읽기용 명세로 보기 | “`project/auth`의 Current DEC를 spec view로 조립해줘.” |
 | 중요한 근거 보존 | “이번 운영 결과를 재사용 가능한 observation 후보로 만들어줘.” |
 | 작업 인계 | “여기서 중단할 수 있게 현재 상태를 snapshot으로 정리해줘.” |
 | 결정 변경 | “기존 결정을 유지할지 supersede할지 실제 취지까지 비교해줘.” |

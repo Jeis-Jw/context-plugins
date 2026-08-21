@@ -36,6 +36,12 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 
 이 비교는 실제 본문을 대상으로 하며 문자열 hash, ID나 metadata를 의미 동일성의 근거로 사용하지 않습니다. 충돌·취지 변경은 결론 전에 알리고, 그 외의 성숙한 결정은 원래 답 뒤 grouped proposal에 한 번 포함합니다. dismissed·deferred 후보는 새 evidence 전까지 반복하지 않으며 승인된 final bundle만 `context-core` coordinator가 적용합니다. 이후 brief는 세 핵심 section을 함께 복원하고, 새 결정이 같은 slot을 supersede하면 이전 DEC를 history로 이동해 더는 따르지 않도록 표시합니다.
 
+## Read-only spec view
+
+`decision_cli.py spec-view --scope <scope>`는 지정 scope와 exact·strict ancestor·strict descendant 관계인 Current DEC를 area index metadata에서 먼저 고른 뒤, 선택된 실제 본문의 `결정`과 `취지`만 읽기용 명세로 조립합니다. 문자열 prefix는 scope 관계로 보지 않으며 History와 `do_not_follow`는 포함하지 않습니다.
+
+결과는 `(created_at, id)` 오름차순이고 JSON envelope와 마지막 newline을 포함한 실제 CLI stdout UTF-8 기준 최대 32 KiB입니다. 상한을 넘으면 같은 순서의 뒤쪽 DEC를 section 중간 절단 없이 항목 전체로 제외하고 `omitted_count`를 반환합니다. 이 projection은 호출할 때마다 다시 계산하며 approval, 저장 또는 filesystem write를 수행하지 않습니다.
+
 `init`이 설치하는 managed policy가 증분 audit, 선택적 recall, 변화 알림과 grouped capture를 매 대화에서 유도합니다. 이는 agent의 같은 응답 pass에서 동작하는 운영지침이지 background daemon이나 per-turn hook은 아닙니다. 사용자 확인 없는 durable write는 계속 금지됩니다.
 
 기존 `wiki/` 자동 migration은 제공하지 않습니다. PCMS는 조직 권한·승인 workflow·cross-project search·policy·audit·conflict queue의 control-plane 경계이며, 이 local plugin은 결정 기록과 recall 자체에 집중합니다.

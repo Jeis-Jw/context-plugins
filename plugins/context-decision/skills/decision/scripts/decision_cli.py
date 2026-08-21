@@ -22,6 +22,7 @@ EXIT_INTEGRITY = 6
 PROTOCOL = "context-common/v2"
 DECISION_INDEX = "context/decision/decision.index.md"
 MAX_BRIEF_BYTES = 8 * 1024
+MAX_SPEC_VIEW_BYTES = 32 * 1024
 MAX_CHECK_BYTES = 24 * 1024
 MAX_CHECK_RESULT_BYTES = 32 * 1024
 MAX_OMITTED_ID_SAMPLE = 8
@@ -105,6 +106,16 @@ def _canonical_value(value: Any) -> Any:
 
 def canonical_json(value: Any) -> str:
     return json.dumps(_canonical_value(value), ensure_ascii=False, separators=(",", ":"))
+
+
+def _serialize_success(result: dict[str, Any], *, json_mode: bool) -> str:
+    if json_mode:
+        return json.dumps(
+            {"ok": True, "result": result},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ) + "\n"
+    return json.dumps(result, ensure_ascii=False, indent=2) + "\n"
 
 
 def canonical_digest(value: Any) -> str:
@@ -474,7 +485,7 @@ def schema_result() -> dict[str, Any]:
         "physical_write": False,
         "required_plugin": REQUIRED_PLUGIN,
         "core_sections": list(CORE_SECTIONS),
-        "commands": ["init", "schema", "capabilities", "candidate prepare", "check", "draft", "capture", "search", "read", "brief", "conflicts", "supersede", "import-fallback", "withdraw", "annotate", "revisit", "batch validate", "plan validate"],
+        "commands": ["init", "schema", "capabilities", "candidate prepare", "check", "draft", "capture", "search", "read", "brief", "spec-view", "conflicts", "supersede", "import-fallback", "withdraw", "annotate", "revisit", "batch validate", "plan validate"],
     }
 
 
@@ -1565,6 +1576,115 @@ def brief_decisions(
     return {"items": items, "returned": len(items), "omitted": omitted, "truncated": omitted > 0, "max_bytes": max_bytes}
 
 
+def _scope_related(left: str, right: str) -> bool:
+    return left == right or is_ancestor_scope(left, right) or is_ancestor_scope(right, left)
+
+
+def spec_view(
+    repo: pathlib.Path,
+    *,
+    scope: str,
+    max_bytes: int = MAX_SPEC_VIEW_BYTES,
+    json_mode: bool = True,
+) -> dict[str, Any]:
+    """Build an ephemeral DEC projection without opening History artifacts."""
+
+    if not 512 <= max_bytes <= MAX_SPEC_VIEW_BYTES:
+        raise DecisionError("usage_invalid", "spec-view max-bytes must be in 512..32768")
+    scope = canonical_scope(scope)
+    index_text, current, _ = _index(repo)
+    matched: list[dict[str, Any]] = []
+    for row in current:
+        row_scope = row.get("scope")
+        try:
+            canonical_row_scope = canonical_scope(row_scope)
+        except DecisionError as error:
+            raise DecisionError(
+                "index_stale",
+                "Current DEC row lacks a canonical scope projection",
+                {"id": row.get("id"), "path": row.get("path")},
+                EXIT_INTEGRITY,
+            ) from error
+        if canonical_row_scope != row_scope:
+            raise DecisionError(
+                "index_stale",
+                "Current DEC row scope projection is noncanonical",
+                {"id": row.get("id"), "path": row.get("path")},
+                EXIT_INTEGRITY,
+            )
+        if _scope_related(scope, canonical_row_scope):
+            matched.append(row)
+    matched.sort(key=lambda row: (row["created_at"], row["id"]))
+
+    items: list[dict[str, Any]] = []
+    body_reads = 0
+
+    def result_value() -> dict[str, Any]:
+        omitted_count = len(matched) - len(items)
+        return {
+            "schema": "context-decision-spec-view/v1",
+            "scope": scope,
+            "items": sorted(items, key=lambda item: (item["created_at"], item["id"])),
+            "returned": len(items),
+            "omitted_count": omitted_count,
+            "truncated": omitted_count > 0,
+            "max_bytes": max_bytes,
+            "retrieval": {
+                "index_sha256": file_digest(index_text),
+                "total_current": len(current),
+                "metadata_matches": len(matched),
+                "body_reads": body_reads,
+                "history_body_reads": 0,
+            },
+            "projection": "ephemeral",
+            "physical_write": False,
+        }
+
+    def output_bytes() -> int:
+        return len(_serialize_success(result_value(), json_mode=json_mode).encode("utf-8"))
+
+    if output_bytes() > max_bytes:
+        raise DecisionError(
+            "output_too_large",
+            "spec-view output envelope exceeds max-bytes",
+            {"max_bytes": max_bytes},
+            EXIT_CONFLICT,
+        )
+
+    for row in matched:
+        record = _record(repo, row)
+        body_reads += 1
+        item = {
+            "id": record["id"],
+            "path": record["path"],
+            "created_at": record["frontmatter"]["created_at"],
+            "scope": record["frontmatter"]["scope"],
+            "decision_key": record["frontmatter"]["decision_key"],
+            "sections": {
+                "결정": record["sections"]["결정"],
+                "취지": record["sections"]["취지"],
+            },
+        }
+        items.append(item)
+        if output_bytes() > max_bytes:
+            items.pop()
+            while items and output_bytes() > max_bytes:
+                items.pop()
+            if output_bytes() > max_bytes:
+                raise DecisionError(
+                    "output_too_large",
+                    "spec-view metadata counters exceed max-bytes",
+                    {"max_bytes": max_bytes},
+                    EXIT_CONFLICT,
+                )
+            break
+
+    result = result_value()
+    if len(_serialize_success(result, json_mode=json_mode).encode("utf-8")) > max_bytes:
+        raise DecisionError("output_too_large", "spec-view result exceeds max-bytes", exit_code=EXIT_CONFLICT)
+    return result
+
+
 def _comparison_tokens(*values: str) -> set[str]:
     text = normalized_key(" ".join(value for value in values if value))
     return {
@@ -2108,6 +2228,10 @@ def build_parser() -> argparse.ArgumentParser:
     brief.add_argument("--include-history", action="store_true")
     brief.add_argument("--max-bytes", type=int, default=MAX_BRIEF_BYTES)
     brief.add_argument("--json", action="store_true")
+    projection = sub.add_parser("spec-view")
+    projection.add_argument("--scope", required=True)
+    projection.add_argument("--max-bytes", type=int, default=MAX_SPEC_VIEW_BYTES)
+    projection.add_argument("--json", action="store_true")
     conflicts = sub.add_parser("conflicts")
     conflicts.add_argument("--scope", required=True)
     conflicts.add_argument("--decision-key", required=True)
@@ -2154,7 +2278,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan_validate.add_argument("--plan-bundle", required=True)
     plan_validate.add_argument("--json", action="store_true")
     for operational in (
-        init, prepare, check, draft, capture, search, read, brief, conflicts, supersede,
+        init, prepare, check, draft, capture, search, read, brief, projection, conflicts, supersede,
         fallback, withdraw, annotate, revisit, validate, plan_validate,
     ):
         _add_preflight_arguments(operational)
@@ -2198,6 +2322,8 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         return read_decision(repo, args.id, sections=args.section, max_bytes=args.max_bytes)
     if args.command == "brief":
         return brief_decisions(repo, query=args.query, identifiers=args.id or (), include_history=args.include_history, max_bytes=args.max_bytes)
+    if args.command == "spec-view":
+        return spec_view(repo, scope=args.scope, max_bytes=args.max_bytes, json_mode=args.json)
     if args.command == "conflicts":
         return conflict_candidates(repo, args.scope, args.decision_key)
     if args.command == "supersede":
@@ -2229,8 +2355,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         result = dispatch(args)
-        envelope = {"ok": True, "result": result}
-        print(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")) if getattr(args, "json", False) else json.dumps(result, ensure_ascii=False, indent=2))
+        sys.stdout.write(_serialize_success(result, json_mode=getattr(args, "json", False)))
         return 0
     except DecisionError as error:
         print(json.dumps(error.envelope(), ensure_ascii=False, separators=(",", ":")))

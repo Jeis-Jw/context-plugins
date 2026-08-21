@@ -14,3 +14,4 @@ context-decision은 직접 설치된 context-core가 활성 상태일 때만 사
 5. direct capture는 `candidate prepare --candidate-id ... --commitment-evidence ...`로 exact candidate를 고정한다. owner가 판독한 뒤 `capture --candidate @file --attestation @file` 또는 `--decline-reason`/`--needs-clarification-reason`으로 넘긴다. CLI가 evidence나 attestation을 발명하지 않는다.
 6. `batch validate`는 exact slot, scope overlap, acknowledgement와 ordered prior bundle overlay를 구조적으로 검증한다. ordinary evidence OBS는 DEC의 `relations.informed_by`로 유지한다.
 7. complete final bundle, exact digest 승인, index rebuild와 physical write는 context-core만 소유한다. decision CLI의 write 수는 항상 0이다.
+8. 사용자가 scope의 현재 결정을 읽기용 명세로 요청하면 `spec-view --scope ...`를 사용한다. exact·ancestor·descendant Current DEC의 실제 `결정`·`취지`만 조립하며 History, 승인과 저장은 포함하지 않는다.
