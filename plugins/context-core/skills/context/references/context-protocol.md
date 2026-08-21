@@ -17,6 +17,15 @@
 - `--strict-index`는 fallback 없이 exit 6 `index_stale`로 실패한다.
 - root index가 없으면 storage error `context_root_missing`이며 plugin dependency error와 다르다.
 
+## 비용 비례 금지 invariant
+
+recall·capture의 artifact body materialization, bounded output과 model·owner invocation 비용은 corpus 크기, 등록 addon 수 또는 누적 turn 수에 비례해 증가하지 않아야 한다.
+
+- runtime 경계는 healthy Stage 1의 index-only read와 artifact open/list/stat 0, Stage 1 4 KiB·body pack 8 KiB, 최대 8개/16 KiB candidate batch, owner input 2 KiB, approval preview 32 KiB 상한으로 집행한다. `context-decision`은 별도로 brief 8 KiB·comparison input 24 KiB·result 32 KiB 상한을 둔다.
+- `tests/context-v1/test_token_io_evidence.py`는 synthetic large corpus의 artifact I/O, candidate·addon 경계와 output byte budget을 계측한다.
+- root·area index bytes를 읽고 metadata row를 score하는 I/O·CPU는 선택한 area index 크기에 따라 증가할 수 있다. 현재 구현은 전체 artifact body materialization을 피하는 것이며 전체 recall 계산량의 O(1)을 보장하지 않는다.
+- 대화 delta당 단일 audit, signal이 없을 때의 침묵, addon의 대화 재판독 금지는 관리형 policy의 의무다. CLI는 `audit_count:1`과 bounded envelope을 검증하지만 host/model이 policy를 실제로 한 번만 수행하는지는 hard runtime guarantee가 아니다.
+
 ## 대화 관찰 경계
 
 - 관리형 policy는 각 user turn의 새 의미를 같은 model response pass에서 한 번 audit한다. 이는 background daemon, 별도 model call 또는 per-turn CLI hook이 아니다. 신호가 없으면 tool call과 user-visible status가 모두 0이다.

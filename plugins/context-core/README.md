@@ -30,3 +30,5 @@
 0.3.0은 각 대화의 새 의미만 같은 응답 pass에서 audit하고, durable signal이 있을 때만 metadata-first recall과 선택된 실제 본문 read를 수행합니다. session-local ledger는 읽은 `{id,sha256}`와 pending·dismissed 참조만 유지해 중복 읽기와 반복 제안을 줄이며, addon은 core의 단일 audit 결과를 재사용합니다.
 
 0.4.0은 source repository와 marketplace를 `Jeis-Jw/context-plugins` / `context-plugins`로 분리한 distribution breaking release입니다. storage protocol은 `context-common/v2`를 유지하며 기존 설치를 자동 변경하지 않습니다.
+
+0.4.1은 목적에 맞는 context 판정 기준과 recall 비용 경계를 명문화하고, managed policy의 정본과 runtime 설치 본문을 함께 정렬한 patch release입니다.

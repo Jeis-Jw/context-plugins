@@ -35,6 +35,7 @@ class PluginContractTests(unittest.TestCase):
         for contract in (
             "같은 response pass",
             "별도 model·tool 호출 없이",
+            "미래 재사용성·번복 비용·현재 상태 영향",
             "session-local ephemeral ledger",
             "metadata 먼저",
             "새 근거가 생기기 전에는 다시 제안하지 않는다",
@@ -42,6 +43,20 @@ class PluginContractTests(unittest.TestCase):
         ):
             self.assertIn(contract, policy)
         self.assertLessEqual(len(policy.encode("utf-8")), 2200)
+
+        rule = (PLUGIN / "rules/context-policy.md").read_text(encoding="utf-8")
+        self.assertIn("미래 재사용성·번복 비용·현재 상태 영향", rule)
+
+    def test_public_protocol_states_non_proportional_cost_invariant_and_limit(self) -> None:
+        protocol = (PLUGIN / "skills/context/references/context-protocol.md").read_text(encoding="utf-8")
+        for contract in (
+            "비용 비례 금지 invariant",
+            "artifact body materialization, bounded output과 model·owner invocation 비용",
+            "전체 recall 계산량의 O(1)을 보장하지 않는다",
+            "tests/context-v1/test_token_io_evidence.py",
+            "hard runtime guarantee가 아니다",
+        ):
+            self.assertIn(contract, protocol)
 
     def test_explicit_init_installs_active_host_policy_and_preserves_external_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

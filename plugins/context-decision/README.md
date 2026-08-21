@@ -47,3 +47,5 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 0.3.0은 core audit가 선택 형성·변경 신호를 찾았을 때만 decision 비교를 수행합니다. `check`는 metadata로 후보를 먼저 좁히고 무관한 score-0 본문을 열지 않으며, 실제 관련 DEC 본문·scope·rationale 비교와 승인형 capture 경계는 그대로 유지합니다.
 
 0.4.0은 exact dependency를 `context-core@context-plugins`, source `Jeis-Jw/context-plugins`로 옮긴 distribution breaking release입니다. `context-common/v2` artifact 호환성은 유지하지만 기존 marketplace 설치를 자동 전환하지 않습니다.
+
+0.4.1은 `context-core`의 판정·비용 계약 개선과 distribution version을 맞춘 patch release이며 decision semantics와 `context-common/v2` 계약은 변경하지 않습니다.

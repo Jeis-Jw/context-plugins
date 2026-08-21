@@ -10,7 +10,7 @@
         "source": "local",
         "path": "./plugins/context-core"
       },
-      "version": "0.4.0",
+      "version": "0.4.1",
       "description": "Proactive scoped recall, actual-body comparison, approval-gated capture suggestions, and coordinated context writes.",
       "policy": {
         "installation": "AVAILABLE",
@@ -24,7 +24,7 @@
         "source": "local",
         "path": "./plugins/context-decision"
       },
-      "version": "0.4.0",
+      "version": "0.4.1",
       "description": "Decision continuity with actual-body comparison, rationale-change and conflict notices, and superseded history.",
       "policy": {
         "installation": "AVAILABLE",

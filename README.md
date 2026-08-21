@@ -17,7 +17,7 @@ Git/Markdown 기반 durable project context를 coding agent가 안전하게 회�
 - Core selector: `context-core@context-plugins`
 - Planned source: `Jeis-Jw/context-plugins`
 - Protocol: `context-common/v2`
-- Current repository version: `0.4.0`
+- Current repository version: `0.4.1`
 
 GitHub source repository는 `Jeis-Jw/context-plugins`로 공개합니다. marketplace에는 아직 publish되지 않았고 live install도 검증되지 않았습니다. 현재 설치된 기존 좌표 `context-core@jeis-ai-plugins`는 별도 distribution이며 새 source의 활성화를 증명하지 않습니다.
 
