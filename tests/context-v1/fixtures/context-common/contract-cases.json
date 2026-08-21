@@ -56,6 +56,11 @@
     "owner_descriptor_v2_target_validation": {"input": "semantically approved draft with an undeclared structural field", "expected": ["core_independent_validation", "schema_invalid", "write_zero"]},
     "owner_descriptor_v2_lifecycle_relations": {"input": "generic successor topology with and without reciprocal references", "expected": ["malformed_reference_rejected", "predecessor_history", "successor_current", "reciprocal_edges"]},
     "owner_descriptor_v2_apply_revalidation": {"input": "approved bundle waiting on root lock while area index changes", "expected": ["post_lock_revalidation", "precondition_changed", "approved_artifact_write_zero"]},
-    "owner_descriptor_v2_partial_retry": {"input": "none, exact seed-only, root-row-plus-profile-only and complete registration states", "expected": ["allowed_prefixes_converge", "complete_noop", "descriptor_bytes_preserved"]}
+    "owner_descriptor_v2_partial_retry": {"input": "none, exact seed-only, root-row-plus-profile-only and complete registration states", "expected": ["allowed_prefixes_converge", "complete_noop", "descriptor_bytes_preserved"]},
+    "assumption_three_owner_registration": {"input": "public core and addon init surfaces register built-in OBS, v1 DEC and v2 ASM in one temporary repository", "expected": ["mixed_v1_v2_ready", "three_owner_capabilities", "profile_only_for_v2"]},
+    "assumption_routing_boundaries": {"input": "decision, assumption and explicit observation candidates with host-collected owner outcomes", "expected": ["decision_proposed", "assumption_provisional", "cross_owner_declines", "write_zero"]},
+    "assumption_owner_conflict": {"input": "faulty ASM claim and valid DEC claim rebound to the same dual-specialized candidate", "expected": ["owner_conflict", "multiple_specialized_owners_claimed", "write_zero"]},
+    "assumption_approval_transaction": {"input": "validated ASM capture result previewed then applied in a temporary repository", "expected": ["preview_write_zero", "wrong_digest_rejected", "exact_digest_applied", "doctor_ready"]},
+    "assumption_receipt_spoof_rejection": {"input": "tampered profiled owner result or validation receipt passed to public core preview", "expected": ["owner_validation_invalid", "artifact_write_zero", "index_write_zero"]}
   }
 }

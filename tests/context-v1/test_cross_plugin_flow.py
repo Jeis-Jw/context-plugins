@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import concurrent.futures
+import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -26,9 +28,11 @@ def load(name: str, path: Path):
 
 context_cli = load("context_cli_cross", ROOT / "plugins/context-core/skills/context/scripts/context_cli.py")
 decision_cli = load("decision_cli_cross", ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py")
+assumption_cli = load("assumption_cli_cross", ROOT / "plugins/context-assumption/skills/assumption/scripts/assumption_cli.py")
 CORE_CLI = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
 DECISION_CLI = ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py"
 DECISION_INIT = ROOT / "plugins/context-decision/skills/init/scripts/decision_init.py"
+ASSUMPTION_CLI = ROOT / "plugins/context-assumption/skills/assumption/scripts/assumption_cli.py"
 
 
 def run_cli(repo: Path, cli: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -39,6 +43,195 @@ def run_cli(repo: Path, cli: Path, *arguments: str) -> subprocess.CompletedProce
         text=True,
         capture_output=True,
     )
+
+
+def public_result(completed: subprocess.CompletedProcess[str]) -> dict:
+    if completed.returncode != 0:
+        raise AssertionError(completed.stdout + completed.stderr)
+    envelope = json.loads(completed.stdout)
+    if envelope.get("ok") is not True or not isinstance(envelope.get("result"), dict):
+        raise AssertionError(completed.stdout + completed.stderr)
+    return envelope["result"]
+
+
+def write_json(path: Path, value: object, *, canonical: bool = False) -> Path:
+    text = (
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        if canonical
+        else json.dumps(value, ensure_ascii=False)
+    )
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def repository_bytes(repo: Path) -> dict[str, str]:
+    output: dict[str, str] = {}
+    for path in sorted(repo.rglob("*")):
+        if not path.is_file() or ".git" in path.relative_to(repo).parts:
+            continue
+        output[path.relative_to(repo).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return output
+
+
+def public_preflight(root: Path, repo: Path, *, prefix: str) -> tuple[Path, Path]:
+    doctor = public_result(run_cli(repo, CORE_CLI, "doctor", "--json"))
+    inventory = {
+        "plugins": [{
+            "marketplace": "context-plugins",
+            "plugin": "context-core",
+            "source": "Jeis-Jw/context-plugins",
+            "enabled": True,
+            "protocols": ["context-common/v2"],
+            "entrypoint": str(CORE_CLI.resolve()),
+        }],
+    }
+    return (
+        write_json(root / f"{prefix}-inventory.json", inventory),
+        write_json(root / f"{prefix}-doctor.json", doctor),
+    )
+
+
+def preflight_arguments(inventory: Path, doctor: Path) -> list[str]:
+    return [
+        "--host", "codex",
+        "--core-inventory", f"@{inventory}",
+        "--core-doctor", f"@{doctor}",
+    ]
+
+
+def bootstrap_three_owners(root: Path, repo: Path) -> dict:
+    public_result(run_cli(repo, CORE_CLI, "init", "--host", "codex", "--json"))
+
+    decision_inventory, decision_doctor = public_preflight(root, repo, prefix="decision-init")
+    decision_plan = public_result(run_cli(
+        repo,
+        DECISION_CLI,
+        "init",
+        *preflight_arguments(decision_inventory, decision_doctor),
+        "--json",
+    ))
+    decision_descriptor = write_json(root / "decision-descriptor.json", decision_plan["owner_descriptor"])
+    decision_seed = root / "decision.index.md"
+    decision_seed.write_text(decision_plan["index_seed"], encoding="utf-8")
+    decision_bootstrap = public_result(run_cli(
+        repo,
+        CORE_CLI,
+        "bootstrap",
+        "--descriptor", f"@{decision_descriptor}",
+        "--index-seed", f"@{decision_seed}",
+        "--host", "codex",
+        "--json",
+    ))
+
+    inventory, doctor = public_preflight(root, repo, prefix="assumption-init")
+    assumption_plan = public_result(run_cli(
+        repo,
+        ASSUMPTION_CLI,
+        "init",
+        *preflight_arguments(inventory, doctor),
+        "--json",
+    ))
+    assumption_descriptor = write_json(
+        root / "assumption-descriptor.json",
+        assumption_plan["owner_descriptor"],
+        canonical=True,
+    )
+    assumption_seed = root / "assumption.index.md"
+    assumption_seed.write_text(assumption_plan["index_seed"], encoding="utf-8")
+    assumption_bootstrap = public_result(run_cli(
+        repo,
+        CORE_CLI,
+        "bootstrap",
+        "--descriptor", f"@{assumption_descriptor}",
+        "--index-seed", f"@{assumption_seed}",
+        "--host", "codex",
+        "--json",
+    ))
+
+    inventory, doctor = public_preflight(root, repo, prefix="ready")
+    core_capabilities = public_result(run_cli(repo, CORE_CLI, "capabilities", "--json"))
+    decision_capabilities = public_result(run_cli(repo, DECISION_CLI, "capabilities", "--json"))
+    assumption_capabilities = public_result(run_cli(repo, ASSUMPTION_CLI, "capabilities", "--json"))
+    capabilities = {
+        "schema": "context-owner-capabilities/v1",
+        "owners": [
+            *core_capabilities["owners"],
+            *decision_capabilities["owners"],
+            *assumption_capabilities["owners"],
+        ],
+    }
+    return {
+        "inventory": inventory,
+        "doctor": doctor,
+        "capabilities": capabilities,
+        "decision_bootstrap": decision_bootstrap,
+        "assumption_bootstrap": assumption_bootstrap,
+        "assumption_descriptor": assumption_plan["owner_descriptor"],
+    }
+
+
+def assumption_candidate(candidate_id: str = "cand_123e4567e89b42d3a456426614174100") -> dict:
+    claim = "외부 인증 공급자의 장애율이 이번 분기에도 0.1% 미만일 것이다."
+    return {
+        "schema": "context-capture-candidate/v1",
+        "candidate_id": candidate_id,
+        "title": "인증 공급자 가용성 가정",
+        "claim": claim,
+        "summary": "인증 공급자의 최근 안정성이 당분간 유지된다고 가정한다.",
+        "captured_from": "conversation",
+        "requested_kind": "assumption",
+        "specialized_kinds": ["assumption"],
+        "fallback_kind": None,
+        "scope_hint": "project/auth",
+        "source_refs": ["conversation:test"],
+        "search_terms": ["인증 공급자", "장애율"],
+        "owner_inputs": {
+            "assumption": {
+                "assumption": claim,
+                "basis": ["최근 90일 장애율이 0.1% 미만이었다."],
+                "unverified_ok": True,
+                "confirm_conditions": ["다음 분기 SLA 보고서를 확인한다."],
+                "refute_conditions": ["장애율이 0.1% 이상이면 반증한다."],
+            },
+        },
+    }
+
+
+def assumption_attestation(value: dict) -> dict:
+    return {
+        "schema": "context-semantic-attestation/v1",
+        "operation": "claim",
+        "input_schema": value["schema"],
+        "input_digest": assumption_cli.canonical_digest(value),
+        "assertions": [
+            {"name": "assumption_present", "value": True, "evidence_pointers": ["/owner_inputs/assumption/assumption"]},
+            {"name": "unverified_ok", "value": True, "evidence_pointers": ["/owner_inputs/assumption/unverified_ok"]},
+        ],
+    }
+
+
+def generic_decline(candidate: dict, capability: dict, reason: str) -> dict:
+    return {
+        "schema": "context-owner-result/v1",
+        "result_type": "claim",
+        "transition": "capture",
+        "owner": capability["owner"],
+        "target_kind": capability["kind"],
+        "candidate_id": candidate["candidate_id"],
+        "decision": "decline",
+        "reason": reason,
+        "capability_digest": context_cli.canonical_digest(capability),
+        "semantic_inputs": [{
+            "operation": "claim",
+            "input_schema": candidate["schema"],
+            "input_digest": context_cli.canonical_digest(candidate),
+            "value": candidate,
+        }],
+        "semantic_attestations": [],
+        "artifact_drafts": [],
+        "effects": [],
+        "proposed_plan": None,
+    }
 
 
 def initialize(repo: Path) -> None:
@@ -353,6 +546,432 @@ class CrossPluginFlowTests(unittest.TestCase):
                 [(phase["phase"], phase["status"]) for phase in json.loads(retried.stdout)["result"]["phases"]],
             )
             self.assertIn(context_cli.POLICY_BODY, (repo / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_acceptance_57_three_owner_mixed_registration(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            state = bootstrap_three_owners(root, repo)
+
+            self.assertEqual("applied", state["decision_bootstrap"]["phases"][1]["status"])
+            self.assertEqual("applied", state["assumption_bootstrap"]["phases"][1]["status"])
+            doctor = public_result(run_cli(repo, CORE_CLI, "doctor", "--json"))
+            self.assertEqual("ready", doctor["repository_state"])
+            self.assertEqual([], doctor["issues"])
+
+            root_index = (repo / context_cli.ROOT_INDEX).read_text(encoding="utf-8")
+            self.assertEqual(
+                ["assumption"],
+                [item["area"] for item in context_cli.parse_root_profiles(root_index)],
+            )
+            self.assertEqual(
+                state["assumption_descriptor"],
+                context_cli.parse_area_profile(
+                    (repo / "context/assumption/assumption.index.md").read_text(encoding="utf-8")
+                ),
+            )
+            self.assertIsNone(
+                context_cli.parse_area_profile(
+                    (repo / "context/decision/decision.index.md").read_text(encoding="utf-8")
+                )
+            )
+            recalled = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "recall",
+                "--area", "decision",
+                "--area", "assumption",
+                "--json",
+            ))
+            self.assertEqual([], recalled["items"])
+            self.assertEqual(
+                {"context-core", "context-decision", "context-assumption"},
+                {item["owner"] for item in state["capabilities"]["owners"]},
+            )
+
+    def test_acceptance_58_assumption_routing_boundaries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            state = bootstrap_three_owners(root, repo)
+            before = repository_bytes(repo)
+            preflight = preflight_arguments(state["inventory"], state["doctor"])
+            capabilities_path = write_json(root / "capabilities.json", state["capabilities"])
+
+            decision = choice("cand_123e4567e89b42d3a456426614174201")
+            decision_path = write_json(root / "decision-candidate.json", decision)
+            decision_attestation_path = write_json(
+                root / "decision-attestation.json", decision_attestation(decision)
+            )
+            decision_claim = public_result(run_cli(
+                repo,
+                DECISION_CLI,
+                "capture",
+                "--candidate", f"@{decision_path}",
+                "--attestation", f"@{decision_attestation_path}",
+                *preflight,
+                "--json",
+            ))
+            assumption_decline = public_result(run_cli(
+                repo,
+                ASSUMPTION_CLI,
+                "decline",
+                "--candidate", f"@{decision_path}",
+                "--reason", "authoritative choice belongs to DEC",
+                *preflight,
+                "--json",
+            ))
+            self.assertEqual("decline", assumption_decline["decision"])
+
+            decision_batch = write_json(root / "decision-batch.json", {
+                "schema": "context-capture-batch/v1",
+                "audit_count": 1,
+                "candidates": [decision],
+            })
+            decision_results = write_json(
+                root / "decision-results.json", [decision_claim, assumption_decline]
+            )
+            routed_decision = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "candidate",
+                "route",
+                "--batch", f"@{decision_batch}",
+                "--capabilities", f"@{capabilities_path}",
+                "--claim-results", f"@{decision_results}",
+                "--json",
+            ))
+            self.assertEqual("proposed", routed_decision["routes"][0]["status"])
+            self.assertEqual("context-decision", routed_decision["routes"][0]["owner"])
+
+            assumption = assumption_candidate()
+            assumption_path = write_json(root / "assumption-candidate.json", assumption)
+            assumption_attestation_path = write_json(
+                root / "assumption-attestation.json", assumption_attestation(assumption)
+            )
+            assumption_claim = public_result(run_cli(
+                repo,
+                ASSUMPTION_CLI,
+                "claim",
+                "--candidate", f"@{assumption_path}",
+                "--attestation", f"@{assumption_attestation_path}",
+                "--route-only",
+                *preflight,
+                "--json",
+            ))
+            by_kind = {item["kind"]: item for item in state["capabilities"]["owners"]}
+            decision_decline = generic_decline(
+                assumption, by_kind["decision"], "unverified premise is outside DEC authority"
+            )
+            observation_decline = generic_decline(
+                assumption, by_kind["observation"], "unverified premise is not observed evidence"
+            )
+            self.assertEqual(
+                ["claim", "decline", "decline"],
+                [assumption_claim["decision"], decision_decline["decision"], observation_decline["decision"]],
+            )
+            assumption_batch = write_json(root / "assumption-batch.json", {
+                "schema": "context-capture-batch/v1",
+                "audit_count": 1,
+                "candidates": [assumption],
+            })
+            assumption_results = write_json(
+                root / "assumption-results.json",
+                [assumption_claim, decision_decline, observation_decline],
+            )
+            routed_assumption = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "candidate",
+                "route",
+                "--batch", f"@{assumption_batch}",
+                "--capabilities", f"@{capabilities_path}",
+                "--claim-results", f"@{assumption_results}",
+                "--json",
+            ))
+            self.assertEqual("context-assumption", routed_assumption["routes"][0]["owner"])
+            self.assertEqual("provisional", routed_assumption["routes"][0]["authority"])
+
+            observation = {
+                **choice("cand_123e4567e89b42d3a456426614174202"),
+                "requested_kind": "observation",
+                "specialized_kinds": ["observation"],
+                "fallback_kind": None,
+            }
+            observation["owner_inputs"] = {
+                "observation": {
+                    "observation": "Safari에서 third-party cookie가 차단된다.",
+                    "evidence": ["재현 fixture"],
+                }
+            }
+            observation["claim"] = observation["owner_inputs"]["observation"]["observation"]
+            for label, candidate in (("observation", observation), ("decision", decision)):
+                candidate_path = write_json(root / f"explicit-{label}.json", candidate)
+                declined = public_result(run_cli(
+                    repo,
+                    ASSUMPTION_CLI,
+                    "decline",
+                    "--candidate", f"@{candidate_path}",
+                    "--reason", f"explicit {label} semantic boundary",
+                    *preflight,
+                    "--json",
+                ))
+                self.assertEqual("decline", declined["decision"])
+                self.assertEqual("context-assumption", declined["owner"])
+            self.assertEqual(before, repository_bytes(repo))
+
+    def test_acceptance_59_assumption_owner_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            state = bootstrap_three_owners(root, repo)
+            before = repository_bytes(repo)
+            preflight = preflight_arguments(state["inventory"], state["doctor"])
+
+            base = assumption_candidate("cand_123e4567e89b42d3a456426614174301")
+            base_path = write_json(root / "base-assumption.json", base)
+            base_attestation = write_json(root / "base-assumption-attestation.json", assumption_attestation(base))
+            actual_assumption_claim = public_result(run_cli(
+                repo,
+                ASSUMPTION_CLI,
+                "claim",
+                "--candidate", f"@{base_path}",
+                "--attestation", f"@{base_attestation}",
+                "--route-only",
+                *preflight,
+                "--json",
+            ))
+
+            dual = choice(base["candidate_id"])
+            dual.update({
+                "title": base["title"],
+                "claim": base["claim"],
+                "summary": base["summary"],
+                "requested_kind": None,
+                "specialized_kinds": ["assumption", "decision"],
+                "fallback_kind": None,
+                "scope_hint": base["scope_hint"],
+                "owner_inputs": {
+                    "assumption": base["owner_inputs"]["assumption"],
+                    "decision": {
+                        **dual["owner_inputs"]["decision"],
+                        "decision": base["claim"],
+                    },
+                },
+            })
+            dual_path = write_json(root / "dual-candidate.json", dual)
+            dual_decision_attestation = write_json(
+                root / "dual-decision-attestation.json", decision_attestation(dual)
+            )
+            decision_claim = public_result(run_cli(
+                repo,
+                DECISION_CLI,
+                "capture",
+                "--candidate", f"@{dual_path}",
+                "--attestation", f"@{dual_decision_attestation}",
+                *preflight,
+                "--json",
+            ))
+            real_assumption_outcome = public_result(run_cli(
+                repo,
+                ASSUMPTION_CLI,
+                "claim",
+                "--candidate", f"@{dual_path}",
+                "--attestation", f"@{base_attestation}",
+                "--route-only",
+                *preflight,
+                "--json",
+            ))
+            self.assertEqual("decline", real_assumption_outcome["decision"])
+
+            faulty_assumption_claim = copy.deepcopy(actual_assumption_claim)
+            digest = assumption_cli.canonical_digest(dual)
+            faulty_assumption_claim["semantic_inputs"][0].update({
+                "input_digest": digest,
+                "value": dual,
+            })
+            faulty_assumption_claim["semantic_attestations"][0]["input_digest"] = digest
+            capabilities_path = write_json(root / "conflict-capabilities.json", state["capabilities"])
+            batch_path = write_json(root / "conflict-batch.json", {
+                "schema": "context-capture-batch/v1",
+                "audit_count": 1,
+                "candidates": [dual],
+            })
+            results_path = write_json(
+                root / "conflict-results.json", [faulty_assumption_claim, decision_claim]
+            )
+            routed = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "candidate",
+                "route",
+                "--batch", f"@{batch_path}",
+                "--capabilities", f"@{capabilities_path}",
+                "--claim-results", f"@{results_path}",
+                "--json",
+            ))
+            self.assertEqual("owner_conflict", routed["routes"][0]["status"])
+            self.assertEqual("multiple_specialized_owners_claimed", routed["routes"][0]["reason"])
+            self.assertEqual(routed["routes"], routed["conflicts"])
+            self.assertEqual(before, repository_bytes(repo))
+
+    def test_acceptance_60_assumption_approval_transaction(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            state = bootstrap_three_owners(root, repo)
+            preflight = preflight_arguments(state["inventory"], state["doctor"])
+            candidate = assumption_candidate("cand_123e4567e89b42d3a456426614174401")
+            candidate_path = write_json(root / "capture-candidate.json", candidate)
+            attestation_path = write_json(root / "capture-attestation.json", assumption_attestation(candidate))
+            owner_result = public_result(run_cli(
+                repo,
+                ASSUMPTION_CLI,
+                "claim",
+                "--candidate", f"@{candidate_path}",
+                "--attestation", f"@{attestation_path}",
+                "--identifier", "ctx_550e8400e29b41d4a716446655440040",
+                "--created-at", "2026-08-22T09:00:00+09:00",
+                *preflight,
+                "--json",
+            ))
+            owner_result_path = write_json(root / "capture-owner-result.json", owner_result)
+            receipt = public_result(run_cli(
+                repo,
+                ASSUMPTION_CLI,
+                "batch",
+                "validate",
+                "--owner-result", f"@{owner_result_path}",
+                *preflight,
+                "--json",
+            ))
+            receipt_path = write_json(root / "capture-receipt.json", receipt)
+
+            before_preview = repository_bytes(repo)
+            preview = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "preview",
+                "--owner-result", f"@{owner_result_path}",
+                "--owner-validation", f"@{receipt_path}",
+                "--json",
+            ))
+            self.assertFalse(preview["applied"])
+            self.assertEqual(before_preview, repository_bytes(repo))
+            bundle_path = write_json(root / "capture-bundle.json", preview["bundle"])
+
+            rejected = run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "apply",
+                "--plan-bundle", f"@{bundle_path}",
+                "--approved-digest", "sha256:" + "0" * 64,
+                "--json",
+            )
+            self.assertEqual(5, rejected.returncode, rejected.stdout + rejected.stderr)
+            self.assertEqual("approval_digest_mismatch", json.loads(rejected.stdout)["error"]["code"])
+            self.assertEqual(before_preview, repository_bytes(repo))
+
+            applied = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "apply",
+                "--plan-bundle", f"@{bundle_path}",
+                "--approved-digest", preview["approval_digest"],
+                "--json",
+            ))
+            self.assertTrue(applied["applied"])
+            read = public_result(run_cli(
+                repo,
+                ASSUMPTION_CLI,
+                "read",
+                "--signal", "assumption-relevant",
+                "--id", "ctx_550e8400e29b41d4a716446655440040",
+                *preflight,
+                "--json",
+            ))
+            self.assertEqual("provisional", read["authority"])
+            self.assertEqual(candidate["claim"], read["sections"]["가정"])
+            self.assertEqual("ready", public_result(run_cli(repo, CORE_CLI, "doctor", "--json"))["repository_state"])
+
+    def test_acceptance_61_assumption_receipt_spoof_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            state = bootstrap_three_owners(root, repo)
+            preflight = preflight_arguments(state["inventory"], state["doctor"])
+            candidate = assumption_candidate("cand_123e4567e89b42d3a456426614174501")
+            candidate_path = write_json(root / "spoof-candidate.json", candidate)
+            attestation_path = write_json(root / "spoof-attestation.json", assumption_attestation(candidate))
+            owner_result = public_result(run_cli(
+                repo,
+                ASSUMPTION_CLI,
+                "claim",
+                "--candidate", f"@{candidate_path}",
+                "--attestation", f"@{attestation_path}",
+                "--identifier", "ctx_550e8400e29b41d4a716446655440050",
+                "--created-at", "2026-08-22T09:00:00+09:00",
+                *preflight,
+                "--json",
+            ))
+            owner_result_path = write_json(root / "spoof-owner-result.json", owner_result)
+            receipt = public_result(run_cli(
+                repo,
+                ASSUMPTION_CLI,
+                "batch",
+                "validate",
+                "--owner-result", f"@{owner_result_path}",
+                *preflight,
+                "--json",
+            ))
+            before = repository_bytes(repo)
+
+            spoofed_receipt = copy.deepcopy(receipt)
+            spoofed_receipt["descriptor_digest"] = "sha256:" + "f" * 64
+            spoofed_receipt_path = write_json(root / "spoofed-receipt.json", spoofed_receipt)
+            valid_result_path = write_json(root / "valid-owner-result.json", owner_result)
+            rejected_receipt = run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "preview",
+                "--owner-result", f"@{valid_result_path}",
+                "--owner-validation", f"@{spoofed_receipt_path}",
+                "--json",
+            )
+            self.assertEqual(5, rejected_receipt.returncode, rejected_receipt.stdout + rejected_receipt.stderr)
+            self.assertEqual("owner_validation_invalid", json.loads(rejected_receipt.stdout)["error"]["code"])
+            self.assertEqual(before, repository_bytes(repo))
+
+            spoofed_result = copy.deepcopy(owner_result)
+            spoofed_result["artifact_drafts"][0]["content"] += "\n"
+            spoofed_result_path = write_json(root / "spoofed-owner-result.json", spoofed_result)
+            valid_receipt_path = write_json(root / "valid-receipt.json", receipt)
+            rejected_result = run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "preview",
+                "--owner-result", f"@{spoofed_result_path}",
+                "--owner-validation", f"@{valid_receipt_path}",
+                "--json",
+            )
+            self.assertEqual(5, rejected_result.returncode, rejected_result.stdout + rejected_result.stderr)
+            self.assertEqual("owner_validation_invalid", json.loads(rejected_result.stdout)["error"]["code"])
+            self.assertEqual(before, repository_bytes(repo))
 
 
 if __name__ == "__main__":
