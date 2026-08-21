@@ -32,6 +32,9 @@ MAX_USER_BYTES = 32 * 1024
 MAX_CANDIDATE_BYTES = 16 * 1024
 MAX_OWNER_INPUT_BYTES = 2 * 1024
 MAX_APPROVAL_PREVIEW_BYTES = 32 * 1024
+MAX_OWNER_DESCRIPTOR_BYTES = 8 * 1024
+MAX_PROFILE_FIELDS = 24
+MAX_PROFILE_ITEMS = 12
 ROOT_INDEX = "context/context.index.md"
 BUILTIN_AREAS = ("snapshot", "observation")
 RESERVED_INDEX_PATHS = {
@@ -80,6 +83,14 @@ LOCAL_ID = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
 AREA_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,79}$")
 ROOT_ROW = re.compile(r"^.*<!-- context-area (\{.*\}) -->$")
 ENTRY_ROW = re.compile(r"^.*<!-- context-entry (\{.*\}) -->$")
+OWNER_PROFILE_ROW = re.compile(r"^<!-- context-owner-profile (\{.*\}) -->$")
+PROFILE_FIELD_TYPES = {
+    "string", "string_list", "date", "timestamp", "enum", "context_id", "context_id_list", "relation_map",
+}
+PROFILE_TOPOLOGIES = {
+    "create_current", "replace_same_state", "retire_current", "supersede_current", "delete_one",
+}
+PROFILE_COMMON_FIELDS = set(COMMON_KEY_ORDER) | {"id"}
 POLICY_BEGIN = "<!-- BEGIN context-core-policy (managed by context-core) -->"
 POLICY_END = "<!-- END context-core-policy (managed by context-core) -->"
 POLICY_BODY = """<!-- BEGIN context-core-policy (managed by context-core) -->
@@ -210,6 +221,275 @@ def canonical_json(value: Any) -> str:
 
 def compact_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _strict_json_loads(text: str, *, code: str = "schema_invalid") -> Any:
+    def object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        output: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in output:
+                raise ContextError(code, "JSON object contains a duplicate key", {"key": key}, EXIT_CONFLICT)
+            output[key] = value
+        return output
+
+    try:
+        return json.loads(text, object_pairs_hook=object_pairs)
+    except json.JSONDecodeError as error:
+        raise ContextError(code, "input is not valid JSON", exit_code=EXIT_CONFLICT) from error
+
+
+def _profile_error(message: str, details: dict[str, Any] | None = None) -> None:
+    raise ContextError("owner_descriptor_invalid", message, details, EXIT_CONFLICT)
+
+
+def _bounded_json_shape(value: Any, *, depth: int = 0, counter: list[int] | None = None) -> None:
+    counter = counter if counter is not None else [0]
+    counter[0] += 1
+    if depth > 8 or counter[0] > 192:
+        _profile_error("owner descriptor exceeds the bounded structural depth or node count")
+    if isinstance(value, dict):
+        if len(value) > MAX_PROFILE_FIELDS:
+            _profile_error("owner descriptor object exceeds the bounded field count")
+        for key, item in value.items():
+            if not isinstance(key, str) or len(key) > 80:
+                _profile_error("owner descriptor key is invalid")
+            _bounded_json_shape(item, depth=depth + 1, counter=counter)
+    elif isinstance(value, list):
+        if len(value) > MAX_PROFILE_ITEMS:
+            _profile_error("owner descriptor array exceeds the bounded item count")
+        for item in value:
+            _bounded_json_shape(item, depth=depth + 1, counter=counter)
+    elif not (value is None or isinstance(value, (str, bool)) or (isinstance(value, int) and not isinstance(value, bool))):
+        _profile_error("owner descriptor contains an unsupported scalar type")
+
+
+def _profile_string_list(value: Any, field: str, *, maximum: int = MAX_PROFILE_ITEMS) -> list[str]:
+    if (
+        not isinstance(value, list)
+        or not 0 <= len(value) <= maximum
+        or any(
+            not isinstance(item, str)
+            or not item
+            or item != item.strip()
+            or any(ord(char) < 32 or ord(char) == 127 for char in item)
+            or len(item) > 80
+            for item in value
+        )
+        or len(value) != len(set(value))
+    ):
+        _profile_error(f"{field} must be a bounded unique string list")
+    return value
+
+
+def _validate_profile_field(name: str, spec: Any) -> None:
+    if not FIELD_KEY.fullmatch(name) or name in PROFILE_COMMON_FIELDS or name in REMOVED_FINGERPRINT_FIELDS:
+        _profile_error("structural profile field name is invalid", {"field": name})
+    if not isinstance(spec, dict) or spec.get("type") not in PROFILE_FIELD_TYPES or not isinstance(spec.get("required"), bool):
+        _profile_error("structural profile field declaration is invalid", {"field": name})
+    kind = spec["type"]
+    expected: set[str]
+    if kind == "string":
+        expected = {"type", "required", "min_chars", "max_chars"}
+        minimum, maximum = spec.get("min_chars"), spec.get("max_chars")
+        if (
+            not isinstance(minimum, int) or isinstance(minimum, bool)
+            or not isinstance(maximum, int) or isinstance(maximum, bool)
+            or not 0 <= minimum <= maximum <= 4000
+            or (spec["required"] and minimum < 1)
+        ):
+            _profile_error("string field bounds are invalid", {"field": name})
+    elif kind == "string_list":
+        expected = {"type", "required", "min_items", "max_items", "max_item_chars"}
+        minimum, maximum, item_maximum = spec.get("min_items"), spec.get("max_items"), spec.get("max_item_chars")
+        if (
+            any(not isinstance(item, int) or isinstance(item, bool) for item in (minimum, maximum, item_maximum))
+            or not 0 <= minimum <= maximum <= MAX_PROFILE_ITEMS
+            or not 1 <= item_maximum <= 2000
+            or (spec["required"] and minimum < 1)
+        ):
+            _profile_error("string_list field bounds are invalid", {"field": name})
+    elif kind in {"date", "timestamp", "context_id"}:
+        expected = {"type", "required"}
+    elif kind == "enum":
+        expected = {"type", "required", "values"}
+        values = _profile_string_list(spec.get("values"), f"fields.{name}.values")
+        if not values:
+            _profile_error("enum field requires at least one value", {"field": name})
+    elif kind == "context_id_list":
+        expected = {"type", "required", "min_items", "max_items"}
+        minimum, maximum = spec.get("min_items"), spec.get("max_items")
+        if (
+            not isinstance(minimum, int) or isinstance(minimum, bool)
+            or not isinstance(maximum, int) or isinstance(maximum, bool)
+            or not 0 <= minimum <= maximum <= MAX_PROFILE_ITEMS
+            or (spec["required"] and minimum < 1)
+        ):
+            _profile_error("context_id_list field bounds are invalid", {"field": name})
+    else:
+        expected = {"type", "required", "keys", "max_items"}
+        keys = _profile_string_list(spec.get("keys"), f"fields.{name}.keys")
+        maximum = spec.get("max_items")
+        if not keys or not isinstance(maximum, int) or isinstance(maximum, bool) or not 1 <= maximum <= MAX_PROFILE_ITEMS:
+            _profile_error("relation_map field bounds are invalid", {"field": name})
+    if set(spec) != expected:
+        _profile_error("structural profile field contains unknown or missing keys", {"field": name})
+
+
+def _validate_structural_profile(profile: Any) -> None:
+    if not isinstance(profile, dict) or set(profile) != {
+        "schema", "fields", "sections", "index_projection", "lifecycle",
+    } or profile.get("schema") != "context-structural-profile/v1":
+        _profile_error("structural profile envelope is invalid")
+    fields = profile.get("fields")
+    if not isinstance(fields, dict) or not 1 <= len(fields) <= MAX_PROFILE_FIELDS:
+        _profile_error("structural profile fields are invalid")
+    for name, spec in fields.items():
+        _validate_profile_field(name, spec)
+
+    sections = profile.get("sections")
+    if not isinstance(sections, dict) or set(sections) != {"ordered", "required", "primary"}:
+        _profile_error("structural profile sections are invalid")
+    ordered = _profile_string_list(sections.get("ordered"), "sections.ordered")
+    required = _profile_string_list(sections.get("required"), "sections.required")
+    primary = sections.get("primary")
+    if (
+        not 1 <= len(ordered) <= MAX_PROFILE_ITEMS
+        or not required
+        or any(name.startswith("#") for name in ordered)
+        or any(name not in ordered for name in required)
+        or [name for name in ordered if name in required] != required
+        or primary not in required
+    ):
+        _profile_error("ordered, required, and primary sections are inconsistent")
+
+    projection = _profile_string_list(profile.get("index_projection"), "index_projection", maximum=4)
+    scalar_types = {"string", "date", "timestamp", "enum", "context_id"}
+    if any(name not in fields or fields[name]["type"] not in scalar_types for name in projection):
+        _profile_error("index projection must name declared scalar fields")
+
+    lifecycle = profile.get("lifecycle")
+    if not isinstance(lifecycle, dict) or set(lifecycle) != {"allowed_topologies", "reasons"}:
+        _profile_error("structural lifecycle envelope is invalid")
+    topologies = _profile_string_list(lifecycle.get("allowed_topologies"), "lifecycle.allowed_topologies", maximum=5)
+    if not topologies or set(topologies) - PROFILE_TOPOLOGIES:
+        _profile_error("structural lifecycle topology is invalid")
+    reasons = lifecycle.get("reasons")
+    if not isinstance(reasons, dict) or len(reasons) > MAX_PROFILE_ITEMS:
+        _profile_error("structural lifecycle reasons are invalid")
+    for reason, recipe in reasons.items():
+        if not FIELD_KEY.fullmatch(reason) or not isinstance(recipe, dict) or set(recipe) != {
+            "topology", "required_fields", "forbidden_fields", "successor", "references",
+        }:
+            _profile_error("structural lifecycle reason recipe is invalid", {"reason": reason})
+        topology = recipe.get("topology")
+        if topology not in {"retire_current", "supersede_current"} or topology not in topologies:
+            _profile_error("lifecycle reason topology is invalid", {"reason": reason})
+        required_fields = _profile_string_list(recipe.get("required_fields"), f"lifecycle.reasons.{reason}.required_fields")
+        forbidden_fields = _profile_string_list(recipe.get("forbidden_fields"), f"lifecycle.reasons.{reason}.forbidden_fields")
+        if (
+            set(required_fields) & set(forbidden_fields)
+            or any(name not in fields for name in [*required_fields, *forbidden_fields])
+            or not {"retired_at", "retired_reason"}.issubset(required_fields)
+        ):
+            _profile_error("lifecycle required and forbidden fields are inconsistent", {"reason": reason})
+        successor = recipe.get("successor")
+        if successor not in {"required", "optional", "forbidden"}:
+            _profile_error("lifecycle successor recipe is invalid", {"reason": reason})
+        successor_spec = fields.get("superseded_by")
+        if successor == "required" and (
+            topology != "supersede_current"
+            or not isinstance(successor_spec, dict)
+            or successor_spec.get("type") != "context_id"
+            or "superseded_by" not in required_fields
+        ):
+            _profile_error("required successor recipe lacks a required context_id field", {"reason": reason})
+        if successor == "forbidden" and "superseded_by" not in forbidden_fields:
+            _profile_error("forbidden successor must name superseded_by as forbidden", {"reason": reason})
+        references = recipe.get("references")
+        if not isinstance(references, list) or len(references) > 8:
+            _profile_error("lifecycle references are invalid", {"reason": reason})
+        seen_references: set[tuple[str, str, str, str]] = set()
+        for reference in references:
+            if not isinstance(reference, dict) or set(reference) != {"location", "field", "target", "match"}:
+                _profile_error("lifecycle reference recipe contains unknown fields", {"reason": reason})
+            key = (reference.get("location"), reference.get("field"), reference.get("target"), reference.get("match"))
+            if key in seen_references:
+                _profile_error("lifecycle reference recipe is duplicated", {"reason": reason})
+            seen_references.add(key)
+            location, field, target, match = key
+            field_spec = fields.get(field)
+            if (
+                location not in {"predecessor", "successor"}
+                or target not in {"predecessor", "successor"}
+                or match not in {"equals", "contains"}
+                or not isinstance(field_spec, dict)
+                or (match == "equals" and field_spec.get("type") != "context_id")
+                or (match == "contains" and field_spec.get("type") != "context_id_list")
+                or (topology != "supersede_current" and (location == "successor" or target == "successor"))
+            ):
+                _profile_error("lifecycle reference recipe is not structurally compatible", {"reason": reason})
+        if topology == "supersede_current":
+            endpoint_pairs = {
+                (reference["location"], reference["target"])
+                for reference in references
+            }
+            if successor != "required" or not {
+                ("predecessor", "successor"),
+                ("successor", "predecessor"),
+            }.issubset(endpoint_pairs):
+                _profile_error(
+                    "supersede_current requires successor and reciprocal reference recipes",
+                    {"reason": reason},
+                )
+    if reasons:
+        retired_at = fields.get("retired_at")
+        retired_reason = fields.get("retired_reason")
+        if (
+            not isinstance(retired_at, dict) or retired_at.get("type") != "timestamp"
+            or not isinstance(retired_reason, dict) or retired_reason.get("type") != "enum"
+            or set(retired_reason.get("values", [])) != set(reasons)
+        ):
+            _profile_error("lifecycle reasons require matching retired_at and retired_reason field declarations")
+
+
+def validate_owner_descriptor(descriptor: Any) -> tuple[str, str, str, str]:
+    if not isinstance(descriptor, dict):
+        _profile_error("owner descriptor must be an object")
+    schema = descriptor.get("schema")
+    if schema == "context-owner-descriptor/v1":
+        if set(descriptor) != {"schema", "owner", "kind", "artifact_schema", "authority"}:
+            _profile_error("area owner descriptor fields differ from context-owner-descriptor/v1")
+    elif schema == "context-owner-descriptor/v2":
+        if set(descriptor) != {"schema", "owner", "kind", "artifact_schema", "authority", "structural_profile"}:
+            _profile_error("area owner descriptor fields differ from context-owner-descriptor/v2")
+        _bounded_json_shape(descriptor)
+        try:
+            canonical_descriptor = canonical_json(descriptor)
+            normalized_descriptor = _canonical_value(descriptor)
+        except ContextError as error:
+            raise ContextError("owner_descriptor_invalid", "owner descriptor is not canonical JSON", error.details, EXIT_CONFLICT) from error
+        if len(canonical_descriptor.encode("utf-8")) > MAX_OWNER_DESCRIPTOR_BYTES:
+            _profile_error("owner descriptor exceeds 8 KiB")
+        if normalized_descriptor != descriptor:
+            _profile_error("owner descriptor strings are not canonical NFC")
+        _validate_structural_profile(descriptor["structural_profile"])
+    else:
+        _profile_error("owner descriptor schema is unsupported")
+    owner = descriptor.get("owner")
+    area = descriptor.get("kind")
+    artifact_schema = descriptor.get("artifact_schema")
+    authority = descriptor.get("authority")
+    if schema == "context-owner-descriptor/v1":
+        if not all(isinstance(value, str) and value for value in (owner, area, artifact_schema, authority)) or not AREA_NAME.fullmatch(area):
+            _profile_error("area owner descriptor identity is invalid")
+    elif (
+        not isinstance(owner, str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,79}", owner)
+        or not isinstance(area, str) or not AREA_NAME.fullmatch(area)
+        or not isinstance(artifact_schema, str) or not re.fullmatch(r"context-[a-z][a-z0-9-]*/v[1-9][0-9]*", artifact_schema)
+        or authority not in {"staging", "evidence", "provisional", "authoritative"}
+    ):
+        _profile_error("v2 owner descriptor identity or authority is invalid")
+    return owner, area, artifact_schema, authority
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -404,7 +684,78 @@ def _string_list(value: Any, field: str, *, required: bool = False, maximum: int
     return [nfc(item.strip()) for item in value]
 
 
-def _validate_common_document(frontmatter: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+def _validate_date(value: Any, field: str) -> None:
+    if not isinstance(value, str):
+        raise ContextError("schema_invalid", f"{field} must be a date")
+    try:
+        parsed = datetime.date.fromisoformat(value)
+    except ValueError as error:
+        raise ContextError("schema_invalid", f"{field} must be an ISO date") from error
+    if parsed.isoformat() != value:
+        raise ContextError("schema_invalid", f"{field} must be a canonical ISO date")
+
+
+def _descriptor_profile(descriptor: dict[str, Any] | None) -> dict[str, Any] | None:
+    if descriptor is None:
+        return None
+    validate_owner_descriptor(descriptor)
+    return descriptor.get("structural_profile") if descriptor.get("schema") == "context-owner-descriptor/v2" else None
+
+
+def _validate_profile_value(name: str, value: Any, spec: dict[str, Any]) -> None:
+    kind = spec["type"]
+    if kind == "string":
+        if (
+            not isinstance(value, str)
+            or "\n" in value
+            or not spec["min_chars"] <= len(value) <= spec["max_chars"]
+            or (spec["min_chars"] > 0 and not value.strip())
+        ):
+            raise ContextError("schema_invalid", "profiled string field violates its declared bounds", {"field": name})
+    elif kind == "string_list":
+        if (
+            not isinstance(value, list)
+            or not spec["min_items"] <= len(value) <= spec["max_items"]
+            or len(value) != len(set(value))
+            or any(not isinstance(item, str) or not item.strip() or "\n" in item or len(item) > spec["max_item_chars"] for item in value)
+        ):
+            raise ContextError("schema_invalid", "profiled string_list field violates its declared bounds", {"field": name})
+    elif kind == "date":
+        _validate_date(value, name)
+    elif kind == "timestamp":
+        _validate_timestamp(value, name)
+    elif kind == "enum":
+        if value not in spec["values"]:
+            raise ContextError("schema_invalid", "profiled enum field has an undeclared value", {"field": name})
+    elif kind == "context_id":
+        _require_context_id(value, name)
+    elif kind == "context_id_list":
+        if (
+            not isinstance(value, list)
+            or not spec["min_items"] <= len(value) <= spec["max_items"]
+            or len(value) != len(set(value))
+        ):
+            raise ContextError("schema_invalid", "profiled context_id_list violates its declared bounds", {"field": name})
+        for identifier in value:
+            _require_context_id(identifier, name)
+    elif kind == "relation_map":
+        if not isinstance(value, dict) or set(value) - set(spec["keys"]):
+            raise ContextError("schema_invalid", "profiled relation_map has undeclared keys", {"field": name})
+        for relation, identifiers in value.items():
+            if (
+                not isinstance(identifiers, list)
+                or len(identifiers) > spec["max_items"]
+                or len(identifiers) != len(set(identifiers))
+            ):
+                raise ContextError("schema_invalid", "profiled relation_map values are invalid", {"field": name, "relation": relation})
+            for identifier in identifiers:
+                _require_context_id(identifier, name)
+
+
+def _validate_common_document(
+    frontmatter: dict[str, Any],
+    descriptor: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], ...]:
     removed = sorted(REMOVED_FINGERPRINT_FIELDS & set(frontmatter))
     warnings = (
         ({"code": "schema_removed_field", "fields": removed},)
@@ -416,8 +767,11 @@ def _validate_common_document(frontmatter: dict[str, Any]) -> tuple[dict[str, An
     if missing:
         raise ContextError("schema_invalid", "required frontmatter field is missing", {"missing": missing})
     schema = frontmatter["schema"]
-    if schema not in SECTION_SPECS:
+    profile = _descriptor_profile(descriptor)
+    if profile is None and schema not in SECTION_SPECS:
         raise ContextError("schema_invalid", "unsupported artifact schema", {"schema": schema})
+    if profile is not None and schema != descriptor["artifact_schema"]:
+        raise ContextError("schema_invalid", "artifact schema differs from its structural profile", {"schema": schema})
     _require_context_id(frontmatter["id"])
     for field, maximum in (("title", 120), ("summary", 280)):
         value = frontmatter[field]
@@ -436,6 +790,17 @@ def _validate_common_document(frontmatter: dict[str, Any]) -> tuple[dict[str, An
     for field, maximum, item_maximum in (("tags", 12, 40), ("search_terms", 12, 40), ("source_refs", 12, 500)):
         if field in frontmatter:
             _string_list(frontmatter[field], field, maximum=maximum, item_maximum=item_maximum)
+    if profile is not None:
+        fields = profile["fields"]
+        unknown = set(frontmatter) - PROFILE_COMMON_FIELDS - set(fields) - REMOVED_FINGERPRINT_FIELDS
+        if unknown:
+            raise ContextError("schema_invalid", "artifact frontmatter contains undeclared profiled fields", {"fields": sorted(unknown)})
+        for name, spec in fields.items():
+            if spec["required"] and name not in frontmatter:
+                raise ContextError("schema_invalid", "required profiled field is missing", {"field": name})
+            if name in frontmatter:
+                _validate_profile_value(name, frontmatter[name], spec)
+        return warnings
     if schema == "context-snapshot/v1":
         if "anchors" in frontmatter:
             anchors = _string_list(frontmatter["anchors"], "anchors", maximum=12, item_maximum=36)
@@ -475,11 +840,16 @@ def _validate_common_document(frontmatter: dict[str, Any]) -> tuple[dict[str, An
     return warnings
 
 
-def parse_document(text: str) -> Document:
+def parse_document(text: str, descriptor: dict[str, Any] | None = None) -> Document:
     frontmatter, lines, closing = _parse_frontmatter(text)
-    warnings = _validate_common_document(frontmatter)
+    warnings = _validate_common_document(frontmatter, descriptor)
     schema = frontmatter["schema"]
-    allowed, required = SECTION_SPECS[schema]
+    profile = _descriptor_profile(descriptor)
+    allowed, required = (
+        (tuple(profile["sections"]["ordered"]), tuple(profile["sections"]["required"]))
+        if profile is not None
+        else SECTION_SPECS[schema]
+    )
     sections: dict[str, str] = {}
     current: str | None = None
     buffer: list[str] = []
@@ -512,22 +882,31 @@ def parse_document(text: str) -> Document:
     return Document(frontmatter=frontmatter, sections=sections, warnings=warnings)
 
 
-def render_document(frontmatter: dict[str, Any], sections: dict[str, str]) -> str:
+def render_document(
+    frontmatter: dict[str, Any],
+    sections: dict[str, str],
+    descriptor: dict[str, Any] | None = None,
+) -> str:
     canonical_frontmatter = {
         key: value
         for key, value in frontmatter.items()
         if key not in REMOVED_FINGERPRINT_FIELDS
     }
-    _validate_common_document(canonical_frontmatter)
+    _validate_common_document(canonical_frontmatter, descriptor)
     schema = canonical_frontmatter["schema"]
-    allowed, required = SECTION_SPECS[schema]
+    profile = _descriptor_profile(descriptor)
+    allowed, required = (
+        (tuple(profile["sections"]["ordered"]), tuple(profile["sections"]["required"]))
+        if profile is not None
+        else SECTION_SPECS[schema]
+    )
     unknown = set(sections) - set(allowed)
     if unknown:
         raise ContextError("section_schema_error", "unknown sections cannot be rendered", {"sections": sorted(unknown)})
     for name in required:
         if not sections.get(name, "").strip() or sections[name].strip() in PLACEHOLDERS:
             raise ContextError("section_schema_error", "required section is missing or placeholder", {"section": name})
-    known = COMMON_KEY_ORDER + ADDITIVE_KEY_ORDER.get(schema, ())
+    known = COMMON_KEY_ORDER + (tuple(profile["fields"]) if profile is not None else ADDITIVE_KEY_ORDER.get(schema, ()))
     ordered = [key for key in known if key in canonical_frontmatter]
     ordered.extend(sorted(set(canonical_frontmatter) - set(ordered)))
     lines = ["---"]
@@ -570,6 +949,85 @@ def _replace_block(text: str, name: str, rows: Sequence[str]) -> str:
     return (before + middle + after).rstrip("\n") + "\n"
 
 
+def parse_root_profiles(text: str) -> list[dict[str, Any]]:
+    begin = "<!-- BEGIN CONTEXT GENERATED:owner-profiles -->"
+    end = "<!-- END CONTEXT GENERATED:owner-profiles -->"
+    if begin not in text and end not in text:
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in _extract_block(text, "owner-profiles"):
+        match = OWNER_PROFILE_ROW.fullmatch(line)
+        if not match:
+            raise ContextError("index_noncanonical", "root owner profile row is malformed", exit_code=EXIT_INTEGRITY)
+        value = _strict_json_loads(match.group(1), code="index_noncanonical")
+        if (
+            not isinstance(value, dict)
+            or list(value) != ["area", "descriptor_schema", "descriptor_digest"]
+            or compact_json(value) != match.group(1)
+            or not isinstance(value.get("area"), str)
+            or not AREA_NAME.fullmatch(value["area"])
+            or value.get("descriptor_schema") != "context-owner-descriptor/v2"
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(value.get("descriptor_digest")))
+        ):
+            raise ContextError("index_noncanonical", "root owner profile row is not canonical", exit_code=EXIT_INTEGRITY)
+        rows.append(value)
+    if rows != sorted(rows, key=lambda row: row["area"]) or len({row["area"] for row in rows}) != len(rows):
+        raise ContextError("index_noncanonical", "root owner profile rows are duplicated or unsorted", exit_code=EXIT_INTEGRITY)
+    return rows
+
+
+def render_root_profiles(text: str, profiles: Sequence[dict[str, Any]]) -> str:
+    rows = [
+        f"<!-- context-owner-profile {compact_json(profile)} -->"
+        for profile in sorted(profiles, key=lambda item: item["area"])
+    ]
+    begin = "<!-- BEGIN CONTEXT GENERATED:owner-profiles -->"
+    end = "<!-- END CONTEXT GENERATED:owner-profiles -->"
+    if begin in text or end in text:
+        if not rows:
+            exact_start = text.find("\n\n## Owner Profiles\n" + begin)
+            if exact_start >= 0 and text.rstrip("\n").endswith(end):
+                return text[:exact_start].rstrip("\n") + "\n"
+        return _replace_block(text, "owner-profiles", rows)
+    if not rows:
+        return text
+    block = "\n".join(["## Owner Profiles", begin, *rows, end])
+    return text.rstrip("\n") + "\n\n" + block + "\n"
+
+
+def parse_area_profile(text: str) -> dict[str, Any] | None:
+    begin = "<!-- BEGIN CONTEXT GENERATED:owner-profile -->"
+    end = "<!-- END CONTEXT GENERATED:owner-profile -->"
+    if begin not in text and end not in text:
+        return None
+    lines = _extract_block(text, "owner-profile")
+    if len(lines) != 1:
+        raise ContextError("owner_profile_invalid", "area owner profile block must contain one descriptor", exit_code=EXIT_INTEGRITY)
+    descriptor = _strict_json_loads(lines[0], code="owner_profile_invalid")
+    try:
+        validate_owner_descriptor(descriptor)
+    except ContextError as error:
+        raise ContextError("owner_profile_invalid", error.message, error.details, EXIT_INTEGRITY) from error
+    if descriptor.get("schema") != "context-owner-descriptor/v2" or canonical_json(descriptor) != lines[0]:
+        raise ContextError("owner_profile_invalid", "area owner profile descriptor is not canonical v2 JSON", exit_code=EXIT_INTEGRITY)
+    return descriptor
+
+
+def render_area_profile(text: str, descriptor: dict[str, Any]) -> str:
+    validate_owner_descriptor(descriptor)
+    if descriptor.get("schema") != "context-owner-descriptor/v2" or parse_area_profile(text) is not None:
+        raise ContextError("owner_profile_invalid", "area owner profile can only be added once for a v2 descriptor", exit_code=EXIT_CONFLICT)
+    _, lines, closing = _parse_frontmatter(text)
+    insert_at = closing + 2
+    block = [
+        "<!-- BEGIN CONTEXT GENERATED:owner-profile -->",
+        canonical_json(descriptor),
+        "<!-- END CONTEXT GENERATED:owner-profile -->",
+        "",
+    ]
+    return "\n".join([*lines[:insert_at], *block, *lines[insert_at:]]).rstrip("\n") + "\n"
+
+
 def parse_root_index(text: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     frontmatter = _parse_index_frontmatter(text, "context-root-index/v1")
     if frontmatter.get("owner") != "context-core":
@@ -602,6 +1060,9 @@ def parse_root_index(text: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         areas.append(row)
     if areas != sorted(areas, key=lambda row: row["area"]):
         raise ContextError("index_stale", "root area rows are not sorted", exit_code=EXIT_INTEGRITY)
+    profiles = parse_root_profiles(text)
+    if any(profile["area"] not in {area["area"] for area in areas} for profile in profiles):
+        raise ContextError("index_noncanonical", "root owner profile lacks a matching area row", exit_code=EXIT_INTEGRITY)
     return frontmatter, areas
 
 
@@ -626,6 +1087,15 @@ def _parse_area_index_metadata(text: str) -> dict[str, Any]:
 
 def parse_area_index(text: str) -> AreaIndex:
     frontmatter = _parse_area_index_metadata(text)
+    descriptor = parse_area_profile(text)
+    if descriptor is not None:
+        owner, area, artifact_schema, authority = validate_owner_descriptor(descriptor)
+        if (
+            (frontmatter["area"], frontmatter["owner"], frontmatter["artifact_schema"], frontmatter["authority"])
+            != (area, owner, artifact_schema, authority)
+            or frontmatter.get("projection_fields", []) != descriptor["structural_profile"]["index_projection"]
+        ):
+            raise ContextError("owner_profile_invalid", "area owner profile differs from index metadata", exit_code=EXIT_INTEGRITY)
     projection_fields = frontmatter.get("projection_fields", [])
     history_required = frontmatter["area"] != "snapshot"
     if not history_required and ("CONTEXT GENERATED:history" in text):
@@ -719,8 +1189,9 @@ def _entry_from_document(
     metadata: dict[str, Any],
     state: str,
     metrics: IOMetrics | None = None,
+    descriptor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    document = parse_document(_read_artifact_text(path, metrics))
+    document = parse_document(_read_artifact_text(path, metrics), descriptor)
     fm = document.frontmatter
     expected_schema = metadata["artifact_schema"]
     if fm["schema"] != expected_schema:
@@ -749,7 +1220,12 @@ def _entry_from_document(
     return row
 
 
-def _validate_strict_lifecycle(frontmatter: dict[str, Any], state: str, path: str) -> None:
+def _validate_strict_lifecycle(
+    frontmatter: dict[str, Any],
+    state: str,
+    path: str,
+    descriptor: dict[str, Any] | None = None,
+) -> None:
     reason = frontmatter.get("retired_reason")
     lifecycle_fields = {"retired_at", "retired_reason", "retirement_note", "superseded_by"}
     if state == "current" and lifecycle_fields & set(frontmatter):
@@ -758,6 +1234,25 @@ def _validate_strict_lifecycle(frontmatter: dict[str, Any], state: str, path: st
         return
     if "retired_at" not in frontmatter or reason is None:
         raise ContextError("lifecycle_invalid", "history artifact lacks retirement metadata", {"path": path}, EXIT_INTEGRITY)
+    profile = _descriptor_profile(descriptor)
+    if profile is not None:
+        recipe = profile["lifecycle"]["reasons"].get(reason)
+        if recipe is None:
+            raise ContextError("lifecycle_invalid", "retired_reason is not declared by the structural profile", {"path": path}, EXIT_INTEGRITY)
+        missing = set(recipe["required_fields"]) - set(frontmatter)
+        forbidden = set(recipe["forbidden_fields"]) & set(frontmatter)
+        if missing or forbidden:
+            raise ContextError(
+                "lifecycle_invalid",
+                "profiled lifecycle required or forbidden fields differ",
+                {"path": path, "missing": sorted(missing), "forbidden": sorted(forbidden)},
+                EXIT_INTEGRITY,
+            )
+        successor = recipe["successor"]
+        has_successor = "superseded_by" in frontmatter
+        if (successor == "required" and not has_successor) or (successor == "forbidden" and has_successor):
+            raise ContextError("lifecycle_invalid", "profiled lifecycle successor cardinality differs", {"path": path}, EXIT_INTEGRITY)
+        return
     allowed = {
         "context-observation/v1": {"invalidated", "superseded"},
         "context-decision/v1": {"withdrawn", "superseded"},
@@ -865,6 +1360,7 @@ def render_area_index_from_repository(repo: pathlib.Path, area: str, *, repair_r
     if not index_path.is_file():
         raise ContextError("index_seed_required", "area index is missing", {"area": area}, EXIT_INTEGRITY)
     existing = index_path.read_text(encoding="utf-8")
+    descriptor = parse_area_profile(existing)
     if repair_rows:
         metadata = _parse_area_index_metadata(existing)
         _extract_block(existing, "current")
@@ -876,7 +1372,7 @@ def render_area_index_from_repository(repo: pathlib.Path, area: str, *, repair_r
         raise ContextError("area_index_mismatch", "area index metadata differs from its canonical path", {"area": area}, EXIT_INTEGRITY)
     rows: dict[str, list[dict[str, Any]]] = {"current": [], "history": []}
     for path, state in _scan_area_paths(repo, area):
-        rows[state].append(_entry_from_document(repo, path, metadata, state))
+        rows[state].append(_entry_from_document(repo, path, metadata, state, descriptor=descriptor))
     for state in rows:
         rows[state].sort(key=lambda row: (row["created_at"], row["id"]))
     rendered = _replace_block(existing, "current", [_entry_row(row) for row in rows["current"]])
@@ -950,13 +1446,19 @@ def score_entry(row: dict[str, Any], query: str) -> int:
 
 
 def _fallback_entries(repo: pathlib.Path, area_row: dict[str, Any], metrics: IOMetrics | None) -> list[dict[str, Any]]:
-    metadata = {
-        "area": area_row["area"], "owner": area_row["owner"], "artifact_schema": area_row["artifact_schema"],
-        "authority": area_row["authority"], "projection_fields": [],
-    }
+    descriptor: dict[str, Any] | None = None
+    try:
+        index_text = _ensure_contained(repo, area_row["path"]).read_text(encoding="utf-8")
+        metadata = _parse_area_index_metadata(index_text)
+        descriptor = parse_area_profile(index_text)
+    except (ContextError, OSError, UnicodeError):
+        metadata = {
+            "area": area_row["area"], "owner": area_row["owner"], "artifact_schema": area_row["artifact_schema"],
+            "authority": area_row["authority"], "projection_fields": [],
+        }
     entries = []
     for path, state in _scan_area_paths(repo, area_row["area"], metrics):
-        entries.append(_entry_from_document(repo, path, metadata, state, metrics))
+        entries.append(_entry_from_document(repo, path, metadata, state, metrics, descriptor))
     return entries
 
 
@@ -1080,12 +1582,15 @@ def recall_repository(
     warnings: list[str] = []
     fallback = False
     area_indexes: dict[str, AreaIndex] = {}
+    area_descriptors: dict[str, dict[str, Any] | None] = {}
     for area_row in selected_areas:
         index_path = repo / area_row["path"]
         try:
-            area_index = parse_area_index(_read_index(index_path, metrics))
+            index_text = _read_index(index_path, metrics)
+            area_index = parse_area_index(index_text)
             if area_index.frontmatter["area"] != area_row["area"] or area_index.frontmatter["owner"] != area_row["owner"]:
                 raise ContextError("index_stale", "area index/root catalog mismatch", exit_code=EXIT_INTEGRITY)
+            area_descriptors[area_row["area"]] = _descriptor_for_area_bytes(root_text, area_row, index_text)
             area_indexes[area_row["area"]] = area_index
             rows = list(area_index.current) + (list(area_index.history) if include_history else [])
         except (ContextError, UnicodeError) as error:
@@ -1095,6 +1600,7 @@ def recall_repository(
                 raise ContextError("index_stale", "area index is unreadable", {"area": area_row["area"], "cause": getattr(error, "code", type(error).__name__)}, EXIT_INTEGRITY) from error
             fallback = True
             warnings.append("area_index_invalid")
+            area_descriptors[area_row["area"]] = _best_effort_area_descriptor(repo, area_row, root_text)
             rows = _fallback_entries(repo, area_row, metrics)
             if not include_history:
                 rows = [row for row in rows if row["state"] == "current"]
@@ -1179,7 +1685,10 @@ def recall_repository(
                 break
             path = repo / item["path"]
             try:
-                document = parse_document(_read_artifact_text(path, metrics))
+                document = parse_document(
+                    _read_artifact_text(path, metrics),
+                    area_descriptors.get(item["kind"]),
+                )
             except FileNotFoundError:
                 continue
             warnings.extend(warning["code"] for warning in document.warnings)
@@ -1267,11 +1776,18 @@ def _capability_list(value: Any) -> list[dict[str, Any]]:
         owner = capability.get("owner")
         kind = capability.get("kind")
         surface = capability.get("claim_surface")
+        authority = capability.get("authority")
+        descriptor_digest = capability.get("descriptor_digest")
         if (
             not isinstance(owner, str)
             or not isinstance(kind, str)
             or not isinstance(capability.get("artifact_schema"), str)
-            or capability.get("authority") not in {"staging", "evidence", "authoritative"}
+            or authority not in {"staging", "evidence", "provisional", "authoritative"}
+            or (
+                descriptor_digest is not None
+                and not re.fullmatch(r"sha256:[0-9a-f]{64}", str(descriptor_digest))
+            )
+            or (authority == "provisional" and descriptor_digest is None)
             or not isinstance(surface, dict)
             or surface.get("type") != "agent_skill"
             or surface.get("operation") != "claim"
@@ -1710,13 +2226,23 @@ def _json_pointer(value: Any, pointer: str) -> Any:
     return current
 
 
-def validate_owner_result(result: dict[str, Any], capability: dict[str, Any] | None = None) -> None:
+def validate_owner_result(
+    result: dict[str, Any],
+    capability: dict[str, Any] | None = None,
+    descriptor: dict[str, Any] | None = None,
+) -> None:
     if result.get("schema") != "context-owner-result/v1" or not isinstance(result.get("owner"), str):
         raise ContextError("owner_result_invalid", "owner result envelope is invalid", exit_code=EXIT_CONFLICT)
     missing = {"result_type", "transition", "target_kind", "capability_digest", "semantic_inputs", "semantic_attestations", "artifact_drafts", "effects", "proposed_plan"} - set(result)
     if missing:
         raise ContextError("owner_result_invalid", "owner result required fields are missing", {"missing": sorted(missing)}, EXIT_CONFLICT)
     kind = result["target_kind"]
+    profile = _descriptor_profile(descriptor)
+    if descriptor is not None and (
+        result.get("owner") != descriptor.get("owner")
+        or kind != descriptor.get("kind")
+    ):
+        raise ContextError("owner_result_invalid", "owner result differs from its registered descriptor", exit_code=EXIT_CONFLICT)
     if result["owner"] == "context-core":
         capability = builtin_capability(kind)
     if capability is not None:
@@ -1815,7 +2341,7 @@ def validate_owner_result(result: dict[str, Any], capability: dict[str, Any] | N
         raise ContextError("plan_preview_mismatch", "effects and operations are not 1:1", exit_code=EXIT_CONFLICT)
     draft_ids = {item["effect_id"] for item in drafts}
     for draft in drafts:
-        document = parse_document(draft.get("content", ""))
+        document = parse_document(draft.get("content", ""), descriptor if profile is not None else None)
         if document.warnings:
             warning = document.warnings[0]
             raise ContextError(
@@ -1827,18 +2353,26 @@ def validate_owner_result(result: dict[str, Any], capability: dict[str, Any] | N
         projection = draft.get("semantic_projection")
         if not isinstance(projection, dict) or set(projection) != {"kind", "primary_claim", "supporting_context"}:
             raise ContextError("owner_result_invalid", "draft semantic projection is invalid", exit_code=EXIT_CONFLICT)
-        draft_kind = {
-            "context-snapshot/v1": "snapshot",
-            "context-observation/v1": "observation",
-            "context-decision/v1": "decision",
-        }.get(document.frontmatter.get("schema"))
+        draft_kind = (
+            kind
+            if profile is not None and document.frontmatter.get("schema") == descriptor.get("artifact_schema")
+            else {
+                "context-snapshot/v1": "snapshot",
+                "context-observation/v1": "observation",
+                "context-decision/v1": "decision",
+            }.get(document.frontmatter.get("schema"))
+        )
         if draft_kind != kind and not (
             result["transition"] == "decision_fallback_import"
             and kind == "decision"
             and draft_kind == "observation"
         ):
             raise ContextError("owner_result_invalid", "draft kind escapes the owner transition", exit_code=EXIT_CONFLICT)
-        primary_name = {"snapshot": "현재 맥락", "observation": "관찰", "decision": "결정"}.get(draft_kind)
+        primary_name = (
+            profile["sections"]["primary"]
+            if profile is not None and draft_kind == kind
+            else {"snapshot": "현재 맥락", "observation": "관찰", "decision": "결정"}.get(draft_kind)
+        )
         if (
             primary_name is None
             or projection["kind"] != draft_kind
@@ -2491,24 +3025,79 @@ def _root_catalog(repo: pathlib.Path) -> tuple[str, list[dict[str, Any]]]:
 
 
 def _area_descriptor_fields(descriptor: dict[str, Any]) -> tuple[str, str, str, str]:
-    fields = {"schema", "owner", "kind", "artifact_schema", "authority"}
-    if set(descriptor) != fields or descriptor.get("schema") != "context-owner-descriptor/v1":
+    return validate_owner_descriptor(descriptor)
+
+
+def _profile_registry_entry(descriptor: dict[str, Any]) -> dict[str, Any]:
+    if descriptor.get("schema") != "context-owner-descriptor/v2":
+        raise ContextError("owner_descriptor_invalid", "only v2 descriptors have a profile registry entry", exit_code=EXIT_CONFLICT)
+    return {
+        "area": descriptor["kind"],
+        "descriptor_schema": descriptor["schema"],
+        "descriptor_digest": canonical_digest(descriptor),
+    }
+
+
+def _descriptor_for_area_bytes(
+    root_text: str,
+    row: dict[str, Any],
+    index_text: str,
+) -> dict[str, Any] | None:
+    profiles = [item for item in parse_root_profiles(root_text) if item["area"] == row["area"]]
+    descriptor = parse_area_profile(index_text)
+    if not profiles and descriptor is None:
+        return None
+    if len(profiles) != 1 or descriptor is None:
         raise ContextError(
-            "owner_descriptor_invalid",
-            "area owner descriptor fields differ from context-owner-descriptor/v1",
-            exit_code=EXIT_CONFLICT,
+            "owner_profile_mismatch",
+            "root profile registry and area descriptor must both exist for a v2 area",
+            {"area": row["area"]},
+            EXIT_CONFLICT,
         )
-    owner = descriptor.get("owner")
-    area = descriptor.get("kind")
-    schema = descriptor.get("artifact_schema")
-    authority = descriptor.get("authority")
-    if not all(isinstance(value, str) and value for value in (owner, area, schema, authority)) or not AREA_NAME.fullmatch(area):
-        raise ContextError("owner_descriptor_invalid", "area owner descriptor is invalid", exit_code=EXIT_CONFLICT)
-    return owner, area, schema, authority
+    owner, area, artifact_schema, authority = validate_owner_descriptor(descriptor)
+    if (
+        profiles[0] != _profile_registry_entry(descriptor)
+        or (area, owner, artifact_schema, authority)
+        != (row["area"], row["owner"], row["artifact_schema"], row["authority"])
+    ):
+        raise ContextError(
+            "owner_profile_mismatch",
+            "root descriptor digest, area profile, and area row differ",
+            {"area": row["area"]},
+            EXIT_CONFLICT,
+        )
+    return descriptor
+
+
+def _best_effort_area_descriptor(
+    repo: pathlib.Path,
+    row: dict[str, Any],
+    root_text: str | None = None,
+) -> dict[str, Any] | None:
+    """Resolve a read-only descriptor, retaining legacy fallback behavior on drift."""
+
+    relative = row.get("path", f"context/{row['area']}/{row['area']}.index.md")
+    try:
+        index_text = _ensure_contained(repo, relative).read_text(encoding="utf-8")
+    except (ContextError, OSError, UnicodeError):
+        return None
+    if root_text is not None and all(
+        isinstance(row.get(field), str)
+        for field in ("area", "path", "owner", "artifact_schema", "authority")
+    ):
+        try:
+            return _descriptor_for_area_bytes(root_text, row, index_text)
+        except ContextError:
+            pass
+    try:
+        return parse_area_profile(index_text)
+    except ContextError:
+        return None
 
 
 def _registered_area_spec(repo: pathlib.Path, row: dict[str, Any]) -> tuple[dict[str, Any], str, str]:
-    index = parse_area_index(_ensure_contained(repo, row["path"]).read_text(encoding="utf-8"))
+    index_text = _ensure_contained(repo, row["path"]).read_text(encoding="utf-8")
+    index = parse_area_index(index_text)
     metadata = index.frontmatter
     if (metadata["area"], metadata["owner"], metadata["artifact_schema"], metadata["authority"]) != (
         row["area"],
@@ -2522,6 +3111,8 @@ def _registered_area_spec(repo: pathlib.Path, row: dict[str, Any]) -> tuple[dict
             {"area": row["area"], "path": row["path"]},
             EXIT_CONFLICT,
         )
+    root_text = _ensure_contained(repo, ROOT_INDEX).read_text(encoding="utf-8")
+    _descriptor_for_area_bytes(root_text, row, index_text)
     return row, _area_label(row["area"]), metadata["summary"]
 
 
@@ -2530,12 +3121,18 @@ def build_area_register_bundle(repo: pathlib.Path, descriptor: dict[str, Any], i
         raise ContextError("index_seed_required", "area registration requires a complete index seed", exit_code=EXIT_CONFLICT)
     owner, area, schema, authority = _area_descriptor_fields(descriptor)
     seed_index = parse_area_index(index_seed)
+    seed_descriptor = parse_area_profile(index_seed)
+    is_profiled = descriptor.get("schema") == "context-owner-descriptor/v2"
+    if (is_profiled and seed_descriptor != descriptor) or (not is_profiled and seed_descriptor is not None):
+        raise ContextError("index_seed_invalid", "area seed owner profile does not match descriptor", exit_code=EXIT_CONFLICT)
     if seed_index.current or seed_index.history:
         raise ContextError("index_seed_invalid", "area seed generated blocks must be empty", exit_code=EXIT_CONFLICT)
     fm = seed_index.frontmatter
     if (fm["area"], fm["owner"], fm["artifact_schema"], fm["authority"]) != (area, owner, schema, authority):
         raise ContextError("index_seed_invalid", "area seed does not match descriptor", exit_code=EXIT_CONFLICT)
     root_text, rows = _root_catalog(repo)
+    root_profiles = parse_root_profiles(root_text)
+    expected_profile = _profile_registry_entry(descriptor) if is_profiled else None
     area_path = f"context/{area}/{area}.index.md"
     expected_row = {
         "area": area,
@@ -2561,8 +3158,17 @@ def build_area_register_bundle(repo: pathlib.Path, descriptor: dict[str, Any], i
                 {"area": area},
                 EXIT_CONFLICT,
             )
+        matching_profiles = [item for item in root_profiles if item["area"] == area]
+        if (is_profiled and matching_profiles != [expected_profile]) or (not is_profiled and matching_profiles):
+            raise ContextError(
+                "owner_descriptor_conflict",
+                "existing immutable owner profile differs from the requested descriptor",
+                {"area": area},
+                EXIT_CONFLICT,
+            )
         if path.is_file():
-            existing_index = parse_area_index(path.read_text(encoding="utf-8"))
+            existing_text = path.read_text(encoding="utf-8")
+            existing_index = parse_area_index(existing_text)
             metadata = existing_index.frontmatter
             if (metadata["area"], metadata["owner"], metadata["artifact_schema"], metadata["authority"]) != (
                 area,
@@ -2574,6 +3180,14 @@ def build_area_register_bundle(repo: pathlib.Path, descriptor: dict[str, Any], i
                     "owner_descriptor_conflict",
                     "existing area index differs from the requested descriptor",
                     {"area": area, "path": area_path},
+                    EXIT_CONFLICT,
+                )
+            existing_descriptor = _descriptor_for_area_bytes(root_text, expected_row, existing_text)
+            if (is_profiled and existing_descriptor != descriptor) or (not is_profiled and existing_descriptor is not None):
+                raise ContextError(
+                    "owner_descriptor_conflict",
+                    "existing immutable area descriptor differs from the requested descriptor",
+                    {"area": area},
                     EXIT_CONFLICT,
                 )
             return {"noop": True, "applied": False, "changed_paths": []}
@@ -2593,10 +3207,16 @@ def build_area_register_bundle(repo: pathlib.Path, descriptor: dict[str, Any], i
             )
         prior_specs = [_registered_area_spec(repo, row) for row in rows if row["area"] != area]
         root_before = render_root_index(root_text, prior_specs)
+        root_before = render_root_profiles(root_before, [item for item in root_profiles if item["area"] != area])
         expected_after = render_root_index(
             root_before,
             [*prior_specs, (expected_row, _area_label(area), fm["summary"])],
         )
+        if expected_profile is not None:
+            expected_after = render_root_profiles(expected_after, [
+                *[item for item in root_profiles if item["area"] != area],
+                expected_profile,
+            ])
         if expected_after != root_text:
             raise ContextError(
                 "partial_area_register",
@@ -2665,6 +3285,8 @@ def build_area_register_bundle(repo: pathlib.Path, descriptor: dict[str, Any], i
             root_text,
             [*specs, (expected_row, _area_label(area), fm["summary"])],
         )
+        if expected_profile is not None:
+            root_after = render_root_profiles(root_after, [*root_profiles, expected_profile])
     contents = {ROOT_INDEX: root_after, area_path: index_seed}
     materials = [_material("material_root_index", ROOT_INDEX, root_after), _material("seed_area_index", area_path, index_seed)]
     effect_id = "effect_register_area"
@@ -2751,13 +3373,18 @@ def build_policy_bundle(repo: pathlib.Path, target: str) -> dict[str, Any]:
     return _bundle_result(preview, plan, [_material(material_id, target, after)])
 
 
-def _area_for_owner(repo: pathlib.Path, area: str, owner: str) -> tuple[dict[str, Any], AreaIndex]:
-    _, rows = _root_catalog(repo)
+def _profiled_area_for_owner(
+    repo: pathlib.Path,
+    area: str,
+    owner: str,
+) -> tuple[dict[str, Any], AreaIndex, dict[str, Any] | None]:
+    root_text, rows = _root_catalog(repo)
     matches = [row for row in rows if row["area"] == area]
     if len(matches) != 1 or matches[0]["owner"] != owner:
         raise ContextError("area_owner_mismatch", "owner is not authorized for target area", {"owner": owner, "area": area}, EXIT_CONFLICT)
     row = matches[0]
-    parsed = parse_area_index(_ensure_contained(repo, row["path"]).read_text(encoding="utf-8"))
+    index_text = _ensure_contained(repo, row["path"]).read_text(encoding="utf-8")
+    parsed = parse_area_index(index_text)
     metadata = parsed.frontmatter
     if (
         metadata["area"],
@@ -2776,10 +3403,21 @@ def _area_for_owner(repo: pathlib.Path, area: str, owner: str) -> tuple[dict[str
             {"area": area, "path": row["path"]},
             EXIT_CONFLICT,
         )
+    descriptor = _descriptor_for_area_bytes(root_text, row, index_text)
+    return row, parsed, descriptor
+
+
+def _area_for_owner(repo: pathlib.Path, area: str, owner: str) -> tuple[dict[str, Any], AreaIndex]:
+    row, parsed, _ = _profiled_area_for_owner(repo, area, owner)
     return row, parsed
 
 
-def _virtual_area_index(index: AreaIndex, effects: Sequence[dict[str, Any]], drafts: dict[str, dict[str, Any]]) -> str:
+def _virtual_area_index(
+    index: AreaIndex,
+    effects: Sequence[dict[str, Any]],
+    drafts: dict[str, dict[str, Any]],
+    descriptor: dict[str, Any] | None = None,
+) -> str:
     current = {row["id"]: dict(row) for row in index.current}
     history = {row["id"]: dict(row) for row in index.history}
     metadata = index.frontmatter
@@ -2790,7 +3428,8 @@ def _virtual_area_index(index: AreaIndex, effects: Sequence[dict[str, Any]], dra
             draft = drafts.get(effect["effect_id"])
             if draft is None:
                 raise ContextError("plan_preview_mismatch", "effect lacks destination draft", exit_code=EXIT_CONFLICT)
-            document = parse_document(draft["content"])
+            resolved_descriptor = descriptor if descriptor is not None else parse_area_profile(index.text)
+            document = parse_document(draft["content"], resolved_descriptor)
             path = pathlib.Path("/") / draft["path"]
             fake_repo = pathlib.Path("/")
             row = {
@@ -2842,8 +3481,167 @@ def _bundle_owner_result(bundle: dict[str, Any]) -> tuple[dict[str, Any], dict[s
         raise ContextError("prior_bundle_invalid", "prior owner result is not JSON", exit_code=EXIT_CONFLICT) from error
     if canonical_json(result) != material["content"] or sha256_bytes(material["content"].encode("utf-8")) != plan.get("owner_result_digest"):
         raise ContextError("prior_bundle_invalid", "prior owner result material changed", exit_code=EXIT_CONFLICT)
-    validate_owner_result(result)
+    descriptor = plan.get("owner_descriptor") if plan.get("owner_descriptor", {}).get("schema") == "context-owner-descriptor/v2" else None
+    validation = plan.get("owner_validation")
+    capability = validation.get("capability") if descriptor is not None and isinstance(validation, dict) else None
+    validate_owner_result(result, capability, descriptor)
     return plan, result
+
+
+def _owner_result_topology(owner_result: dict[str, Any]) -> str:
+    proposed_plan = owner_result.get("proposed_plan")
+    operations = proposed_plan.get("operations") if isinstance(proposed_plan, dict) else None
+    effect_list = owner_result.get("effects")
+    draft_list = owner_result.get("artifact_drafts")
+    if (
+        not isinstance(operations, list)
+        or not isinstance(effect_list, list)
+        or not isinstance(draft_list, list)
+        or any(not isinstance(item, dict) for item in [*operations, *effect_list, *draft_list])
+    ):
+        raise ContextError("transition_topology_invalid", "owner topology collections are malformed", exit_code=EXIT_CONFLICT)
+    effects = {effect.get("effect_id"): effect for effect in effect_list}
+    drafts = {draft.get("effect_id"): draft for draft in draft_list}
+    if len(operations) == 1:
+        operation = operations[0]
+        effect = effects.get(operation.get("effect_id"), {})
+        op = operation.get("op")
+        path = operation.get("path")
+        if op == "create" and effect.get("action") == "create" and isinstance(path, str) and "/retired/" not in path:
+            return "create_current"
+        if op in {"replace", "move"} and effect.get("action") in {"replace", "move", "rename"}:
+            before = operation.get("from_path", operation.get("path", ""))
+            after = operation.get("to_path", drafts.get(operation.get("effect_id"), {}).get("path", ""))
+            if isinstance(before, str) and isinstance(after, str) and ("/retired/" in before) == ("/retired/" in after):
+                return "replace_same_state"
+        if op == "move" and effect.get("action") == "retire":
+            source = operation.get("from_path")
+            destination = operation.get("to_path")
+            if isinstance(source, str) and isinstance(destination, str) and "/retired/" not in source and "/retired/" in destination:
+                return "retire_current"
+        if op == "delete" and effect.get("action") == "delete":
+            return "delete_one"
+    if len(operations) == 2:
+        moves = [operation for operation in operations if operation.get("op") == "move"]
+        creates = [operation for operation in operations if operation.get("op") == "create"]
+        if len(moves) == len(creates) == 1:
+            move_effect = effects.get(moves[0].get("effect_id"), {})
+            create_effect = effects.get(creates[0].get("effect_id"), {})
+            source = moves[0].get("from_path")
+            destination = moves[0].get("to_path")
+            create_path = creates[0].get("path")
+            if (
+                move_effect.get("action") == "retire"
+                and create_effect.get("action") == "create"
+                and isinstance(source, str)
+                and isinstance(destination, str)
+                and isinstance(create_path, str)
+                and "/retired/" not in source
+                and "/retired/" in destination
+                and "/retired/" not in create_path
+            ):
+                return "supersede_current"
+    raise ContextError("transition_topology_invalid", "owner operations do not match a generic structural topology", exit_code=EXIT_CONFLICT)
+
+
+def _profile_reference_ids(frontmatter: dict[str, Any], profile: dict[str, Any]) -> set[str]:
+    identifiers: set[str] = set()
+    for name, spec in profile["fields"].items():
+        if name not in frontmatter:
+            continue
+        value = frontmatter[name]
+        if spec["type"] == "context_id":
+            identifiers.add(value)
+        elif spec["type"] == "context_id_list":
+            identifiers.update(value)
+        elif spec["type"] == "relation_map":
+            for values in value.values():
+                identifiers.update(values)
+    return identifiers
+
+
+def _validate_profiled_owner_structure(
+    repo: pathlib.Path,
+    owner_result: dict[str, Any],
+    descriptor: dict[str, Any],
+    transition_topology: str,
+) -> None:
+    profile = descriptor["structural_profile"]
+    if transition_topology not in profile["lifecycle"]["allowed_topologies"] or _owner_result_topology(owner_result) != transition_topology:
+        raise ContextError("transition_topology_invalid", "owner result topology differs from its structural profile", exit_code=EXIT_CONFLICT)
+    effects = {effect["effect_id"]: effect for effect in owner_result["effects"]}
+    documents: dict[str, Document] = {}
+    states: dict[str, str] = {}
+    for draft in owner_result["artifact_drafts"]:
+        effect = effects.get(draft["effect_id"])
+        if effect is None or effect.get("area") != descriptor["kind"]:
+            raise ContextError("area_owner_mismatch", "profiled draft escapes its descriptor area", exit_code=EXIT_CONFLICT)
+        document = parse_document(draft["content"], descriptor)
+        if document.frontmatter["id"] != effect.get("id"):
+            raise ContextError("plan_preview_mismatch", "profiled draft id differs from its effect", exit_code=EXIT_CONFLICT)
+        state = "history" if "/retired/" in draft["path"] else "current"
+        if effect.get("state") != state:
+            raise ContextError("plan_preview_mismatch", "profiled effect state differs from its target path", exit_code=EXIT_CONFLICT)
+        _validate_strict_lifecycle(document.frontmatter, state, draft["path"], descriptor)
+        documents[draft["effect_id"]] = document
+        states[draft["effect_id"]] = state
+
+    proposed_operations = owner_result["proposed_plan"]["operations"]
+    for operation in proposed_operations:
+        effect = effects[operation["effect_id"]]
+        if operation.get("area") != descriptor["kind"] or effect.get("area") != descriptor["kind"]:
+            raise ContextError("area_owner_mismatch", "profiled operation escapes its descriptor area", exit_code=EXIT_CONFLICT)
+        source = operation.get("from_path", operation.get("path"))
+        if operation["op"] in {"replace", "move", "delete"} and isinstance(source, str):
+            source_path = _ensure_contained(repo, source)
+            if source_path.is_file():
+                source_document = parse_document(source_path.read_text(encoding="utf-8"), descriptor)
+                if source_document.frontmatter["id"] != effect.get("id"):
+                    raise ContextError("plan_preview_mismatch", "profiled source id differs from its effect", exit_code=EXIT_CONFLICT)
+                source_state = "history" if "/retired/" in source else "current"
+                _validate_strict_lifecycle(source_document.frontmatter, source_state, source, descriptor)
+
+    retired = [effect_id for effect_id, state in states.items() if state == "history"]
+    current = [effect_id for effect_id, state in states.items() if state == "current"]
+    if transition_topology in {"retire_current", "supersede_current"}:
+        if len(retired) != 1 or (transition_topology == "supersede_current" and len(current) != 1):
+            raise ContextError("transition_topology_invalid", "profiled lifecycle drafts do not match topology", exit_code=EXIT_CONFLICT)
+        predecessor_document = documents[retired[0]]
+        reason = predecessor_document.frontmatter["retired_reason"]
+        recipe = profile["lifecycle"]["reasons"].get(reason)
+        if recipe is None or recipe["topology"] != transition_topology:
+            raise ContextError("lifecycle_invalid", "profiled lifecycle reason differs from operation topology", exit_code=EXIT_CONFLICT)
+        successor_document = documents[current[0]] if transition_topology == "supersede_current" else None
+        predecessor_id = predecessor_document.frontmatter["id"]
+        successor_id = successor_document.frontmatter["id"] if successor_document is not None else None
+        locations = {"predecessor": predecessor_document, "successor": successor_document}
+        targets = {"predecessor": predecessor_id, "successor": successor_id}
+        for reference in recipe["references"]:
+            document = locations[reference["location"]]
+            target = targets[reference["target"]]
+            if document is None or target is None:
+                raise ContextError("reference_invalid", "profiled lifecycle reference lacks its topology endpoint", exit_code=EXIT_CONFLICT)
+            value = document.frontmatter.get(reference["field"])
+            matches = value == target if reference["match"] == "equals" else isinstance(value, list) and target in value
+            if not matches:
+                raise ContextError("reference_invalid", "profiled lifecycle reference does not bind its endpoint", {"field": reference["field"]}, EXIT_CONFLICT)
+
+    referenced_ids = set()
+    for document in documents.values():
+        referenced_ids.update(_profile_reference_ids(document.frontmatter, profile))
+    effect_ids = {effect.get("id") for effect in effects.values() if is_context_id(effect.get("id"))}
+    external = referenced_ids - effect_ids
+    if external:
+        paths = _artifact_id_paths(repo, external)
+        missing = sorted(identifier for identifier, values in paths.items() if len(values) != 1)
+        if missing:
+            raise ContextError("reference_invalid", "profiled artifact reference is missing or ambiguous", {"ids": missing}, EXIT_CONFLICT)
+    if transition_topology == "delete_one":
+        operation = owner_result["proposed_plan"]["operations"][0]
+        target = _ensure_contained(repo, operation["path"])
+        inbound = _inbound_refs(repo, effects[operation["effect_id"]]["id"], target)
+        if inbound:
+            raise ContextError("inbound_reference", "profiled delete target has inbound references", {"paths": inbound}, EXIT_CONFLICT)
 
 
 def _validate_owner_validation(
@@ -2851,12 +3649,73 @@ def _validate_owner_validation(
     validation: dict[str, Any] | None,
     area_index: AreaIndex,
     same_area_prior_digests: Sequence[str],
-) -> None:
+    descriptor: dict[str, Any] | None = None,
+    *,
+    base_area_index_sha256: str | None = None,
+    verify_base_area_index: bool = True,
+) -> tuple[dict[str, Any] | None, str | None]:
     requires = owner_result["owner"] != "context-core"
     if not requires and validation is None:
-        return
+        return None, None
     if not isinstance(validation, dict):
         raise ContextError("owner_validation_required", "addon owner result requires a batch validation receipt", exit_code=EXIT_CONFLICT)
+    profile = _descriptor_profile(descriptor)
+    if profile is not None:
+        required_fields = {
+            "schema", "owner", "kind", "descriptor_digest", "capability", "owner_result_digest",
+            "base_area_index_sha256", "prior_same_area_bundle_digests", "transition_topology",
+            "semantic_input_digests", "status", "receipt_digest",
+        }
+        if set(validation) != required_fields or validation.get("schema") != "context-owner-validation-receipt/v2":
+            raise ContextError("owner_validation_invalid", "profiled owner receipt fields are stale or malformed", exit_code=EXIT_CONFLICT)
+        capability = validation.get("capability")
+        try:
+            capabilities = _capability_list([capability])
+        except ContextError as error:
+            raise ContextError("owner_validation_invalid", "profiled owner receipt capability is invalid", exit_code=EXIT_CONFLICT) from error
+        if len(capabilities) != 1:
+            raise ContextError("owner_validation_invalid", "profiled owner receipt capability is missing", exit_code=EXIT_CONFLICT)
+        capability = capabilities[0]
+        transition_topology = validation.get("transition_topology")
+        semantic_inputs = owner_result.get("semantic_inputs")
+        assertions = capability.get("claim_assertions")
+        if (
+            not isinstance(semantic_inputs, list)
+            or any(not isinstance(item, dict) for item in semantic_inputs)
+            or not isinstance(assertions, list)
+            or not assertions
+            or len(assertions) > MAX_PROFILE_ITEMS
+            or len(assertions) != len(set(assertions))
+            or any(not isinstance(item, str) or not FIELD_KEY.fullmatch(item) for item in assertions)
+        ):
+            raise ContextError("owner_validation_invalid", "profiled capability or semantic inputs are malformed", exit_code=EXIT_CONFLICT)
+        semantic_digests = {item.get("operation"): item.get("input_digest") for item in semantic_inputs}
+        expected = dict(validation)
+        receipt_digest = expected.pop("receipt_digest", None)
+        descriptor_digest = canonical_digest(descriptor)
+        expected_base_digest = base_area_index_sha256 or sha256_bytes(area_index.text.encode("utf-8"))
+        if (
+            validation.get("owner") != owner_result["owner"]
+            or validation.get("kind") != owner_result["target_kind"]
+            or validation.get("descriptor_digest") != descriptor_digest
+            or capability.get("owner") != descriptor["owner"]
+            or capability.get("kind") != descriptor["kind"]
+            or capability.get("artifact_schema") != descriptor["artifact_schema"]
+            or capability.get("authority") != descriptor["authority"]
+            or capability.get("descriptor_digest") != descriptor_digest
+            or canonical_digest(capability) != owner_result.get("capability_digest")
+            or validation.get("owner_result_digest") != canonical_digest(owner_result)
+            or (verify_base_area_index and validation.get("base_area_index_sha256") != expected_base_digest)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(validation.get("base_area_index_sha256")))
+            or validation.get("prior_same_area_bundle_digests") != list(same_area_prior_digests)
+            or transition_topology not in profile["lifecycle"]["allowed_topologies"]
+            or transition_topology != _owner_result_topology(owner_result)
+            or validation.get("semantic_input_digests") != semantic_digests
+            or validation.get("status") != "valid"
+            or receipt_digest != canonical_digest(expected)
+        ):
+            raise ContextError("owner_validation_invalid", "profiled owner receipt bindings are stale or malformed", exit_code=EXIT_CONFLICT)
+        return capability, transition_topology
     expected = dict(validation)
     receipt_digest = expected.pop("receipt_digest", None)
     if (
@@ -2870,13 +3729,15 @@ def _validate_owner_validation(
         or receipt_digest != canonical_digest(expected)
     ):
         raise ContextError("owner_validation_invalid", "owner validation receipt is stale or malformed", exit_code=EXIT_CONFLICT)
+    return None, None
 
 
 def finalize_owner_result(repo: pathlib.Path, owner_result: dict[str, Any], owner_validation: dict[str, Any] | None = None, prior_bundles: Sequence[dict[str, Any]] = ()) -> dict[str, Any]:
-    validate_owner_result(owner_result)
+    if not isinstance(owner_result, dict) or not isinstance(owner_result.get("owner"), str) or not isinstance(owner_result.get("target_kind"), str):
+        raise ContextError("owner_result_invalid", "owner result envelope is invalid", exit_code=EXIT_CONFLICT)
     owner = owner_result["owner"]
     primary_area = owner_result["target_kind"]
-    area_row, physical_area_index = _area_for_owner(repo, primary_area, owner)
+    area_row, physical_area_index, descriptor = _profiled_area_for_owner(repo, primary_area, owner)
     prior_digests: list[str] = []
     same_area_prior_digests: list[str] = []
     virtual_text = physical_area_index.text
@@ -2890,9 +3751,19 @@ def finalize_owner_result(repo: pathlib.Path, owner_result: dict[str, Any], owne
             prior_effects = [effect for effect in prior_result["effects"] if effect.get("area") == primary_area]
             prior_drafts = {draft["effect_id"]: draft for draft in prior_result["artifact_drafts"] if any(effect["effect_id"] == draft["effect_id"] for effect in prior_effects)}
             virtual_index = AreaIndex(physical_area_index.frontmatter, parse_area_index(virtual_text).current, parse_area_index(virtual_text).history, virtual_text)
-            virtual_text = _virtual_area_index(virtual_index, prior_effects, prior_drafts)
+            virtual_text = _virtual_area_index(virtual_index, prior_effects, prior_drafts, descriptor)
             same_area_prior_digests.append(prior_digest)
-    _validate_owner_validation(owner_result, owner_validation, physical_area_index, same_area_prior_digests)
+    capability, transition_topology = _validate_owner_validation(
+        owner_result,
+        owner_validation,
+        physical_area_index,
+        same_area_prior_digests,
+        descriptor,
+    )
+    validate_owner_result(owner_result, capability, descriptor)
+    if descriptor is not None:
+        assert transition_topology is not None
+        _validate_profiled_owner_structure(repo, owner_result, descriptor, transition_topology)
     read_preconditions = owner_result["proposed_plan"].get("read_preconditions", [])
     if len({item.get("path") for item in read_preconditions}) != len(read_preconditions):
         raise ContextError("read_precondition_invalid", "owner read preconditions contain duplicate paths", exit_code=EXIT_CONFLICT)
@@ -2903,10 +3774,11 @@ def finalize_owner_result(repo: pathlib.Path, owner_result: dict[str, Any], owne
         if not target.is_file() or sha256_bytes(target.read_bytes()) != precondition["sha256"]:
             raise ContextError("precondition_changed", "owner read precondition is stale", {"path": precondition["path"]}, EXIT_CONFLICT)
     area_indexes: dict[str, AreaIndex] = {primary_area: AreaIndex(physical_area_index.frontmatter, parse_area_index(virtual_text).current, parse_area_index(virtual_text).history, virtual_text)}
+    area_descriptors: dict[str, dict[str, Any] | None] = {primary_area: descriptor}
     for area in sorted({effect.get("area") for effect in owner_result["effects"] if isinstance(effect.get("area"), str)} - {primary_area}):
         if owner_result["transition"] != "decision_fallback_import" or area != "observation" or owner != "context-decision":
             raise ContextError("area_owner_mismatch", "cross-owner area is not allowlisted", {"area": area}, EXIT_CONFLICT)
-        _, area_indexes[area] = _area_for_owner(repo, area, "context-core")
+        _, area_indexes[area], area_descriptors[area] = _profiled_area_for_owner(repo, area, "context-core")
     drafts = {draft["effect_id"]: draft for draft in owner_result["artifact_drafts"]}
     effects = {effect["effect_id"]: effect for effect in owner_result["effects"]}
     operations: list[dict[str, Any]] = []
@@ -2936,7 +3808,7 @@ def finalize_owner_result(repo: pathlib.Path, owner_result: dict[str, Any], owne
             if not relative.startswith(f"context/{area}/") or relative in RESERVED_INDEX_PATHS:
                 raise ContextError("path_escape", "draft path is outside the owner area", {"path": relative}, EXIT_CONFLICT)
             _ensure_contained(repo, relative)
-            document = parse_document(draft["content"])
+            document = parse_document(draft["content"], area_descriptors[area])
             if document.frontmatter["schema"] != area_record["artifact_schema"] or document.frontmatter["id"] != effect.get("id"):
                 raise ContextError("plan_preview_mismatch", "draft schema/id does not match effect", exit_code=EXIT_CONFLICT)
             material_id = f"material_{effect_id}"
@@ -2987,7 +3859,7 @@ def finalize_owner_result(repo: pathlib.Path, owner_result: dict[str, Any], owne
         matching_drafts = {key: value for key, value in drafts.items() if any(effect["effect_id"] == key for effect in matching_effects)}
         index = area_indexes[area]
         path = f"context/{area}/{area}.index.md"
-        rendered_index = _virtual_area_index(index, matching_effects, matching_drafts)
+        rendered_index = _virtual_area_index(index, matching_effects, matching_drafts, area_descriptors[area])
         index_before[path] = sha256_bytes(index.text.encode("utf-8"))
         index_after[path] = sha256_bytes(file_bytes(rendered_index))
         index_material_id = f"material_index_{hashlib.sha256(area.encode('utf-8')).hexdigest()[:12]}"
@@ -3000,6 +3872,11 @@ def finalize_owner_result(repo: pathlib.Path, owner_result: dict[str, Any], owne
         "owner_validation": owner_validation, "prior_bundle_digests": prior_digests,
         "read_preconditions": owner_result["proposed_plan"].get("read_preconditions", []), "operations": operations,
     }
+    if descriptor is not None:
+        plan["owner_descriptor"] = descriptor
+        plan["descriptor_digest"] = canonical_digest(descriptor)
+        plan["transition_topology"] = transition_topology
+        plan["prior_same_area_bundle_digests"] = same_area_prior_digests
     preview = {"schema": "context-approval-preview/v1", "owner": owner, "candidate_id": owner_result.get("candidate_id"), "artifacts": [{"effect_id": draft["effect_id"], "path": draft["path"], "content": draft["content"]} for draft in owner_result["artifact_drafts"]], "effects": owner_result["effects"]}
     return _bundle_result(preview, plan, materials)
 
@@ -3024,12 +3901,14 @@ def _scan_artifact_id(
     repo: pathlib.Path,
     identifier: str,
     areas: Sequence[dict[str, Any]],
+    root_text: str | None = None,
 ) -> tuple[str, pathlib.Path, Document]:
     found: list[tuple[str, pathlib.Path, Document]] = []
     for area in areas:
+        descriptor = _best_effort_area_descriptor(repo, area, root_text)
         for path, _ in _scan_area_paths(repo, area["area"]):
             try:
-                document = parse_document(path.read_text(encoding="utf-8"))
+                document = parse_document(path.read_text(encoding="utf-8"), descriptor)
             except (ContextError, OSError, UnicodeError):
                 continue
             if document.frontmatter["id"] == identifier:
@@ -3081,10 +3960,13 @@ def _find_artifact(
 ) -> tuple[str, pathlib.Path, Document]:
     _require_context_id(identifier)
     areas: list[dict[str, Any]] = []
+    root_text: str | None = None
     try:
-        _, areas = _root_catalog(repo)
+        root_text, areas = _root_catalog(repo)
         area, row, path = _indexed_artifact_entry(repo, identifier, areas)
-        document = parse_document(path.read_text(encoding="utf-8"))
+        index_text = _ensure_contained(repo, area["path"]).read_text(encoding="utf-8")
+        descriptor = _descriptor_for_area_bytes(root_text, area, index_text)
+        document = parse_document(path.read_text(encoding="utf-8"), descriptor)
         if (
             document.frontmatter["id"] != identifier
             or document.frontmatter["schema"] != area["artifact_schema"]
@@ -3096,7 +3978,7 @@ def _find_artifact(
             warnings.append("index_lookup_fallback")
         if not areas:
             areas = _filesystem_lookup_areas(repo)
-        return _scan_artifact_id(repo, identifier, areas)
+        return _scan_artifact_id(repo, identifier, areas, root_text)
 
 
 def _frontmatter_identifier(path: pathlib.Path) -> str | None:
@@ -3227,16 +4109,22 @@ def build_rename_bundle(repo: pathlib.Path, identifier: str, filename: str) -> d
 
 def _inbound_refs(repo: pathlib.Path, identifier: str, excluded_path: pathlib.Path) -> list[str]:
     refs: list[str] = []
-    _, areas = _root_catalog(repo)
+    root_text, areas = _root_catalog(repo)
     for area in areas:
+        index_text = _ensure_contained(repo, area["path"]).read_text(encoding="utf-8")
+        descriptor = _descriptor_for_area_bytes(root_text, area, index_text)
         for path, _ in _scan_area_paths(repo, area["area"]):
             if path == excluded_path:
                 continue
             try:
-                document = parse_document(path.read_text(encoding="utf-8"))
+                document = parse_document(path.read_text(encoding="utf-8"), descriptor)
             except ContextError:
                 continue
             frontmatter = document.frontmatter
+            if descriptor is not None:
+                if identifier in _profile_reference_ids(frontmatter, descriptor["structural_profile"]):
+                    refs.append(path.relative_to(repo).as_posix())
+                continue
             relation_values: list[str] = []
             for key in ("anchors", "supersedes", "superseded_by"):
                 value = frontmatter.get(key, [])
@@ -3734,19 +4622,12 @@ def _validate_area_register_control(
     operation: dict[str, Any],
 ) -> None:
     descriptor = plan["owner_descriptor"]
-    _require_exact_fields(
-        descriptor,
-        {"schema", "owner", "kind", "artifact_schema", "authority"},
-        "area_register owner descriptor",
-    )
-    owner = descriptor.get("owner")
-    area = descriptor.get("kind")
-    if (
-        descriptor.get("schema") != "context-owner-descriptor/v1"
-        or not all(isinstance(descriptor.get(key), str) and descriptor[key] for key in ("owner", "kind", "artifact_schema", "authority"))
-        or not AREA_NAME.fullmatch(str(area))
-    ):
-        _core_control_error("area_register owner descriptor is invalid")
+    try:
+        owner, area, _, _ = validate_owner_descriptor(descriptor)
+    except ContextError as error:
+        raise ContextError("plan_preview_mismatch", "area_register owner descriptor is invalid", exit_code=EXIT_CONFLICT) from error
+    is_profiled = descriptor.get("schema") == "context-owner-descriptor/v2"
+    expected_profile = _profile_registry_entry(descriptor) if is_profiled else None
     area_path = f"context/{area}/{area}.index.md"
     control = plan["control_input"]
     _require_exact_fields(
@@ -3763,6 +4644,7 @@ def _validate_area_register_control(
     try:
         seed_index = parse_area_index(seed["content"])
         _, root_rows = parse_root_index(root_material["content"])
+        root_profiles = parse_root_profiles(root_material["content"])
     except ContextError as error:
         raise ContextError("plan_preview_mismatch", "area_register material is not a valid canonical index", exit_code=EXIT_CONFLICT) from error
     expected_row = {
@@ -3774,41 +4656,63 @@ def _validate_area_register_control(
         "authority": descriptor["authority"],
     }
     metadata = seed_index.frontmatter
+    seed_descriptor = parse_area_profile(seed["content"])
     if (
         seed_index.current
         or seed_index.history
         or (metadata["area"], metadata["owner"], metadata["artifact_schema"], metadata["authority"])
         != (area, owner, descriptor["artifact_schema"], descriptor["authority"])
         or [row for row in root_rows if row["area"] == area] != [expected_row]
+        or ((is_profiled and seed_descriptor != descriptor) or (not is_profiled and seed_descriptor is not None))
+        or (
+            (is_profiled and [item for item in root_profiles if item["area"] == area] != [expected_profile])
+            or (not is_profiled and any(item["area"] == area for item in root_profiles))
+        )
     ):
         _core_control_error("area_register descriptor, seed, and root row differ")
     specs: list[tuple[dict[str, Any], str, str]] = []
     for row in root_rows:
         index = seed_index if row["area"] == area else parse_area_index((repo / row["path"]).read_text(encoding="utf-8"))
+        index_text = seed["content"] if row["area"] == area else index.text
+        _descriptor_for_area_bytes(root_material["content"], row, index_text)
         fm = index.frontmatter
         if (fm["area"], fm["owner"], fm["artifact_schema"], fm["authority"]) != (
             row["area"], row["owner"], row["artifact_schema"], row["authority"],
         ):
             _core_control_error("area_register root and area metadata differ")
         specs.append((row, _area_label(row["area"]), fm["summary"]))
-    if render_root_index(root_material["content"], specs) != root_material["content"]:
+    canonical_root = render_root_index(root_material["content"], specs)
+    canonical_root = render_root_profiles(canonical_root, root_profiles)
+    if canonical_root != root_material["content"]:
         _core_control_error("area_register root generated bytes are not canonical")
     current_root_digest = _digest_or_none(repo / ROOT_INDEX)
     if current_root_digest == operation.get("before_sha256", {}).get(ROOT_INDEX):
         current_root = (repo / ROOT_INDEX).read_text(encoding="utf-8")
         _, current_rows = parse_root_index(current_root)
+        current_profiles = parse_root_profiles(current_root)
+        expected_profiles = sorted(
+            [*current_profiles, *([expected_profile] if expected_profile is not None else [])],
+            key=lambda item: item["area"],
+        )
+        expected_root = render_root_index(current_root, specs)
+        expected_root = render_root_profiles(expected_root, expected_profiles)
         if (
             root_rows != sorted([*current_rows, expected_row], key=lambda row: row["area"])
-            or root_material["content"] != render_root_index(current_root, specs)
+            or root_profiles != expected_profiles
+            or root_material["content"] != expected_root
         ):
             _core_control_error("area_register root material does not add exactly one area")
     elif current_root_digest == operation.get("after_sha256", {}).get(ROOT_INDEX):
         prior_specs = [spec for spec in specs if spec[0]["area"] != area]
         prior_root = render_root_index(root_material["content"], prior_specs)
+        prior_profiles = [item for item in root_profiles if item["area"] != area]
+        prior_root = render_root_profiles(prior_root, prior_profiles)
+        reconstructed_root = render_root_index(prior_root, specs)
+        reconstructed_root = render_root_profiles(reconstructed_root, root_profiles)
         if (
             operation.get("before_sha256", {}).get(ROOT_INDEX)
             != sha256_bytes(file_bytes(prior_root))
-            or render_root_index(prior_root, specs) != root_material["content"]
+            or reconstructed_root != root_material["content"]
         ):
             _core_control_error("area_register resume state is not the exact canonical write prefix")
     seed_digest = sha256_bytes(file_bytes(seed["content"]))
@@ -4062,7 +4966,54 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
             owner_result = json.loads(owner_material["content"])
         except json.JSONDecodeError as error:
             raise ContextError("owner_result_invalid", "owner result material is not JSON", exit_code=EXIT_CONFLICT) from error
-        validate_owner_result(owner_result)
+        validation = plan.get("owner_validation")
+        registered_row, registered_index, registered_descriptor = _profiled_area_for_owner(
+            repo,
+            plan.get("owner_descriptor", {}).get("kind"),
+            plan.get("owner"),
+        )
+        capability: dict[str, Any] | None = None
+        transition_topology: str | None = None
+        if registered_descriptor is not None:
+            all_prior_digests = plan.get("prior_bundle_digests")
+            same_area_prior_digests = plan.get("prior_same_area_bundle_digests")
+            valid_prior_shape = (
+                isinstance(all_prior_digests, list)
+                and isinstance(same_area_prior_digests, list)
+                and all(
+                    isinstance(digest, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", digest)
+                    for digest in [*all_prior_digests, *same_area_prior_digests]
+                )
+                and len(all_prior_digests) == len(set(all_prior_digests))
+                and len(same_area_prior_digests) == len(set(same_area_prior_digests))
+                and [
+                    digest
+                    for digest in all_prior_digests
+                    if digest in set(same_area_prior_digests)
+                ] == same_area_prior_digests
+            )
+            if (
+                plan.get("owner_descriptor") != registered_descriptor
+                or plan.get("descriptor_digest") != canonical_digest(registered_descriptor)
+                or plan.get("transition_topology") not in PROFILE_TOPOLOGIES
+                or not isinstance(validation, dict)
+                or not valid_prior_shape
+                or validation.get("prior_same_area_bundle_digests") != same_area_prior_digests
+            ):
+                raise ContextError("descriptor_digest_mismatch", "final plan is not bound to the registered structural descriptor", exit_code=EXIT_CONFLICT)
+            capability, transition_topology = _validate_owner_validation(
+                owner_result,
+                validation,
+                registered_index,
+                same_area_prior_digests,
+                registered_descriptor,
+                base_area_index_sha256=index_operations[0].get("before_sha256", {}).get(registered_row["path"]),
+                verify_base_area_index=not bool(same_area_prior_digests),
+            )
+        validate_owner_result(owner_result, capability, registered_descriptor)
+        if registered_descriptor is not None:
+            assert transition_topology is not None
+            _validate_profiled_owner_structure(repo, owner_result, registered_descriptor, transition_topology)
         if canonical_json(owner_result) != owner_material["content"]:
             raise ContextError("owner_result_invalid", "owner result material is not canonical JSON", exit_code=EXIT_CONFLICT)
         if (
@@ -4071,23 +5022,24 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
             or owner_result["capability_digest"] != plan.get("capability_digest")
         ):
             raise ContextError("plan_preview_mismatch", "final plan is not bound to its owner result", exit_code=EXIT_CONFLICT)
-        _area_for_owner(repo, plan["owner_descriptor"]["kind"], plan["owner"])
+        if registered_row["artifact_schema"] != plan["owner_descriptor"].get("artifact_schema"):
+            raise ContextError("plan_preview_mismatch", "final plan artifact schema differs from registered area", exit_code=EXIT_CONFLICT)
         _validate_target_artifact_ids(repo, non_index, owner_result["effects"])
-        validation = plan.get("owner_validation")
         if owner_result["owner"] != "context-core":
             if not isinstance(validation, dict):
                 raise ContextError("owner_validation_required", "addon final plan lacks an owner validation receipt", exit_code=EXIT_CONFLICT)
-            receipt_body = dict(validation)
-            receipt_digest = receipt_body.pop("receipt_digest", None)
-            if (
-                validation.get("schema") != "context-owner-validation-receipt/v1"
-                or validation.get("owner") != owner_result["owner"]
-                or validation.get("kind") != owner_result["target_kind"]
-                or validation.get("owner_result_digest") != canonical_digest(owner_result)
-                or validation.get("status") != "valid"
-                or receipt_digest != canonical_digest(receipt_body)
-            ):
-                raise ContextError("owner_validation_invalid", "addon owner validation receipt is altered", exit_code=EXIT_CONFLICT)
+            if registered_descriptor is None:
+                receipt_body = dict(validation)
+                receipt_digest = receipt_body.pop("receipt_digest", None)
+                if (
+                    validation.get("schema") != "context-owner-validation-receipt/v1"
+                    or validation.get("owner") != owner_result["owner"]
+                    or validation.get("kind") != owner_result["target_kind"]
+                    or validation.get("owner_result_digest") != canonical_digest(owner_result)
+                    or validation.get("status") != "valid"
+                    or receipt_digest != canonical_digest(receipt_body)
+                ):
+                    raise ContextError("owner_validation_invalid", "addon owner validation receipt is altered", exit_code=EXIT_CONFLICT)
         index_operation = index_operations[0]
         index_paths = {
             f"context/{area}/{area}.index.md"
@@ -4131,7 +5083,8 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
                     for effect_id, draft in owner_drafts.items()
                     if any(effect["effect_id"] == effect_id for effect in matching_effects)
                 }
-                if content != _virtual_area_index(current_index, matching_effects, matching_drafts):
+                area_descriptor = registered_descriptor if area == registered_row["area"] else None
+                if content != _virtual_area_index(current_index, matching_effects, matching_drafts, area_descriptor):
                     raise ContextError(
                         "plan_preview_mismatch",
                         "target area index material is not derived from the approved effects",
@@ -4279,7 +5232,13 @@ def _digest_or_none(path: pathlib.Path) -> str | None:
     return sha256_bytes(path.read_bytes()) if path.is_file() else None
 
 
-def _apply_file_operation(repo: pathlib.Path, operation: dict[str, Any], materials: dict[str, dict[str, Any]], changed: list[str]) -> None:
+def _apply_file_operation(
+    repo: pathlib.Path,
+    operation: dict[str, Any],
+    materials: dict[str, dict[str, Any]],
+    changed: list[str],
+    descriptor: dict[str, Any] | None = None,
+) -> None:
     op = operation["op"]
     if op in {"file_create", "file_replace"}:
         path = _ensure_contained(repo, operation["path"])
@@ -4288,7 +5247,7 @@ def _apply_file_operation(repo: pathlib.Path, operation: dict[str, Any], materia
             return
         if current != operation["before_sha256"]:
             raise ContextError("precondition_changed", "file precondition changed", {"path": operation["path"]}, EXIT_CONFLICT)
-        if op == "file_replace" and operation.get("role") == "artifact" and parse_document(path.read_text(encoding="utf-8")).frontmatter["id"] != operation.get("id"):
+        if op == "file_replace" and operation.get("role") == "artifact" and parse_document(path.read_text(encoding="utf-8"), descriptor).frontmatter["id"] != operation.get("id"):
             raise ContextError("precondition_changed", "replace target id changed", {"path": operation["path"]}, EXIT_CONFLICT)
         content = materials[operation["material"]]["content"]
         if operation.get("role") == "policy":
@@ -4308,7 +5267,7 @@ def _apply_file_operation(repo: pathlib.Path, operation: dict[str, Any], materia
         material = operation.get("material")
         if source_digest is None and destination_digest == after:
             return
-        if source_digest == before and parse_document(source.read_text(encoding="utf-8")).frontmatter["id"] != operation.get("id"):
+        if source_digest == before and parse_document(source.read_text(encoding="utf-8"), descriptor).frontmatter["id"] != operation.get("id"):
             raise ContextError("precondition_changed", "move source id changed", {"path": operation["from_path"]}, EXIT_CONFLICT)
         if material is None:
             if source_digest != before or destination_digest is not None:
@@ -4330,7 +5289,7 @@ def _apply_file_operation(repo: pathlib.Path, operation: dict[str, Any], materia
         if current is None:
             return
         inbound = _inbound_refs(repo, operation["id"], path)
-        target_id = parse_document(path.read_text(encoding="utf-8")).frontmatter["id"] if current == operation["before_sha256"] else None
+        target_id = parse_document(path.read_text(encoding="utf-8"), descriptor).frontmatter["id"] if current == operation["before_sha256"] else None
         if current != operation["before_sha256"] or target_id != operation["id"] or operation.get("inbound_refs") or inbound:
             raise ContextError("precondition_changed", "delete precondition changed", exit_code=EXIT_CONFLICT)
         os.unlink(path)
@@ -4419,11 +5378,22 @@ def apply_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest: st
     index_paths: list[str] = []
     with _root_lock(repo):
         plan, materials = _validate_bundle(repo, bundle, approved_digest)
+        plan_descriptor = plan.get("owner_descriptor")
+        profiled_descriptor = (
+            plan_descriptor
+            if isinstance(plan_descriptor, dict) and plan_descriptor.get("schema") == "context-owner-descriptor/v2"
+            else None
+        )
         for operation in plan["operations"]:
             if operation["op"] == "index_rebuild":
                 index_paths = _apply_index_operation(repo, plan, operation, materials, changed)
             else:
-                _apply_file_operation(repo, operation, materials, changed)
+                operation_descriptor = (
+                    profiled_descriptor
+                    if profiled_descriptor is not None and operation.get("area") == profiled_descriptor["kind"]
+                    else None
+                )
+                _apply_file_operation(repo, operation, materials, changed, operation_descriptor)
     return {"applied": True, "plan_id": plan["plan_id"], "approval_digest": approved_digest, "changed_paths": sorted(set(changed)), "index_paths": index_paths, "warnings": []}
 
 
@@ -4468,10 +5438,21 @@ def refresh_repository(repo: pathlib.Path) -> dict[str, Any]:
     for area in areas:
         index_valid = True
         index_text: str | None = None
+        descriptor: dict[str, Any] | None = None
         try:
             path = _ensure_contained(repo, area["path"])
             index_text = path.read_text(encoding="utf-8")
             index = parse_area_index(index_text)
+            try:
+                descriptor = _descriptor_for_area_bytes(root_text, area, index_text)
+            except ContextError as error:
+                issues.append({
+                    "code": "owner_profile_mismatch",
+                    "path": area["path"],
+                    "area": area["area"],
+                    "cause": error.code,
+                })
+                continue
         except FileNotFoundError:
             issues.append({"code": "index_missing", "path": area["path"]})
             continue
@@ -4513,9 +5494,9 @@ def refresh_repository(repo: pathlib.Path) -> dict[str, Any]:
             for artifact_path, state in _scan_area_paths(repo, area["area"]):
                 relative = artifact_path.relative_to(repo).as_posix()
                 try:
-                    row = _entry_from_document(repo, artifact_path, metadata, state)
-                    document = parse_document(artifact_path.read_text(encoding="utf-8"))
-                    _validate_strict_lifecycle(document.frontmatter, state, relative)
+                    row = _entry_from_document(repo, artifact_path, metadata, state, descriptor=descriptor)
+                    document = parse_document(artifact_path.read_text(encoding="utf-8"), descriptor)
+                    _validate_strict_lifecycle(document.frontmatter, state, relative, descriptor)
                     warnings.extend(
                         {**warning, "path": relative}
                         for warning in document.warnings
@@ -4674,6 +5655,7 @@ def doctor_repository(repo: pathlib.Path) -> dict[str, Any]:
 def schema_result() -> dict[str, Any]:
     return {
         "schema": "context-core-schema/v1", "protocol": PROTOCOL, "storage_root": "context/", "root_override": False,
+        "features": ["context-owner-descriptor/v2"],
         "id": "ctx_<lowercase-uuidv4-hex>", "json_success": {"ok": True, "result": {}},
         "json_error": {"ok": False, "error": {"code": "string", "message": "string", "details": {}}},
         "exit_codes": {"usage_schema_filename": 2, "not_found": 3, "conflict": 5, "integrity_index": 6},
@@ -4723,6 +5705,30 @@ def _load_json_argument(value: str, *, allow_stdin: bool = False) -> Any:
         return json.loads(text)
     except json.JSONDecodeError as error:
         raise ContextError("schema_invalid", "input is not valid JSON") from error
+
+
+def _load_descriptor_argument(value: str, *, allow_stdin: bool = False) -> dict[str, Any]:
+    if value == "@-":
+        if not allow_stdin:
+            raise ContextError("usage_invalid", "stdin is not supported for this argument")
+        text = sys.stdin.read()
+    elif value.startswith("@"):
+        text = _read_input_file(value[1:])
+    else:
+        raise ContextError("usage_invalid", "JSON input must use @file or @-")
+    descriptor = _strict_json_loads(text, code="owner_descriptor_invalid")
+    validate_owner_descriptor(descriptor)
+    if descriptor.get("schema") == "context-owner-descriptor/v2":
+        canonical = canonical_json(descriptor)
+        if text not in {canonical, canonical + "\n"}:
+            raise ContextError(
+                "owner_descriptor_invalid",
+                "v2 owner descriptor input must be canonical JSON",
+                exit_code=EXIT_CONFLICT,
+            )
+        if len(canonical.encode("utf-8")) > MAX_OWNER_DESCRIPTOR_BYTES:
+            raise ContextError("owner_descriptor_invalid", "owner descriptor exceeds 8 KiB", exit_code=EXIT_CONFLICT)
+    return descriptor
 
 
 def _load_text_argument(value: str) -> str:
@@ -4967,7 +5973,7 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "bootstrap":
         return bootstrap_repository(
             repo,
-            _load_json_argument(args.descriptor, allow_stdin=True),
+            _load_descriptor_argument(args.descriptor, allow_stdin=True),
             _load_text_argument(args.index_seed),
             host=args.host,
         )
@@ -4983,7 +5989,7 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
         value = prepare_lifecycle_input(repo, args.transition, args.predecessor, _load_json_argument(args.successor_result, allow_stdin=True))
         return {"input": value, "input_digest": canonical_digest(value), "applied": False}
     if args.command == "area" and args.area_command == "register":
-        return build_area_register_bundle(repo, _load_json_argument(args.descriptor, allow_stdin=True), _load_text_argument(args.index_seed))
+        return build_area_register_bundle(repo, _load_descriptor_argument(args.descriptor, allow_stdin=True), _load_text_argument(args.index_seed))
     if args.command == "transaction" and args.transaction_command == "preview":
         owner_result = _load_json_argument(args.owner_result, allow_stdin=True)
         validation = _load_json_argument(args.owner_validation) if args.owner_validation else None

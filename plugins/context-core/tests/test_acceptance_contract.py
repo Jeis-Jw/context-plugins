@@ -10,7 +10,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 PLUGIN = REPO / "plugins/context-core"
 REGISTRY = REPO / "tests/context-v1/acceptance-matrix.json"
-OWNED = {1, 3, 4, 5, 6, 7, 8, 9, 10, 35, 39, 47}
+OWNED = {1, 3, 4, 5, 6, 7, 8, 9, 10, 35, 39, 47, 49, 50, 51, 53, 54, 55, 56}
 
 
 class AcceptanceKernelContractTests(unittest.TestCase):

@@ -48,6 +48,14 @@
     "distribution_manifests": {"input": "Claude, Codex and marketplace manifests", "expected": ["dependency_fields_zero", "implicit_install_policy_zero"]},
     "pre_decision_semantic_check": {"input": "paraphrased candidate and related Current DEC", "expected": ["actual_core_sections", "five_relation_contract", "write_zero"]},
     "removed_claim_identity_surrogates": {"input": "legacy claim identity field on artifact or capture candidate", "expected": ["artifact_warning", "authorized_lazy_clean", "candidate_rejected"]},
-    "decision_spec_view": {"input": "scope with exact, ancestor, descendant and historical decisions", "expected": ["current_only", "decision_and_rationale_only", "deterministic_order", "complete_item_cap", "write_zero"]}
+    "decision_spec_view": {"input": "scope with exact, ancestor, descendant and historical decisions", "expected": ["current_only", "decision_and_rationale_only", "deterministic_order", "complete_item_cap", "write_zero"]},
+    "owner_descriptor_v1_compatibility": {"input": "valid v1 owner descriptor and fixed area seed on the new runtime", "expected": ["root_bytes_unchanged", "area_seed_bytes_unchanged", "profile_registry_absent", "retry_noop"]},
+    "owner_descriptor_v2_mixed_bootstrap": {"input": "v1 area and canonical v2 descriptor in one initialized root", "expected": ["mixed_root_allowed", "feature_advertised", "full_profile_area_only", "retry_noop"]},
+    "owner_descriptor_v2_fail_closed": {"input": "unknown, oversized, duplicate, noncanonical or changed v2 descriptor", "expected": ["rejected", "descriptor_immutable", "write_zero"]},
+    "owner_descriptor_v2_receipt_binding": {"input": "provisional capability, owner receipt and registered descriptor", "expected": ["descriptor_digest_bound", "capability_bound", "receipt_bound", "plan_bound", "write_zero_before_approval"]},
+    "owner_descriptor_v2_target_validation": {"input": "semantically approved draft with an undeclared structural field", "expected": ["core_independent_validation", "schema_invalid", "write_zero"]},
+    "owner_descriptor_v2_lifecycle_relations": {"input": "generic successor topology with and without reciprocal references", "expected": ["malformed_reference_rejected", "predecessor_history", "successor_current", "reciprocal_edges"]},
+    "owner_descriptor_v2_apply_revalidation": {"input": "approved bundle waiting on root lock while area index changes", "expected": ["post_lock_revalidation", "precondition_changed", "approved_artifact_write_zero"]},
+    "owner_descriptor_v2_partial_retry": {"input": "none, exact seed-only, root-row-plus-profile-only and complete registration states", "expected": ["allowed_prefixes_converge", "complete_noop", "descriptor_bytes_preserved"]}
   }
 }

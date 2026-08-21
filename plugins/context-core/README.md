@@ -9,16 +9,19 @@
 3. `$context-core:init`을 한 번 호출하면 canonical storage seed와 활성 host의 관리형 운영지침을 core coordinator가 적용합니다.
 4. 반환된 `doctor.repository_state: ready`, `policy.target`과 phase result를 확인합니다. ready 재호출은 noop입니다.
 
-`schema`와 `capabilities`는 repository root 없이 확인할 수 있습니다. `doctor`는 read-only이며 `context-common/v2`, `repository_state`, `issues`, `warnings`를 보고합니다. 저장소가 아직 초기화되지 않은 read operation은 dependency 오류가 아닌 `context_root_missing`으로 실패합니다. `init`은 absent에서 fixed root/SNAP/OBS seed와 `codex → AGENTS.md`, `claude-code → CLAUDE.md` 관리형 block만 직접 적용합니다. populated repository에서 root index만 없으면 exact built-in SNAP/OBS metadata로 rebuild하고 미등록 area는 자동 claim하지 않으며, legacy artifact/index warning은 init을 막지 않습니다. init target의 incompatible schema/owner/path는 덮어쓰지 않습니다.
+`schema`와 `capabilities`는 repository root 없이 확인할 수 있습니다. `schema.features`의 `context-owner-descriptor/v2`는 bounded structural profile을 이해하는 runtime handshake입니다. `doctor`는 read-only이며 `context-common/v2`, `repository_state`, `issues`, `warnings`를 보고합니다. 저장소가 아직 초기화되지 않은 read operation은 dependency 오류가 아닌 `context_root_missing`으로 실패합니다. `init`은 absent에서 fixed root/SNAP/OBS seed와 `codex → AGENTS.md`, `claude-code → CLAUDE.md` 관리형 block만 직접 적용합니다. populated repository에서 root index만 없으면 exact built-in SNAP/OBS metadata로 rebuild하고 미등록 area는 자동 claim하지 않으며, legacy artifact/index warning은 init을 막지 않습니다. init target의 incompatible schema/owner/path는 덮어쓰지 않습니다.
 
 ## 제품 흐름
 
 - Standalone: 명시적 handoff는 SNAP, 재사용 가능한 발견·근거는 OBS로 제안합니다.
 - Integrated: semantic owner가 complete draft와 plan을 만들고, `context-core`가 grouped preview를 봉인한 뒤 유일한 physical coordinator로 적용합니다.
+- Generic addon: canonical `context-owner-descriptor/v2`가 closed field types, H2 order, index projection과 generic lifecycle topology를 선언합니다. `supersede_current`는 predecessor→successor와 successor→predecessor reference recipe를 모두 요구합니다. semantic receipt는 의미 claim을 증명하지만 core의 target-byte structural validation을 대체하지 않습니다.
 - 각 user turn에서는 새 의미만 같은 응답 pass에서 별도 호출 없이 audit합니다. 신호가 없으면 아무 상태도 표시하지 않고, 신호가 있을 때만 metadata recall과 선택된 실제 본문 read를 수행합니다.
 - 이미 읽은 `{id,sha256}`와 pending·dismissed 참조는 session-local ephemeral ledger로 재사용하며, 본문을 복제하거나 repository에 저장하지 않습니다.
 - Audit, route, claim, draft, preview와 denied apply는 repository와 host configuration을 변경하지 않습니다.
 - 명시적 `init`과 addon init용 `bootstrap`만 fixed `core_init|area_register|policy_install`을 coordinator 검증으로 직접 적용합니다. 일반 artifact mutation의 exact digest approval은 유지되며 `refresh --fix index`만 derived index를 승인 없이 즉시 rebuild합니다.
+- v1과 v2 area는 같은 root에 공존합니다. v1 bytes에는 profile registry를 추가하지 않고, v2 descriptor는 등록 뒤 immutable하며 digest가 달라진 재등록은 write 0으로 거절합니다.
+- 등록된 v2 root registry와 area descriptor의 digest가 다르면 `doctor`와 `refresh`는 blocking issue로 보고하고 `refresh --fix index`도 해당 trust bytes를 자동 복구하지 않습니다. 일반 artifact/index drift의 read fallback 정책은 유지됩니다.
 - 관리형 운영지침은 conflict·취지 변경을 먼저 알리고, 그 외에는 원 답 뒤 성숙한 후보만 milestone당 한 번 제안합니다. dismissed·deferred 후보는 새 근거 전까지 반복하지 않으며 의미 판정에 hash·ID·metadata를 사용하지 않습니다.
 
 기존 `wiki/`를 자동 migration하지 않습니다. Obsidian은 repository root를 vault로 열 때의 선택적 view일 뿐 runtime dependency가 아닙니다. PCMS는 조직 권한·승인 queue·cross-project search·정책·감사 같은 control-plane 범위를 담당하며, 이 local plugin은 그 기능을 제한해 판매하는 제품이 아닙니다.
