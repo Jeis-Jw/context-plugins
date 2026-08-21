@@ -22,7 +22,7 @@ The new repository starts with a clean import commit. This avoids publishing unr
 | plugin version | `0.3.0` | `0.4.0` |
 | protocol | `context-common/v2` | `context-common/v2` |
 
-The coordinate change is a breaking distribution migration even though the storage protocol remains `context-common/v2`. Existing installations are not modified automatically. Publication, marketplace installation, reload, temporary-consumer bootstrap and rollback verification remain separate release work.
+The coordinate change is a breaking distribution migration even though the storage protocol remains `context-common/v2`. Existing installations are not modified automatically. The GitHub source repository is public; marketplace publication, installation, reload, temporary-consumer bootstrap and rollback verification remain separate release work.
 
 ## Knowledge boundary
 

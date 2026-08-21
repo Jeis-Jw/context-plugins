@@ -1,6 +1,6 @@
 # Context Plugins
 
-Git/Markdown 기반 durable project context를 coding agent가 안전하게 회수하고, 실제 본문 비교와 사용자 승인 뒤에만 기록하도록 만드는 공개 예정 plugin repository입니다.
+Git/Markdown 기반 durable project context를 coding agent가 안전하게 회수하고, 실제 본문 비교와 사용자 승인 뒤에만 기록하도록 만드는 public plugin repository입니다.
 
 이 저장소는 `context-manager` 프로젝트의 plugin 구성요소이며 두 플러그인을 함께 소유합니다.
 
@@ -19,7 +19,7 @@ Git/Markdown 기반 durable project context를 coding agent가 안전하게 회�
 - Protocol: `context-common/v2`
 - Current repository version: `0.4.0`
 
-이 좌표는 아직 외부에 publish되거나 live install로 검증되지 않았습니다. 현재 설치된 기존 좌표 `context-core@jeis-ai-plugins`는 별도 distribution이며 새 source의 활성화를 증명하지 않습니다.
+GitHub source repository는 `Jeis-Jw/context-plugins`로 공개합니다. marketplace에는 아직 publish되지 않았고 live install도 검증되지 않았습니다. 현재 설치된 기존 좌표 `context-core@jeis-ai-plugins`는 별도 distribution이며 새 source의 활성화를 증명하지 않습니다.
 
 ## Repository layout
 
