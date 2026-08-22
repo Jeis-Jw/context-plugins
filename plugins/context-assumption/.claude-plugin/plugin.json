@@ -1,5 +1,9 @@
 {
   "name": "context-assumption",
-  "version": "0.5.0",
-  "description": "Provisional project assumptions with evidence-bound confirmation, refutation, and supersession."
+  "version": "0.5.1",
+  "description": "Provisional project assumptions with evidence-bound confirmation, refutation, and supersession.",
+  "author": {
+    "name": "Jinwuk-Lee",
+    "url": "https://github.com/Jeis-Jw"
+  }
 }

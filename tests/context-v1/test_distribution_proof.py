@@ -18,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PHASE0 = ROOT / "tests/context-v1/phase0/phase0_contract.py"
 PLUGIN_NAMES = ("context-core", "context-decision", "context-assumption", "context-term")
+RELEASE_VERSION = "0.5.1"
 OWNER_SKILLS = {
     "context-core": "context",
     "context-decision": "decision",
@@ -130,17 +131,12 @@ class DistributionProofTests(unittest.TestCase):
             "Jeis-Jw/context-plugins",
             "scope",
             "reload",
-            "새 session",
+            "new session",
             "context-decision:init",
         ):
             self.assertIn(token, readme)
-        for code in expected - {"ready", "core_uninitialized"}:
-            line = next(line for line in readme.splitlines() if line.startswith(f"- `{code}`:"))
-            for token in ("Jeis-Jw/context-plugins", "scope", "reload", "새 session", "context-decision:init", "재시도"):
-                self.assertIn(token, line)
-        absent_line = next(line for line in readme.splitlines() if line.startswith("- `core_uninitialized`:"))
-        for token in ("installed", "context-core", "bootstrap", "같은 호출", "decision"):
-            self.assertIn(token, absent_line)
+        for token in ("install or correct", "reload", "retry", "same init call", "bootstrap"):
+            self.assertIn(token, readme)
 
     def test_acceptance_42_repository_absent(self) -> None:
         fixtures = ROOT / "tests/context-v1/fixtures/host-inventory"
@@ -198,6 +194,10 @@ class DistributionProofTests(unittest.TestCase):
         codex_marketplace = read_json(ROOT / ".agents/plugins/marketplace.json")
         self.assertEqual("context-plugins", claude_marketplace["name"])
         self.assertEqual("context-plugins", codex_marketplace["name"])
+        self.assertEqual(
+            "Developer-preview marketplace for Git-backed, approval-gated durable project context.",
+            claude_marketplace["metadata"]["description"],
+        )
         self.assertEqual(list(PLUGIN_NAMES), [item["name"] for item in claude_marketplace["plugins"]])
         self.assertEqual(list(PLUGIN_NAMES), [item["name"] for item in codex_marketplace["plugins"]])
         claude_entries = {item["name"]: item for item in claude_marketplace["plugins"]}
@@ -209,12 +209,13 @@ class DistributionProofTests(unittest.TestCase):
             codex = read_json(root / ".codex-plugin/plugin.json")
             self.assertEqual(name, claude["name"])
             self.assertEqual(name, codex["name"])
-            self.assertEqual("0.5.0", claude["version"])
+            self.assertEqual(RELEASE_VERSION, claude["version"])
             self.assertEqual(claude["version"], codex["version"])
             self.assertEqual(claude["version"], claude_entries[name]["version"])
             self.assertEqual(claude["version"], codex_entries[name]["version"])
             self.assertEqual(claude["description"], claude_entries[name]["description"])
             self.assertEqual(codex["description"], codex_entries[name]["description"])
+            self.assertEqual(claude_marketplace["owner"], claude["author"])
             self.assertEqual(f"./plugins/{name}", claude_entries[name]["source"])
             self.assertEqual({"source": "local", "path": f"./plugins/{name}"}, codex_entries[name]["source"])
             self.assertEqual(
@@ -225,9 +226,9 @@ class DistributionProofTests(unittest.TestCase):
             for document in (claude, codex, claude_entries[name], codex_entries[name]):
                 self.assertFalse(FORBIDDEN_KEYS & recursive_keys(document))
             plugin_readme = (root / "README.md").read_text(encoding="utf-8")
-            self.assertIn("0.5.0", plugin_readme)
+            self.assertIn(RELEASE_VERSION, plugin_readme)
             if name in {"context-core", "context-decision"}:
-                self.assertIn("0.4.1", plugin_readme)
+                self.assertTrue((root / "README.ko.md").is_file())
 
             skills = root / codex["skills"]
             self.assertTrue(skills.is_dir())
@@ -325,9 +326,9 @@ class DistributionProofTests(unittest.TestCase):
                 self.assertLessEqual(len(prompt), 128, f"{manifest}: {prompt}")
 
         decision_skill = (decision_root / "skills/decision/SKILL.md").read_text(encoding="utf-8")
-        for token in ("context-common/v2", "partial/invalid", "cache path", "managed block"):
+        for token in ("context-common/v2", "partial/invalid/ready", "scan caches", "managed block"):
             self.assertIn(token, init_skill)
-        for token in ("실제", "conflict", "exact digest", "context-core만 소유"):
+        for token in ("actual", "conflict", "exact digest", "Core alone owns"):
             self.assertIn(token, decision_skill)
         for name in PLUGIN_NAMES[1:]:
             semantic_root = ROOT / "plugins" / name
@@ -339,20 +340,25 @@ class DistributionProofTests(unittest.TestCase):
 
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         for token in (
-            "0.5.0",
+            RELEASE_VERSION,
             "context-assumption",
             "context-term",
-            "local release unit",
-            "아직 push",
-            "Fresh host live install",
-            "중앙 marketplace catalog 배포",
-            "아직 미선택",
+            "There is no bundle or meta-plugin",
+            "tag not created or pushed",
+            "Fresh install and cache lifecycle passed",
+            "Marketplace publication",
+            "Not selected",
         ):
             self.assertIn(token, readme)
+        self.assertIn("v0.5.1", readme)
+        self.assertIn("--ref v0.5.1", readme)
+        self.assertIn("--branch v0.5.1", readme)
+        self.assertNotIn("--ref main", readme)
+        self.assertTrue((ROOT / "README.ko.md").is_file())
         self.assertFalse((ROOT / "LICENSE").exists())
         self.assertFalse((ROOT / "wiki").exists())
         migration = (ROOT / "MIGRATION.md").read_text(encoding="utf-8")
-        for token in ("0.5.0 additive semantic owners", "context-common/v2", "not rewritten", "not provided"):
+        for token in ("0.5.0 additive semantic owners", "0.5.1 W1-W3 hardening", "context-common/v2", "not rewritten", "not provided"):
             self.assertIn(token, migration)
 
     def test_forbidden_install_and_host_mutation_calls_are_absent(self) -> None:
@@ -457,7 +463,7 @@ class DistributionProofTests(unittest.TestCase):
 
         for name in PLUGIN_NAMES[1:]:
             readme = (ROOT / "plugins" / name / "README.md").read_text(encoding="utf-8")
-            for token in ("path suffix", "SHA-256", "marketplace provenance", "저수준 compatibility", "@file", "@@literal", "8 KiB", "16 KiB"):
+            for token in ("path suffix", "SHA-256", "marketplace provenance", "compatibility", "@file", "@@literal", "8 KiB", "16 KiB"):
                 self.assertIn(token, readme)
             prompts = read_json(ROOT / "plugins" / name / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"]
             prompt_text = " ".join(prompts)
@@ -465,10 +471,10 @@ class DistributionProofTests(unittest.TestCase):
                 self.assertIn(token, prompt_text)
 
         root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        for token in ("mode `0600`", "직접 삭제", "indexed body", "20개", "end-to-end host/model token", "O(1)"):
+        for token in ("mode `0600`", "Delete it manually", "indexed artifact bodies", "20 bodies", "end-to-end model tokens", "O(1)"):
             self.assertIn(token, root_readme)
         decision_readme = (ROOT / "plugins/context-decision/README.md").read_text(encoding="utf-8")
-        for token in ("user-facing exact `approval_digest`", "직접 삭제", "indexed body open 0", "20개", "end-to-end model token", "O(1)"):
+        for token in ("user-facing exact approval", "Delete the receipt manually", "zero indexed bodies", "20 bodies", "end-to-end model tokens", "O(1)"):
             self.assertIn(token, decision_readme)
 
         release_notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
@@ -477,6 +483,20 @@ class DistributionProofTests(unittest.TestCase):
             self.assertIn(token, release_notes)
         for token in ("W1-W3", "context-common/v2", "linked worktree", "@file", "@@literal"):
             self.assertIn(token, migration)
+        for token in (
+            "2026-08-22",
+            "10/10 passed",
+            "0.149.0-alpha.4.1",
+            "Claude Code `2.1.89`",
+            "All four plugins installed and loaded",
+            "Actual model behavior",
+            "Unverified",
+            "3,147",
+            "1,339",
+            "57.5% character reduction",
+            "not a token-savings claim",
+        ):
+            self.assertIn(token, root_readme)
 
     def test_public_help_exposes_capture_limits_and_core_trust(self) -> None:
         environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}

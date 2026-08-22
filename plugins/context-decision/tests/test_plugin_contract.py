@@ -105,15 +105,15 @@ class PluginContractTests(unittest.TestCase):
     def test_schema_and_capabilities_are_the_only_core_free_surfaces(self) -> None:
         protocol = (ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.md").read_text(encoding="utf-8")
         init = (ROOT / "plugins/context-decision/skills/init/SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("`schema`와 `capabilities`만 core 없이", protocol)
+        self.assertIn("Only `schema` and `capabilities` are core-free", protocol)
         for token in ("entrypoint path", "SHA-256", "protocol", "repository_state=absent"):
             self.assertIn(token, protocol)
-        for forbidden in ("install", "enable", "update", "marketplace add", "cache probing", "embedded core"):
+        for forbidden in ("install", "enable", "update", "marketplace", "plugin caches", "embed a core"):
             self.assertIn(forbidden, protocol)
-        self.assertIn("release가 고정한 context-core", init)
+        self.assertIn("release-pinned", init)
         self.assertIn("context_cli.py bootstrap", init)
         self.assertIn("decision_init.py", init)
-        self.assertIn("한 번만", init)
+        self.assertIn("exactly once", init)
 
     def test_loaded_init_skill_resolves_sibling_entrypoint_without_claude_root(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

@@ -52,7 +52,8 @@ semantic plugin은 임의의 `--core-cli`를 실행하지 않습니다. `context
 - Core selector: `context-core@context-plugins`
 - Source: `Jeis-Jw/context-plugins`
 - Protocol: `context-common/v2`
-- Current repository version: `0.5.0`
+- Current repository version: `0.5.1`
+- Immutable install ref: `v0.5.1` (not created or pushed; owner approval required)
 
 ## Provenance
 
@@ -61,3 +62,5 @@ semantic plugin은 임의의 `--core-cli`를 실행하지 않습니다. `context
 ## License
 
 공개 라이선스는 아직 선택하지 않았습니다. 저장소가 public이더라도 `LICENSE`가 추가되기 전에는 사용·복제·재배포 권한이 자동으로 부여되지 않습니다.
+
+`v0.5.1` tag 생성, release commit/tag push, marketplace publication과 license 선택은 각각 owner gate입니다. 검증만으로 이 단계가 완료됐다고 간주하지 않습니다.

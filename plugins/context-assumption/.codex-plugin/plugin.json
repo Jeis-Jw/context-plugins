@@ -1,6 +1,6 @@
 {
   "name": "context-assumption",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Provisional project assumptions with explicit verification conditions and evidence-bound lifecycle transitions.",
   "author": {
     "name": "Jinwuk-Lee",

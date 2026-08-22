@@ -1,8 +1,8 @@
 # Release notes
 
-## Unreleased hardening patch
+## 0.5.1 (prepared; tag not published)
 
-This developer-preview patch preserves `context-common/v2` and existing SNAP, OBS and DEC bytes.
+This developer-preview patch preserves `context-common/v2` and existing SNAP, OBS and DEC bytes. It is distinct from the already published 0.5.0 bytes; `v0.5.1` has not been created or pushed.
 
 ### W1 — lower prompt and recall overhead
 
@@ -25,4 +25,4 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ## Release boundary
 
-This repository is preparing a developer preview. No tag, push or marketplace publication is implied by these notes. A public license has not been selected; an owner must choose one before public reuse or redistribution is invited.
+This repository is preparing a developer preview. No tag, push or marketplace publication is implied by these notes. The owner must explicitly approve creation and push of `v0.5.1`. A public license has not been selected; an owner must choose one before public reuse or redistribution is invited.

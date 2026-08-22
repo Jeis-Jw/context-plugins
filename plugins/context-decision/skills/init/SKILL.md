@@ -1,11 +1,11 @@
 ---
 name: init
-description: 사용자가 현재 repository의 context-decision 초기화나 bootstrap을 명시적으로 요청했을 때 exact compatible context-core를 확인하고 필요한 core bootstrap과 decision area 등록을 한 번에 완료한다. 일반 decision capture 중에는 자동 실행하지 않는다.
+description: When explicitly requested, verify the release-pinned context-core and initialize core storage, the DEC area, and the active host policy in one idempotent operation.
 ---
 
 # Init
 
-먼저 이 release가 고정한 context-core public entrypoint의 absolute path를 준비한다. `decision_init.py`는 subprocess 실행 전에 path suffix와 SHA-256을 semantic CLI의 `REQUIRED_PLUGIN` pin에 대조하고, 일치한 core에서만 `context-core-schema/v1`, `context-common/v2`, `context-owner-descriptor/v2`, 필수 doctor/bootstrap/transaction command와 current doctor state를 직접 handshake한다. host/skill catalog가 이 loaded `SKILL.md`의 actual absolute path를 제공하면, 그 파일의 sibling `scripts/decision_init.py`를 resolve해 orchestration entrypoint를 **한 번만** 호출한다. cwd, plugin cache 탐색 또는 `$CLAUDE_PLUGIN_ROOT`를 Codex 경로 fallback으로 사용하지 않는다.
+Resolve the absolute path of this loaded `SKILL.md`, then its sibling `scripts/decision_init.py`. Resolve the separately loaded core skill to its public `skills/context/scripts/context_cli.py`. Invoke the init adapter exactly once:
 
 ```bash
 INIT_SKILL_FILE="/absolute/path/from-loaded-skill-catalog/plugins/context-decision/skills/init/SKILL.md"
@@ -16,10 +16,10 @@ python3 "$INIT_ENTRYPOINT" \
   --json
 ```
 
-Claude Code에서는 host가 제공한 plugin root를 알고 있을 때만 `INIT_SKILL_FILE="${CLAUDE_PLUGIN_ROOT}/skills/init/SKILL.md"`를 optional route로 사용할 수 있다. Codex에서는 반드시 loaded skill catalog의 absolute `SKILL.md` path를 사용한다.
+Claude Code may use `INIT_SKILL_FILE="${CLAUDE_PLUGIN_ROOT}/skills/init/SKILL.md"` only when the host supplies that plugin root. Codex must use the absolute path from the loaded skill catalog. Do not infer paths from cwd, scan caches, or use `$CLAUDE_PLUGIN_ROOT` as a Codex fallback.
 
-- missing/path 또는 SHA mismatch/incompatible이면 subprocess, repository와 host configuration write 0으로 중단한다. 설치·활성화·update는 caller가 별도로 수행하고 reload·새 session 뒤 재시도한다.
-- absent/partial/invalid/ready는 위 exact doctor handshake 뒤 명시적 bootstrap에 전달한다. repair 가능 여부와 실패 진단은 pinned core가 소유하며 adapter가 doctor receipt를 만들거나 수정하지 않는다.
-- 이 entrypoint가 exact pin과 handshake를 먼저 실행하고 fixed descriptor/index seed와 `--host`를 명시적으로 제공된 active installed core의 public `context_cli.py bootstrap --descriptor @file --index-seed @file --host <host> --json` surface에 그대로 전달한다. cache path를 추측하거나 core를 내장·복제하지 않는다.
+Before subprocess execution, the adapter verifies the release-pinned entrypoint path suffix and SHA-256 from the decision semantic CLI's `REQUIRED_PLUGIN`. It then directly handshakes `context-core-schema/v1`, `context-common/v2`, required doctor/bootstrap/transaction commands, `context-owner-descriptor/v2`, and the current doctor state. This does not attest marketplace provenance, source, scope, or enabled state. Caller inventory/doctor files are low-level compatibility inputs and are not accepted by this canonical init.
 
-core public bootstrap은 absent core seed, decision area, 현재 host 운영지침을 순서대로 맞춘다. 운영지침은 Codex의 `AGENTS.md` 또는 Claude Code의 `CLAUDE.md`에 marker로 경계된 단일 managed block으로 설치·갱신되며 marker 밖의 bytes를 보존한다. 세 단계는 `phases`에 `applied|noop|failed`로 보고하고 재시도하면 완료된 단계는 noop, 남은 단계만 적용된다. 이 명시적 init이 허용하는 write는 fixed core seed·area registration·policy installation뿐이며 DEC/user-content mutation은 exact digest approval을 계속 요구한다.
+A missing path, digest mismatch, or incompatible handshake produces zero subprocess, repository, and host-configuration writes. For absent/partial/invalid/ready doctor states, pass the exact state to the pinned core; core owns repairability and diagnostics.
+
+The adapter passes the fixed descriptor/index seed and explicit host to public `context_cli.py bootstrap --descriptor @file --index-seed @file --host ...`. Core reports `core_init|area_register|policy_install` phases as `applied|noop|failed`, preserves bytes outside the managed block markers, and converges completed phases on retry. No DEC/user-content mutation is authorized without exact digest approval.

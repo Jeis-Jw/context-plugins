@@ -36,9 +36,9 @@ Users install only the owners they need and explicitly run each installed addon'
 
 Rollback is distribution-level: stop using or uninstall the optional addon while leaving its repository artifacts untouched. Automatic downgrade, descriptor mutation, area deletion and corpus cleanup are not provided.
 
-## W1-W3 hardening in the next patch
+## 0.5.1 W1-W3 hardening
 
-The next patch keeps `context-common/v2` and existing artifact bytes while tightening the executable and approval boundaries.
+`0.5.1` keeps `context-common/v2` and existing artifact bytes while tightening the executable and approval boundaries. It requires no storage migration and is a new release identity distinct from existing `0.5.0` bytes.
 
 - W1 reduces the Codex prompt character surface, adds a one-command inline DEC preview and a frozen out-of-repository receipt, and makes healthy index misses open zero indexed bodies while capping recovery body opens at 20.
 - W2 binds both core and workflow approval material to exact worktree/Git-common-dir identity, pins the distributed `context_cli.py` path suffix and SHA-256 before execution, and performs the core schema/protocol/command/feature/doctor handshake directly. This executable check is not marketplace provenance, catalog source or enabled-state attestation; caller inventory remains a low-level compatibility input.

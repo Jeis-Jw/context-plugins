@@ -45,3 +45,5 @@ python3 skills/term/scripts/term_cli.py search --signal term-encountered --query
 모든 저수준 non-static compatibility 명령에는 caller-provided core host inventory와 doctor receipt가 필요하다. Canonical init은 `--core-cli`에서 직접 handshake한다.
 
 0.5.0은 `context-term/v1` authoritative semantic owner의 첫 distribution release다. TERM은 optional addon이며 설치·활성화·init·기존 용어 문서 변환을 자동 수행하지 않고, exact core handshake와 승인형 transaction 경계를 그대로 따른다.
+
+0.5.1은 release-pinned core path/SHA와 direct handshake, repository-bound approval, actual semantic input limits와 `@file`/`@@literal` 계약을 추가한 developer-preview patch다. `v0.5.1` tag는 아직 생성·push되지 않았고 TERM은 계속 optional experimental surface다.

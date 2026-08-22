@@ -50,11 +50,11 @@ class PluginContractTests(unittest.TestCase):
     def test_public_protocol_states_non_proportional_cost_invariant_and_limit(self) -> None:
         protocol = (PLUGIN / "skills/context/references/context-protocol.md").read_text(encoding="utf-8")
         for contract in (
-            "비용 비례 금지 invariant",
-            "artifact body materialization, bounded output과 model·owner invocation 비용",
-            "전체 recall 계산량의 O(1)을 보장하지 않는다",
+            "Bounded-cost scope",
+            "Hard bounds apply to artifact body materialization/open",
+            "does not guarantee O(1) end-to-end recall computation or model tokens",
             "tests/context-v1/test_token_io_evidence.py",
-            "hard runtime guarantee가 아니다",
+            "not a hard runtime guarantee",
         ):
             self.assertIn(contract, protocol)
 

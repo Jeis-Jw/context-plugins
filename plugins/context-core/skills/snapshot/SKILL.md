@@ -1,18 +1,18 @@
 ---
 name: snapshot
-description: 명시적으로 요청된 unfinished session handoff를 여러 named SNAP 중 하나로 preview, 갱신, 조회 또는 폐기한다.
+description: When explicitly requested, preview, save, update, load, or discard one of several named SNAP handoffs for unfinished work.
 ---
 
 # Snapshot
 
-SNAP은 `authority: staging`인 mutable resume context다. 결정·관찰의 권위 기록으로 취급하지 않는다.
+SNAP is mutable resume context with `authority: staging`; it is not authoritative decision or evidence history.
 
-1. 저장 요청에 unfinished context와 handoff 의도가 모두 있는지 확인한다.
-2. `context_cli.py capabilities --json`의 snapshot descriptor만 사용해 bounded candidate와 `claim` attestation을 만든다.
-3. `save`는 create-only이며 `현재 맥락`, `열린 항목`, `다음 단계`를 모두 채운다.
-4. `update`는 기본 full replacement다. 일부만 바꿀 때만 `--merge`를 사용한다.
-5. 모든 mutation은 반환된 complete bundle을 보여주고 exact `approval_digest` 승인 뒤 `transaction apply`로 적용한다.
-6. `load`의 `freshness`는 warning label일 뿐 SNAP lifecycle을 바꾸지 않는다.
-7. `discard`는 exact SNAP ID만 사용한다. SNAP에는 archive/history/retired 상태가 없다.
+1. Require both unfinished context and explicit handoff intent.
+2. Use only the snapshot descriptor from `context_cli.py capabilities --json` to build a bounded candidate and claim attestation.
+3. `save` is create-only and must fill Current context, Open items, and Next steps.
+4. `update` is full replacement by default; use `--merge` only for a deliberate partial update.
+5. Show the complete returned bundle and call `transaction apply` only after exact `approval_digest` approval.
+6. `load.freshness` is a warning label and never changes lifecycle state.
+7. `discard` accepts an exact SNAP ID. SNAP has no archive, history, or retired state.
 
-CLI는 `../context/scripts/context_cli.py snapshot ...`을 사용한다. `@file` body를 우선하고, 승인 뒤 candidate·timestamp·bundle을 다시 생성하지 않는다.
+Use `../context/scripts/context_cli.py snapshot ...`. Prefer `@file` for bodies and never regenerate a candidate, timestamp, or bundle after approval.
