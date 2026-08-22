@@ -535,6 +535,17 @@ class DistributionProofTests(unittest.TestCase):
             "low-level compatibility input",
         ):
             self.assertIn(token, korean_readme)
+        self.assertIn(
+            "release-pinned core executable의 path suffix/SHA-256, schema·protocol·required "
+            "features/commands 또는 operation별 doctor state가 요구 조건과 다르면 target write는 0",
+            korean_readme,
+        )
+        self.assertIn(
+            "이 검증은 marketplace provenance, catalog source 또는 host enabled state를 attest하지 않습니다.",
+            korean_readme,
+        )
+        self.assertNotIn("source, version 또는 protocol이 맞지 않으면", korean_readme)
+        self.assertNotIn("marketplace provenance, catalog source 또는 host enabled state를 attest합니다", korean_readme)
         self.assertIn("`0.5.1` developer preview는 local release 후보 commit으로 준비됐습니다", korean_readme)
         self.assertIn("local `0.5.1` release 후보 commit도 아직 push되지 않았고", korean_readme)
         self.assertIn("`v0.5.1` tag는 아직 생성·push되지 않았으며", korean_readme)

@@ -133,7 +133,7 @@ context/
 - Hard bound는 artifact body materialization/open, selected output, candidate/envelope와 owner input에 적용됩니다. Index row scoring·directory enumeration과 end-to-end host/model token 사용량은 corpus 크기와 무관한 O(1)을 보장하지 않습니다.
 - background daemon처럼 대화를 수집하거나 transcript 전체를 자동 보관하지 않습니다.
 - 명시적 `init` 외에는 plugin 설치·활성화와 host configuration을 자동으로 변경하지 않습니다.
-- source, version 또는 protocol이 맞지 않으면 대상 파일을 쓰지 않고 필요한 exact 좌표를 안내합니다.
+- release-pinned core executable의 path suffix/SHA-256, schema·protocol·required features/commands 또는 operation별 doctor state가 요구 조건과 다르면 target write는 0이며 필요한 exact 좌표를 안내합니다. 이 검증은 marketplace provenance, catalog source 또는 host enabled state를 attest하지 않습니다.
 - 기존 `wiki/`나 과거 distribution의 context를 자동 migration하지 않습니다.
 
 ## 검증 근거
