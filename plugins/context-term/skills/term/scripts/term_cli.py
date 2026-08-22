@@ -45,6 +45,8 @@ REQUIRED_PLUGIN = {
     "source": "Jeis-Jw/context-plugins",
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
+    "entrypoint": "skills/context/scripts/context_cli.py",
+    "entrypoint_sha256": "sha256:92dc345d2c0178a98740e89f07aad1f32fcef261ff921acd267486d1678d180a",
 }
 
 
@@ -166,6 +168,46 @@ def _serialize_public(value: Any) -> str:
 
 def bytes_digest(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def required_core_surface(value: str) -> pathlib.Path:
+    supplied = pathlib.Path(value)
+    try:
+        resolved = supplied.resolve(strict=True)
+        digest = bytes_digest(resolved.read_bytes())
+    except (OSError, RuntimeError) as error:
+        raise TermError("core_surface_unavailable", "the pinned context-core public CLI is unavailable", {"required_plugin": dict(REQUIRED_PLUGIN)}, EXIT_CONFLICT) from error
+    suffix = pathlib.PurePosixPath(REQUIRED_PLUGIN["entrypoint"]).parts
+    if (
+        not supplied.is_absolute()
+        or not resolved.is_file()
+        or tuple(resolved.parts[-len(suffix):]) != suffix
+        or digest != REQUIRED_PLUGIN["entrypoint_sha256"]
+    ):
+        raise TermError(
+            "core_surface_mismatch",
+            "context-core entrypoint path or SHA-256 differs from the pinned release contract",
+            {"required_entrypoint": REQUIRED_PLUGIN["entrypoint"], "required_sha256": REQUIRED_PLUGIN["entrypoint_sha256"], "observed_path": str(resolved), "observed_sha256": digest},
+            EXIT_CONFLICT,
+        )
+    return resolved
+
+
+def validate_core_schema_handshake(value: Any) -> dict[str, Any]:
+    required_commands = {"doctor", "bootstrap", "transaction preview", "transaction apply"}
+    features = value.get("features") if isinstance(value, dict) else None
+    commands = value.get("commands") if isinstance(value, dict) else None
+    if (
+        not isinstance(value, dict)
+        or value.get("schema") != "context-core-schema/v1"
+        or value.get("protocol") != PROTOCOL
+        or not isinstance(features, list)
+        or REQUIRED_FEATURE not in features
+        or not isinstance(commands, list)
+        or not required_commands.issubset(commands)
+    ):
+        raise TermError("core_incompatible", "context-core schema, protocol, feature, or required command handshake is incompatible", {"required_plugin": dict(REQUIRED_PLUGIN), "required_commands": sorted(required_commands)}, EXIT_CONFLICT)
+    return value
 
 
 def file_bytes(content: str) -> bytes:

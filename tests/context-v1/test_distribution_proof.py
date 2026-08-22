@@ -251,6 +251,9 @@ class DistributionProofTests(unittest.TestCase):
                 ):
                     resolved = subprocess.run(command, cwd=temp, env=environment, text=True, capture_output=True)
                     self.assertEqual(0, resolved.returncode, resolved.stdout + resolved.stderr)
+                    if command[1] == str(init_entrypoint) and name != "context-core":
+                        self.assertNotIn("--core-inventory", resolved.stdout)
+                        self.assertNotIn("--core-doctor", resolved.stdout)
                 schema_probe = subprocess.run(
                     [sys.executable, str(owner_cli), "schema", "--json"],
                     cwd=temp,
@@ -285,13 +288,15 @@ class DistributionProofTests(unittest.TestCase):
                     workflow_entrypoint = cached / "skills/decision/scripts/decision_workflow.py"
                     self.assertTrue(workflow_entrypoint.is_file())
                     workflow_help = subprocess.run(
-                        [sys.executable, str(workflow_entrypoint), "--help"],
+                        [sys.executable, str(workflow_entrypoint), "preview", "--help"],
                         cwd=temp,
                         env=environment,
                         text=True,
                         capture_output=True,
                     )
                     self.assertEqual(0, workflow_help.returncode, workflow_help.stdout + workflow_help.stderr)
+                    self.assertNotIn("--core-inventory", workflow_help.stdout)
+                    self.assertNotIn("--core-doctor", workflow_help.stdout)
                 self.assertEqual(before, digest_tree(cached))
 
         self.assertTrue((ROOT / "plugins/context-core/skills/context/SKILL.md").is_file())
@@ -412,6 +417,27 @@ class DistributionProofTests(unittest.TestCase):
             "auto_update(",
         ):
             self.assertNotIn(forbidden_command, all_python)
+
+    def test_semantic_plugins_pin_the_distributed_core_entrypoint(self) -> None:
+        core_cli = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
+        expected = read_json(ROOT / "tests/context-v1/fixtures/host-inventory/required-plugin.json")
+        expected_digest = "sha256:" + hashlib.sha256(core_cli.read_bytes()).hexdigest()
+        self.assertEqual("skills/context/scripts/context_cli.py", expected["entrypoint"])
+        self.assertEqual(expected_digest, expected["entrypoint_sha256"])
+
+        for name in PLUGIN_NAMES[1:]:
+            owner_cli = ROOT / "plugins" / name / OWNER_CLIS[name]
+            module = load(f"{name.replace('-', '_')}_distribution_pin", owner_cli)
+            self.assertEqual(expected, module.REQUIRED_PLUGIN)
+            init_source = (ROOT / "plugins" / name / INIT_ENTRYPOINTS[name]).read_text(encoding="utf-8")
+            self.assertIn(".required_core_surface", init_source)
+            self.assertNotIn(expected_digest, init_source)
+
+        workflow_source = (
+            ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("decision_cli.required_core_surface", workflow_source)
+        self.assertNotIn(expected_digest, workflow_source)
 
 
 if __name__ == "__main__":

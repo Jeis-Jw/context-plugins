@@ -4,5 +4,7 @@
   "selector": "context-core@context-plugins",
   "source": "Jeis-Jw/context-plugins",
   "provider": "Jinwuk-Lee (Jeis-Jw)",
-  "required_protocol": "context-common/v2"
+  "required_protocol": "context-common/v2",
+  "entrypoint": "skills/context/scripts/context_cli.py",
+  "entrypoint_sha256": "sha256:92dc345d2c0178a98740e89f07aad1f32fcef261ff921acd267486d1678d180a"
 }

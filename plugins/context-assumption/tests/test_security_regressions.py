@@ -213,12 +213,13 @@ class AssumptionSecurityRegressionTests(unittest.TestCase):
             repo.mkdir()
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
             fake = root / "context_cli.py"
-            fake.write_text("raise SystemExit('must not run')\n", encoding="utf-8")
-            inventory, doctor = helpers.write_preflight(root, "absent")
+            marker = root / "executed"
+            fake.write_text("from pathlib import Path\nPath(" + repr(str(marker)) + ").write_text('executed')\n", encoding="utf-8")
             before = helpers.tree_digest(repo)
-            completed = subprocess.run([sys.executable, str(helpers.INIT_PATH), *helpers.preflight_args(inventory, doctor), "--core-cli", str(fake), "--json"], cwd=repo, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, text=True, capture_output=True)
+            completed = subprocess.run([sys.executable, str(helpers.INIT_PATH), "--host", "codex", "--core-cli", str(fake), "--json"], cwd=repo, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, text=True, capture_output=True)
             payload = self._assert_rejected_noop(repo, completed, before)
-            self.assertEqual("core_surface_unavailable", payload["error"]["code"])
+            self.assertEqual("core_surface_mismatch", payload["error"]["code"])
+            self.assertFalse(marker.exists())
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -237,11 +238,10 @@ class AssumptionSecurityRegressionTests(unittest.TestCase):
                 "print(json.dumps({'ok':True,'result':result}))\n",
                 encoding="utf-8",
             )
-            inventory, doctor = helpers.write_preflight(root, "absent", entrypoint=fake)
             before = helpers.tree_digest(repo)
-            completed = subprocess.run([sys.executable, str(helpers.INIT_PATH), *helpers.preflight_args(inventory, doctor), "--core-cli", str(fake), "--json"], cwd=repo, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, text=True, capture_output=True)
+            completed = subprocess.run([sys.executable, str(helpers.INIT_PATH), "--host", "codex", "--core-cli", str(fake), "--json"], cwd=repo, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, text=True, capture_output=True)
             payload = self._assert_rejected_noop(repo, completed, before)
-            self.assertEqual("core_bootstrap_postcondition_invalid", payload["error"]["code"])
+            self.assertEqual("core_surface_mismatch", payload["error"]["code"])
 
     def test_public_bounds_closed_fields_mixed_decline_and_doctor_states(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

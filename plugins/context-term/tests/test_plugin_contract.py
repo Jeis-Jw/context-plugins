@@ -17,10 +17,9 @@ class TermPluginContractTests(unittest.TestCase):
             repo = Path(temp) / "repo"
             repo.mkdir()
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
-            inventory, doctor = helpers.write_preflight(Path(temp), "absent")
             before = helpers.tree_digest(repo)
             completed = subprocess.run(
-                [sys.executable, str(helpers.INIT_PATH), *helpers.preflight_args(inventory, doctor), "--core-cli", str(helpers.CORE_CLI_PATH), "--json"],
+                [sys.executable, str(helpers.INIT_PATH), "--host", "codex", "--core-cli", str(helpers.CORE_CLI_PATH), "--json"],
                 cwd=repo,
                 env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
                 text=True,

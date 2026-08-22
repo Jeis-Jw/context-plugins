@@ -33,6 +33,8 @@ REQUIRED_PLUGIN_FIELDS = (
     "source",
     "provider",
     "required_protocol",
+    "entrypoint",
+    "entrypoint_sha256",
 )
 OBSERVED_FIELDS = (
     "marketplace",

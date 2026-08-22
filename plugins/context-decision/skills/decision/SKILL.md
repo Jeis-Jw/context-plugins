@@ -5,7 +5,7 @@ description: 대화의 증분 audit에서 선택 신호가 생길 때만 관련 
 
 # Decision
 
-context-decision은 직접 설치된 context-core가 활성 상태일 때만 사용한다. 이 skill은 대화 전체를 따로 audit하지 않는 semantic owner이며 filesystem을 쓰지 않는다. `schema`/`capabilities`를 제외한 CLI 호출은 host의 `--host`, `--core-inventory @file`, `--core-doctor @file`을 먼저 검증한다.
+context-decision은 직접 설치된 context-core가 활성 상태일 때만 사용한다. 이 skill은 대화 전체를 따로 audit하지 않는 semantic owner이며 filesystem을 쓰지 않는다. 저수준 semantic CLI의 `schema`/`capabilities` 외 호출은 compatibility mode로 host의 `--host`, `--core-inventory @file`, `--core-doctor @file`을 검증한다. 일반 capture workflow와 init은 caller가 만든 inventory/doctor를 받지 않고 release-pinned core CLI에서 schema와 doctor를 직접 handshake한다.
 
 1. context-core의 증분 audit이 선택의 형성·변경 신호를 감지한 경우에만 동작한다. ledger의 같은 scope·anchor와 Current `{id,sha256}` 본문이 session context에도 남아 있으면 재사용한다. 본문이 없거나 scope·evidence·anchor·index 또는 artifact SHA가 바뀌었으면 결론·기록 제안 전에 `check --statement ... --scope ... --decision-key ...`를 실행한다.
 2. `check`는 metadata로 후보를 줄인 뒤 관련 Current DEC의 실제 `결정`·`취지`·`반려대안`만 반환한다. 이를 읽고 `new|same|supporting|rationale_changed|conflict` 중 하나로 판정한다. 문장 유사도, hash, ID와 metadata는 의미 판정 근거가 아니다.
@@ -22,7 +22,7 @@ context-decision은 직접 설치된 context-core가 활성 상태일 때만 사
 
 ```bash
 python3 /loaded/context-decision/skills/decision/scripts/decision_workflow.py preview \
-  --host <codex|claude-code> --core-inventory @inventory.json \
+  --host <codex|claude-code> \
   --core-cli /loaded/context-core/skills/context/scripts/context_cli.py \
   --inline --candidate-id cand_0123456789abcdef0123456789abcdef \
   --title '<title>' --summary '<summary>' --scope '<scope>' \

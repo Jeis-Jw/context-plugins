@@ -50,6 +50,8 @@ REQUIRED_PLUGIN = {
     "source": "Jeis-Jw/context-plugins",
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
+    "entrypoint": "skills/context/scripts/context_cli.py",
+    "entrypoint_sha256": "sha256:92dc345d2c0178a98740e89f07aad1f32fcef261ff921acd267486d1678d180a",
 }
 OBSERVED_PLUGIN_FIELDS = ("marketplace", "plugin", "source", "enabled", "protocol", "repository_state")
 PREFLIGHT_MESSAGES = {
@@ -132,6 +134,62 @@ def file_digest(content: str) -> str:
 
 def bytes_digest(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def required_core_surface(value: str) -> pathlib.Path:
+    supplied = pathlib.Path(value)
+    try:
+        resolved = supplied.resolve(strict=True)
+        digest = bytes_digest(resolved.read_bytes())
+    except (OSError, RuntimeError) as error:
+        raise DecisionError(
+            "core_surface_unavailable",
+            "the pinned context-core public CLI is unavailable",
+            {"required_plugin": dict(REQUIRED_PLUGIN)},
+            EXIT_CONFLICT,
+        ) from error
+    suffix = pathlib.PurePosixPath(REQUIRED_PLUGIN["entrypoint"]).parts
+    if (
+        not supplied.is_absolute()
+        or not resolved.is_file()
+        or tuple(resolved.parts[-len(suffix):]) != suffix
+        or digest != REQUIRED_PLUGIN["entrypoint_sha256"]
+    ):
+        raise DecisionError(
+            "core_surface_mismatch",
+            "context-core entrypoint path or SHA-256 differs from the pinned release contract",
+            {
+                "required_entrypoint": REQUIRED_PLUGIN["entrypoint"],
+                "required_sha256": REQUIRED_PLUGIN["entrypoint_sha256"],
+                "observed_path": str(resolved),
+                "observed_sha256": digest,
+            },
+            EXIT_CONFLICT,
+        )
+    return resolved
+
+
+def validate_core_schema_handshake(value: Any) -> dict[str, Any]:
+    required_commands = {"doctor", "bootstrap", "transaction preview", "transaction apply"}
+    if not isinstance(value, dict):
+        raise DecisionError("core_handshake_invalid", "context-core schema handshake is invalid", exit_code=EXIT_CONFLICT)
+    features = value.get("features")
+    commands = value.get("commands")
+    if (
+        value.get("schema") != "context-core-schema/v1"
+        or value.get("protocol") != PROTOCOL
+        or not isinstance(features, list)
+        or "context-owner-descriptor/v2" not in features
+        or not isinstance(commands, list)
+        or not required_commands.issubset(commands)
+    ):
+        raise DecisionError(
+            "core_incompatible",
+            "context-core schema, protocol, feature, or required command handshake is incompatible",
+            {"required_plugin": dict(REQUIRED_PLUGIN), "required_commands": sorted(required_commands)},
+            EXIT_CONFLICT,
+        )
+    return value
 
 
 def new_context_id() -> str:
@@ -1985,6 +2043,30 @@ def _doctor_result(value: Any) -> dict[str, Any]:
     if "owner" in value and value.get("owner") != "context-core":
         raise DecisionError("doctor_receipt_invalid", "core doctor receipt owner is invalid", exit_code=EXIT_CONFLICT)
     return value
+
+
+def validate_core_doctor_handshake(value: Any, *, allowed_states: set[str]) -> dict[str, Any]:
+    doctor = _doctor_result(value)
+    required = {"schema", "owner", "supported_protocols", "repository_state", "root", "issues", "warnings"}
+    if (
+        set(doctor) != required
+        or doctor.get("schema") != "context-core-doctor/v1"
+        or doctor.get("owner") != "context-core"
+        or doctor.get("root") != "context/"
+        or doctor.get("repository_state") not in allowed_states
+        or not isinstance(doctor.get("supported_protocols"), list)
+        or PROTOCOL not in doctor["supported_protocols"]
+        or not isinstance(doctor.get("issues"), list)
+        or not isinstance(doctor.get("warnings"), list)
+        or (doctor["repository_state"] == "ready" and doctor["issues"])
+    ):
+        raise DecisionError(
+            "core_handshake_invalid",
+            "context-core doctor handshake is invalid for this operation",
+            {"allowed_states": sorted(allowed_states)},
+            EXIT_CONFLICT,
+        )
+    return doctor
 
 
 def _observed_plugin(plugin: Any, doctor: dict[str, Any]) -> dict[str, Any]:

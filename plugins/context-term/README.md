@@ -29,7 +29,7 @@ TERM CLI는 artifact draft, lifecycle owner-result와 `context-owner-validation-
 
 `batch validate`는 embedded result를 신뢰하지 않는다. live Current source와 index를 다시 읽고 candidate·attestation·mutation request에서 transition 결과를 재생성한 뒤 exact owner-result가 일치할 때만 receipt를 발급한다. source path는 canonical `context/term` containment와 symlink-free component를 요구한다.
 
-명시적 `$context-term:init`은 host inventory가 선언한 active core entrypoint와 제공된 `--core-cli` realpath가 같을 때만 실행한다. installed core의 `schema --json`에서 `context-owner-descriptor/v2` feature를 확인한 뒤 descriptor/seed를 core `bootstrap`에 전달하고, 실제 doctor ready와 root registry·area descriptor·index bytes를 다시 확인한다. 자동 설치, update, downgrade, migration은 하지 않는다.
+명시적 `$context-term:init`은 release contract가 고정한 active core entrypoint suffix와 SHA-256이 제공된 absolute `--core-cli`와 같을 때만 실행한다. 일치한 core의 schema·protocol·필수 command·`context-owner-descriptor/v2` feature와 doctor state를 직접 확인한 뒤 descriptor/seed를 core `bootstrap`에 전달하고, 실제 doctor ready와 root registry·area descriptor·index bytes를 다시 확인한다. 자동 설치, update, downgrade, migration은 하지 않는다.
 
 candidate와 전체 candidate batch envelope는 각각 canonical UTF-8 16 KiB, owner input은 2 KiB, public output은 실제 canonical UTF-8 32 KiB로 제한한다. common `tags`와 `search_terms` item은 core와 동일하게 40자까지 허용한다. lifecycle clock은 `updated_at`과 `retired_at`이 source `created_at`보다 빠르면 거부한다. 일반 operation은 exact `repository_state=ready`에서만 동작한다. `partial`은 명시적 init repair에만 허용하고 `invalid`는 init을 포함해 항상 거부한다.
 

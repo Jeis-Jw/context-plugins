@@ -75,23 +75,6 @@ def run_cli(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def run_init(repo: Path, case: dict, inventory: Path, doctor: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
-            sys.executable,
-            str(INIT_PATH),
-            *preflight_args(case, inventory, doctor),
-            "--core-cli",
-            str(CORE_CLI_PATH),
-            "--json",
-        ],
-        cwd=repo,
-        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
-        text=True,
-        capture_output=True,
-    )
-
-
 class PluginContractTests(unittest.TestCase):
     def test_acceptance_02_core_missing(self) -> None:
         fixtures = ROOT / "tests/context-v1/fixtures/host-inventory"
@@ -123,11 +106,11 @@ class PluginContractTests(unittest.TestCase):
         protocol = (ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.md").read_text(encoding="utf-8")
         init = (ROOT / "plugins/context-decision/skills/init/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("`schema`와 `capabilities`만 core 없이", protocol)
-        for token in ("identity", "enabled", "protocol", "repository_state=absent"):
+        for token in ("entrypoint path", "SHA-256", "protocol", "repository_state=absent"):
             self.assertIn(token, protocol)
         for forbidden in ("install", "enable", "update", "marketplace add", "cache probing", "embedded core"):
             self.assertIn(forbidden, protocol)
-        self.assertIn("먼저 context-core 설치", init)
+        self.assertIn("release가 고정한 context-core", init)
         self.assertIn("context_cli.py bootstrap", init)
         self.assertIn("decision_init.py", init)
         self.assertIn("한 번만", init)
@@ -207,9 +190,6 @@ class PluginContractTests(unittest.TestCase):
                         self.assertEqual(case["expected_observed"], details["observed"])
                         self.assertEqual(case["expected_rendered"]["manual_actions"], details["manual_actions"])
                         self.assertEqual({"repository": "none", "host_configuration": "none"}, details["write_policy"])
-                        orchestrated = run_init(repo, case, inventory, doctor)
-                        self.assertEqual(5, orchestrated.returncode, orchestrated.stdout + orchestrated.stderr)
-                        self.assertEqual(payload, json.loads(orchestrated.stdout))
                         self.assertEqual(before, (digest_tree(repo), digest_tree(host)))
 
     def test_non_static_cli_fails_closed_without_host_preflight(self) -> None:

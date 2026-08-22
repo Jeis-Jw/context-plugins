@@ -526,19 +526,11 @@ class CrossPluginFlowTests(unittest.TestCase):
             repo.mkdir()
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
             (repo / "keep.txt").write_text("preserve\n", encoding="utf-8")
-            inventory = root / "inventory.json"
-            doctor = root / "doctor.json"
-            inventory.write_text(json.dumps(case["inventory"], ensure_ascii=False), encoding="utf-8")
-            doctor.write_text(json.dumps(case["doctor"], ensure_ascii=False), encoding="utf-8")
             completed = run_cli(
                 repo,
                 DECISION_INIT,
                 "--host",
                 case["host"],
-                "--core-inventory",
-                f"@{inventory}",
-                "--core-doctor",
-                f"@{doctor}",
                 "--core-cli",
                 str(CORE_CLI),
                 "--json",
@@ -562,10 +554,6 @@ class CrossPluginFlowTests(unittest.TestCase):
                 DECISION_INIT,
                 "--host",
                 case["host"],
-                "--core-inventory",
-                f"@{inventory}",
-                "--core-doctor",
-                f"@{doctor}",
                 "--core-cli",
                 str(CORE_CLI),
                 "--json",

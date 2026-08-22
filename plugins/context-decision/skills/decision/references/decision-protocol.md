@@ -10,7 +10,7 @@
 - source: `Jeis-Jw/context-plugins`
 - protocol: `context-common/v2`
 
-`schema`와 `capabilities`만 core 없이 호출할 수 있다. host는 다른 operation에 `--host`, `--core-inventory @file`, `--core-doctor @file`을 넘긴다. production CLI가 repository root를 탐색하기 전 exact identity, source, enabled state와 protocol을 read-only로 확인한다. `doctor.repository_state=absent`는 bootstrap-required state이고 partial/invalid diagnostics는 전역 차단하지 않는다. decision owner는 install, enable, update, marketplace add, cache probing 또는 embedded core를 수행하지 않는다.
+`schema`와 `capabilities`만 core 없이 호출할 수 있다. 저수준 semantic operation은 compatibility mode로 `--host`, `--core-inventory @file`, `--core-doctor @file`을 받는다. 일반 workflow와 init은 release contract의 entrypoint path·SHA-256 pin을 먼저 확인한 뒤 그 core의 schema와 doctor를 직접 handshake한다. `doctor.repository_state=absent`는 bootstrap-required state이고 partial/invalid diagnostics는 전역 차단하지 않는다. decision owner는 install, enable, update, marketplace add, cache probing 또는 embedded core를 수행하지 않는다.
 
 ## Semantic claim gate
 
@@ -59,7 +59,7 @@ Receipt 없는 final owner plan이나 altered receipt는 `plan validate`에서 �
 
 ## Frozen workflow receipt
 
-일반 단일 capture의 public golden path는 `decision_workflow.py preview --inline`과 `apply`다. caller는 decision semantic field와 `explicit_choice`, `scope_identified`, `commitment_present`를 각각 명시적으로 attest한다. workflow는 그 입력을 exact candidate·attestation으로 직렬화할 뿐 semantic evidence나 판정을 만들지 않는다. `preview`는 host inventory와 loaded core CLI를 입력받아 current core doctor, owner-result 생성, same-batch validation과 core transaction preview를 한 process에서 순서대로 한 번씩 수행한다. complete approval preview와 exact digest만 stdout에 반환하고 bundle/materials는 명시된 repository 밖의 새 `context-decision-workflow-receipt/v1` 파일에 저장한다. 이미 고정한 semantic input을 재사용하는 고급 경로에는 `--candidate @file --attestation @file` mode를 유지한다.
+일반 단일 capture의 public golden path는 `decision_workflow.py preview --inline`과 `apply`다. caller는 decision semantic field와 `explicit_choice`, `scope_identified`, `commitment_present`를 각각 명시적으로 attest한다. workflow는 그 입력을 exact candidate·attestation으로 직렬화할 뿐 semantic evidence나 판정을 만들지 않는다. `preview`는 loaded core CLI의 release pin, schema와 current doctor를 직접 확인하고 owner-result 생성, same-batch validation과 core transaction preview를 한 process에서 순서대로 수행한다. complete approval preview와 exact digest만 stdout에 반환하고 bundle/materials는 명시된 repository 밖의 새 `context-decision-workflow-receipt/v1` 파일에 저장한다. 이미 고정한 semantic input을 재사용하는 고급 경로에는 `--candidate @file --attestation @file` mode를 유지한다.
 
 receipt의 workflow approval material은 exact `context-repository-identity/v1`, core CLI absolute path와 SHA-256, candidate/owner-result digest, nested core approval digest와 exact bundle을 모두 결박한다. stdout의 user-facing `approval_digest`는 이 전체 material의 canonical digest다. `receipt_digest`는 손상 탐지용일 뿐 approval을 대체하지 않으므로 receipt와 nested digest를 함께 재계산해도 원래 사용자 승인을 재사용할 수 없다. 기존 receipt overwrite, repository 안 receipt, clone·linked worktree·same-path recreated repository apply, 변경된 core CLI와 잘못된 digest는 write 전에 실패한다. `apply`는 nested bundle을 다시 만들지 않고 context-core `transaction apply`에 전달하며 receipt 자체도 변경하지 않는다.
 
@@ -73,7 +73,7 @@ preview의 repository와 host configuration write는 0이다. 명시적 transien
 
 `check --statement ... --scope ... --decision-key ...`는 새 선택을 확정하거나 기록하기 전에 사용한다. exact slot과 scope overlap은 반드시 포함한다. 그 밖의 후보는 statement·rationale·query와 title·summary·search terms의 distinctive metadata match만 선택하며, score 0의 임의 body는 열지 않는다. 관련 Current DEC의 세 핵심 section과 `{id,path,sha256}`를 `context-decision-comparison-input/v1`으로 반환하고 retrieval에는 index SHA, metadata match 수, body read 수와 selected semantic bytes를 포함한다. comparison input은 24 KiB, 전체 result는 32 KiB이며 omitted ID는 최대 8개 sample과 exact count만 반환한다. agent는 `new|same|supporting|rationale_changed|conflict` 중 하나와 근거·관련 ID를 제시한다. `new`는 반환된 집합 안의 판정이며 전역 무충돌 증명이 아니다. 이 operation은 read-only이고 지문·문장 유사도로 의미를 확정하지 않는다.
 
-`init`은 exact core identity/source/enabled/protocol이 맞으면 `repository_state`가 ready/partial/invalid인 경우에도 `context-owner-descriptor/v1`, complete empty decision index seed, descriptor/seed digest와 installed core `bootstrap` 요청을 반환한다. `absent`도 bootstrap-required로 허용한다. Init skill은 `decision_init.py` entrypoint 한 번으로 preflight와 active installed core의 public `context_cli.py bootstrap --host <host>` 호출을 순서대로 수행한다. core surface가 필요한 root 복구, decision area registration과 host별 managed operating policy installation을 coordinator로 적용하며 phase result를 반환한다. decision CLI 자체는 root/area/index/policy를 만들거나 수정하지 않는다.
+`init`은 release-pinned core에서 schema와 doctor state를 직접 handshake한 뒤 `context-owner-descriptor/v2`, complete empty decision index seed, descriptor/seed digest와 installed core `bootstrap` 요청을 만든다. ready/partial/invalid과 bootstrap-required `absent`를 전달하되 실제 복구 가능 여부는 core가 판정한다. Init skill은 `decision_init.py` entrypoint 한 번으로 handshake와 active installed core의 public `context_cli.py bootstrap --host <host>` 호출을 순서대로 수행한다. core surface가 필요한 root 복구, decision area registration과 host별 managed operating policy installation을 coordinator로 적용하며 phase result를 반환한다. decision CLI 자체는 root/area/index/policy를 만들거나 수정하지 않는다.
 
 `claim_fingerprint`, `source_claim_fingerprint`와 capture candidate의 `claim_key`는 schema에서 제거됐다. candidate ID는 transport reference로만 사용한다. legacy artifact field는 읽고 다음 승인 rewrite에서 제거하며, 신규 candidate/draft의 제거된 field는 `schema_removed_field`로 실패한다.
 

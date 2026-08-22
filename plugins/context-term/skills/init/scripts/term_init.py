@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import pathlib
@@ -38,11 +39,31 @@ def _forward(completed: subprocess.CompletedProcess[str]) -> int:
     return completed.returncode
 
 
+def _load_term_cli():
+    spec = importlib.util.spec_from_file_location("context_term_init_semantic_cli", TERM_CLI)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("context-term semantic CLI could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_core(module, core_cli: pathlib.Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    module.required_core_surface(str(core_cli))
+    return _run([sys.executable, str(core_cli), *arguments, "--json"])
+
+
+def _result(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
+    payload = json.loads(completed.stdout)
+    if set(payload) != {"ok", "result"} or payload.get("ok") is not True or not isinstance(payload.get("result"), dict):
+        raise ValueError("public core result envelope is invalid")
+    return payload["result"]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="term_init.py")
     parser.add_argument("--host", choices=("codex", "claude-code"), required=True)
-    parser.add_argument("--core-inventory", required=True)
-    parser.add_argument("--core-doctor", required=True)
     parser.add_argument("--core-cli", required=True)
     parser.add_argument("--json", action="store_true")
     return parser
@@ -157,65 +178,32 @@ def _postcondition(repo: pathlib.Path, plan: dict[str, Any], doctor: dict[str, A
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    planned = _run([
-        sys.executable,
-        str(TERM_CLI),
-        "init",
-        "--host",
-        args.host,
-        "--core-inventory",
-        args.core_inventory,
-        "--core-doctor",
-        args.core_doctor,
-        "--json",
-    ])
-    if planned.returncode:
-        return _forward(planned)
+    term_cli = _load_term_cli()
     try:
-        plan = json.loads(planned.stdout)["result"]
-    except (KeyError, TypeError, json.JSONDecodeError):
-        return _error("init_plan_invalid", "context-term init plan is invalid", compact=args.json, details={"write_policy": {"repository": "none", "host_configuration": "none"}})
-
-    observed_entrypoint = plan.get("active_core_entrypoint")
-    supplied = pathlib.Path(args.core_cli)
-    observed = pathlib.Path(observed_entrypoint) if isinstance(observed_entrypoint, str) else None
-    try:
-        core_cli = supplied.resolve(strict=True)
-        active_core = observed.resolve(strict=True) if observed is not None else None
-    except (OSError, RuntimeError):
-        core_cli = supplied.resolve()
-        active_core = None
-    if (
-        not supplied.is_absolute()
-        or observed is None
-        or not observed.is_absolute()
-        or active_core is None
-        or core_cli != active_core
-        or not core_cli.is_file()
-        or core_cli.name != "context_cli.py"
-    ):
-        return _error("core_surface_unavailable", "the installed context-core public CLI was not supplied", compact=args.json, details={"write_policy": {"repository": "none", "host_configuration": "none"}})
-
-    handshake = _run([sys.executable, str(core_cli), "schema", "--json"])
-    if handshake.returncode:
-        return _forward(handshake)
-    try:
-        schema = json.loads(handshake.stdout)["result"]
-        features = schema["features"]
-    except (KeyError, TypeError, json.JSONDecodeError):
-        return _error("core_handshake_invalid", "context-core schema handshake is invalid", compact=args.json, details={"write_policy": {"repository": "none", "host_configuration": "none"}})
-    if (
-        schema.get("schema") != "context-core-schema/v1"
-        or schema.get("protocol") != "context-common/v2"
-        or not isinstance(features, list)
-        or REQUIRED_FEATURE not in features
-    ):
-        return _error(
-            "core_incompatible",
-            "context-core does not advertise context-owner-descriptor/v2",
-            compact=args.json,
-            details={"required_feature": REQUIRED_FEATURE, "observed_features": features, "write_policy": {"repository": "none", "host_configuration": "none"}},
+        core_cli = term_cli.required_core_surface(args.core_cli)
+        handshake = _run_core(term_cli, core_cli, "schema")
+        if handshake.returncode:
+            return _forward(handshake)
+        term_cli.validate_core_schema_handshake(_result(handshake))
+        doctor_before_command = _run_core(term_cli, core_cli, "doctor")
+        if doctor_before_command.returncode:
+            return _forward(doctor_before_command)
+        doctor_before = term_cli.validate_core_doctor(_result(doctor_before_command))
+        plan = term_cli.build_init_plan(
+            {
+                "host": args.host,
+                "observed": {
+                    "repository_state": doctor_before["repository_state"],
+                    "entrypoint": str(core_cli),
+                    "entrypoint_sha256": term_cli.REQUIRED_PLUGIN["entrypoint_sha256"],
+                },
+            }
         )
+    except term_cli.TermError as error:
+        _emit(error.envelope(), args.json)
+        return error.exit_code
+    except (KeyError, TypeError, json.JSONDecodeError, OSError, RuntimeError, ValueError) as error:
+        return _error("core_handshake_invalid", "context-core init handshake is invalid", compact=args.json, details={"reason": str(error), "write_policy": {"repository": "none", "host_configuration": "none"}})
 
     with tempfile.TemporaryDirectory(prefix="context-term-init-") as temporary:
         temp_root = pathlib.Path(temporary)
@@ -223,9 +211,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         seed = temp_root / "term.index.md"
         descriptor.write_text(json.dumps(plan["owner_descriptor"], ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
         seed.write_text(plan["index_seed"], encoding="utf-8")
-        completed = _run([
-            sys.executable,
-            str(core_cli),
+        completed = _run_core(
+            term_cli,
+            core_cli,
             "bootstrap",
             "--descriptor",
             f"@{descriptor}",
@@ -233,15 +221,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"@{seed}",
             "--host",
             args.host,
-            "--json",
-        ])
+        )
     if completed.returncode:
         return _forward(completed)
     try:
         bootstrap = json.loads(completed.stdout)["result"]
     except (KeyError, TypeError, json.JSONDecodeError):
         return _error("core_bootstrap_result_invalid", "context-core bootstrap result is invalid", compact=args.json)
-    post_doctor = _run([sys.executable, str(core_cli), "doctor", "--json"])
+    post_doctor = _run_core(term_cli, core_cli, "doctor")
     if post_doctor.returncode:
         return _forward(post_doctor)
     try:

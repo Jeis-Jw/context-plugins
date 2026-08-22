@@ -65,47 +65,24 @@ def repository_identity(repo: Path) -> dict:
 
 
 class DecisionWorkflowTests(unittest.TestCase):
-    def _initialized_repository(self, root: Path) -> tuple[Path, Path]:
+    def _initialized_repository(self, root: Path) -> Path:
         repo = root / "repository"
         repo.mkdir()
         subprocess.run(["git", "init", "-q", str(repo)], check=True)
         (repo / "keep.txt").write_text("repository bytes\n", encoding="utf-8")
         core_init = run(repo, CORE_CLI, "init", "--host", "codex", "--json")
         self.assertEqual(0, core_init.returncode, core_init.stdout + core_init.stderr)
-        inventory = root / "inventory.json"
-        write_json(
-            inventory,
-            {
-                "plugins": [
-                    {
-                        "marketplace": "context-plugins",
-                        "plugin": "context-core",
-                        "source": "Jeis-Jw/context-plugins",
-                        "enabled": True,
-                        "protocols": ["context-common/v2"],
-                    }
-                ]
-            },
-        )
-        doctor = run(repo, CORE_CLI, "doctor", "--json")
-        self.assertEqual(0, doctor.returncode, doctor.stdout + doctor.stderr)
-        doctor_path = root / "doctor.json"
-        doctor_path.write_text(doctor.stdout, encoding="utf-8")
         decision_init = run(
             repo,
             DECISION_INIT,
             "--host",
             "codex",
-            "--core-inventory",
-            f"@{inventory}",
-            "--core-doctor",
-            f"@{doctor_path}",
             "--core-cli",
             str(CORE_CLI),
             "--json",
         )
         self.assertEqual(0, decision_init.returncode, decision_init.stdout + decision_init.stderr)
-        return repo, inventory
+        return repo
 
     def _semantic_inputs(self, root: Path) -> tuple[Path, Path, dict]:
         candidate = {
@@ -181,7 +158,7 @@ class DecisionWorkflowTests(unittest.TestCase):
     def test_preview_freezes_one_bundle_and_apply_uses_only_that_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            repo, inventory = self._initialized_repository(root)
+            repo = self._initialized_repository(root)
             candidate_path, attestation_path, candidate = self._semantic_inputs(root)
             receipt_path = root / "decision-receipt.json"
             before = digest_tree(repo)
@@ -191,8 +168,6 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "preview",
                 "--host",
                 "codex",
-                "--core-inventory",
-                f"@{inventory}",
                 "--core-cli",
                 str(CORE_CLI),
                 "--candidate",
@@ -238,8 +213,6 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "preview",
                 "--host",
                 "codex",
-                "--core-inventory",
-                f"@{inventory}",
                 "--core-cli",
                 str(CORE_CLI),
                 "--candidate",
@@ -295,11 +268,16 @@ class DecisionWorkflowTests(unittest.TestCase):
     def test_receipt_is_repository_bound_and_invalid_preflight_writes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            repo, inventory = self._initialized_repository(root)
+            repo = self._initialized_repository(root)
             candidate_path, attestation_path, _ = self._semantic_inputs(root)
-            invalid_inventory = root / "invalid-inventory.json"
-            write_json(invalid_inventory, {"plugins": []})
             receipt_path = root / "invalid-receipt.json"
+            fake_core = root / "fake/skills/context/scripts/context_cli.py"
+            fake_core.parent.mkdir(parents=True)
+            marker = root / "fake-core-executed"
+            fake_core.write_text(
+                "from pathlib import Path\nPath(" + repr(str(marker)) + ").write_text('executed')\n",
+                encoding="utf-8",
+            )
             before = digest_tree(repo)
             denied = run(
                 repo,
@@ -307,10 +285,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "preview",
                 "--host",
                 "codex",
-                "--core-inventory",
-                f"@{invalid_inventory}",
                 "--core-cli",
-                str(CORE_CLI),
+                str(fake_core),
                 "--candidate",
                 f"@{candidate_path}",
                 "--attestation",
@@ -320,7 +296,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "--json",
             )
             self.assertEqual(5, denied.returncode, denied.stdout + denied.stderr)
-            self.assertEqual("core_missing", json.loads(denied.stdout)["error"]["code"])
+            self.assertEqual("core_surface_mismatch", json.loads(denied.stdout)["error"]["code"])
+            self.assertFalse(marker.exists())
             self.assertFalse(receipt_path.exists())
             self.assertEqual(before, digest_tree(repo))
 
@@ -331,8 +308,6 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "preview",
                 "--host",
                 "codex",
-                "--core-inventory",
-                f"@{inventory}",
                 "--core-cli",
                 str(CORE_CLI),
                 "--candidate",
@@ -355,8 +330,6 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "preview",
                 "--host",
                 "codex",
-                "--core-inventory",
-                f"@{inventory}",
                 "--core-cli",
                 str(CORE_CLI),
                 "--candidate",
@@ -395,8 +368,8 @@ class DecisionWorkflowTests(unittest.TestCase):
             second_root = root / "second"
             first_root.mkdir()
             second_root.mkdir()
-            first, inventory = self._initialized_repository(first_root)
-            second, _ = self._initialized_repository(second_root)
+            first = self._initialized_repository(first_root)
+            second = self._initialized_repository(second_root)
             candidate_path, attestation_path, _ = self._semantic_inputs(root)
             receipt_path = root / "replay-receipt.json"
             preview = run(
@@ -405,8 +378,6 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "preview",
                 "--host",
                 "codex",
-                "--core-inventory",
-                f"@{inventory}",
                 "--core-cli",
                 str(CORE_CLI),
                 "--candidate",
@@ -453,14 +424,12 @@ class DecisionWorkflowTests(unittest.TestCase):
     def test_inline_preview_serializes_explicit_semantics_without_input_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            repo, inventory = self._initialized_repository(root)
+            repo = self._initialized_repository(root)
             receipt_path = root / "inline-receipt.json"
             base = [
                 "preview",
                 "--host",
                 "codex",
-                "--core-inventory",
-                f"@{inventory}",
                 "--core-cli",
                 str(CORE_CLI),
                 *self._inline_arguments(),
@@ -512,7 +481,7 @@ class DecisionWorkflowTests(unittest.TestCase):
     def test_file_and_inline_inputs_cannot_be_mixed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            repo, inventory = self._initialized_repository(root)
+            repo = self._initialized_repository(root)
             receipt_path = root / "mixed-receipt.json"
             mixed = run(
                 repo,
@@ -520,8 +489,6 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "preview",
                 "--host",
                 "codex",
-                "--core-inventory",
-                f"@{inventory}",
                 "--core-cli",
                 str(CORE_CLI),
                 "--candidate",

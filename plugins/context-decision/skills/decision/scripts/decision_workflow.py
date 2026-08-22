@@ -62,15 +62,7 @@ def _load_json_argument(value: str) -> Any:
 
 
 def _core_cli(value: str) -> pathlib.Path:
-    path = pathlib.Path(value).resolve()
-    if not path.is_file() or path.name != "context_cli.py":
-        raise WorkflowError(
-            "core_surface_unavailable",
-            "the active installed context-core public CLI was not supplied",
-            {"required_plugin": dict(decision_cli.REQUIRED_PLUGIN)},
-            5,
-        )
-    return path
+    return decision_cli.required_core_surface(value)
 
 
 def _file_digest(path: pathlib.Path) -> str:
@@ -78,6 +70,7 @@ def _file_digest(path: pathlib.Path) -> str:
 
 
 def _run_core(core_cli: pathlib.Path, repo: pathlib.Path, *arguments: str) -> dict[str, Any]:
+    decision_cli.required_core_surface(str(core_cli))
     completed = subprocess.run(
         [sys.executable, str(core_cli), *arguments, "--json"],
         cwd=repo,
@@ -220,12 +213,20 @@ def _load_receipt(path: pathlib.Path) -> dict[str, Any]:
     return receipt
 
 
-def _require_ready_core(host: str, inventory: Any, doctor: dict[str, Any]) -> dict[str, Any]:
-    rendered = decision_cli.render_core_preflight(decision_cli.classify_core_preflight(inventory, doctor), host)
-    if rendered["code"] != "ready":
-        details = {key: value for key, value in rendered.items() if key not in {"code", "message"}}
-        raise decision_cli.DecisionError(rendered["code"], rendered["message"], details, decision_cli.EXIT_CONFLICT)
-    return rendered
+def _require_ready_core(host: str, core_cli: pathlib.Path, doctor: dict[str, Any]) -> dict[str, Any]:
+    doctor = decision_cli.validate_core_doctor_handshake(doctor, allowed_states={"ready"})
+    return {
+        "code": "ready",
+        "host": host,
+        "required_plugin": dict(decision_cli.REQUIRED_PLUGIN),
+        "observed": {
+            "entrypoint": str(core_cli),
+            "entrypoint_sha256": _file_digest(core_cli),
+            "protocol": decision_cli.PROTOCOL,
+            "repository_state": doctor["repository_state"],
+        },
+        "write_policy": {"repository": "none", "host_configuration": "none"},
+    }
 
 
 INLINE_FIELDS = (
@@ -294,10 +295,11 @@ def preview(args: argparse.Namespace) -> dict[str, Any]:
     receipt_path = _receipt_path(args.receipt_file, repo, must_exist=False)
     core_cli = _core_cli(args.core_cli)
     core_cli_sha256 = _file_digest(core_cli)
-    inventory = _load_json_argument(args.core_inventory)
     candidate, attestation = _semantic_inputs(args)
+    schema = _run_core(core_cli, repo, "schema")
+    decision_cli.validate_core_schema_handshake(schema)
     doctor = _run_core(core_cli, repo, "doctor")
-    preflight = _require_ready_core(args.host, inventory, doctor)
+    preflight = _require_ready_core(args.host, core_cli, doctor)
     owner_result = decision_cli.build_claim_result(
         candidate,
         attestation,
@@ -402,7 +404,6 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     preview_parser = sub.add_parser("preview")
     preview_parser.add_argument("--host", choices=("codex", "claude-code"), required=True)
-    preview_parser.add_argument("--core-inventory", required=True)
     preview_parser.add_argument("--core-cli", required=True)
     source = preview_parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--candidate")
