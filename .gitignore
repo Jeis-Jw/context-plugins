@@ -14,6 +14,7 @@ htmlcov/
 .obsidian/
 
 # Local orchestration/runtime state
+.studio/
 .task-worker/
 .task-worker.yml
 .pcms-context.json
