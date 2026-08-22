@@ -42,7 +42,7 @@ Rollback is distribution-level: stop using or uninstall the optional addon while
 
 - W1 reduces the Codex prompt character surface, adds a one-command inline DEC preview and a frozen out-of-repository receipt, and makes healthy index misses open zero indexed bodies while capping recovery body opens at 20.
 - W2 binds both core and workflow approval material to exact worktree/Git-common-dir identity, pins the distributed `context_cli.py` path suffix and SHA-256 before execution, and performs the core schema/protocol/command/feature/doctor handshake directly. This executable check is not marketplace provenance, catalog source or enabled-state attestation; caller inventory remains a low-level compatibility input.
-- W3 applies actual semantic input limits (DEC 1,200 codepoints, common primary claim 2,000 codepoints, owner input 8 KiB, full candidate envelope 16 KiB) and gives semantic `--sec-*` values the core-compatible literal, `@file` and `@@literal` behavior.
+- W3 applies actual semantic input limits (DEC 1,200 codepoints, common primary claim 2,000 codepoints, owner input 8 KiB, full candidate envelope 16 KiB). Core and DEC `--sec-*` values use literal, `@file` and `@@literal` behavior; ASM and TERM use structured `--candidate @file` input.
 
 Frozen workflow receipts contain decision material. They must be created at a new absolute path outside the repository and Git metadata, remain mode `0600`, and be deleted manually after the workflow. Reusing a receipt across a clone, linked worktree or same-path repository recreation fails before repository writes.
 

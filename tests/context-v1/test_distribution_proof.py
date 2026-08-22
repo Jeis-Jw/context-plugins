@@ -463,8 +463,14 @@ class DistributionProofTests(unittest.TestCase):
 
         for name in PLUGIN_NAMES[1:]:
             readme = (ROOT / "plugins" / name / "README.md").read_text(encoding="utf-8")
-            for token in ("path suffix", "SHA-256", "marketplace provenance", "compatibility", "@file", "@@literal", "8 KiB", "16 KiB"):
+            for token in ("path suffix", "SHA-256", "marketplace provenance", "compatibility", "@file", "8 KiB", "16 KiB"):
                 self.assertIn(token, readme)
+            if name == "context-decision":
+                self.assertIn("@@literal", readme)
+            else:
+                self.assertIn("`--candidate @file`", readme)
+                self.assertNotIn("--sec-*", readme)
+                self.assertNotIn("@@literal", readme)
             prompts = read_json(ROOT / "plugins" / name / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"]
             prompt_text = " ".join(prompts)
             for token in ("pinned context_cli.py", "SHA-256", "marketplace provenance/source/enabled", "low-level compatibility"):
@@ -479,7 +485,7 @@ class DistributionProofTests(unittest.TestCase):
 
         release_notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
         migration = (ROOT / "MIGRATION.md").read_text(encoding="utf-8")
-        for token in ("W1", "W2", "W3", "3,147", "1,339", "57.5%", "not a token-savings measurement"):
+        for token in ("W1", "W2", "W3", "not a token-savings measurement"):
             self.assertIn(token, release_notes)
         for token in ("W1-W3", "context-common/v2", "linked worktree", "@file", "@@literal"):
             self.assertIn(token, migration)
@@ -491,14 +497,44 @@ class DistributionProofTests(unittest.TestCase):
             "All four plugins installed and loaded",
             "Actual model behavior",
             "Unverified",
-            "3,147",
-            "1,339",
-            "57.5% character reduction",
             "not a token-savings claim",
         ):
             self.assertIn(token, root_readme)
 
         korean_readme = (ROOT / "README.ko.md").read_text(encoding="utf-8")
+        baseline_prompt_chars = 3_147
+        prompt_values = [
+            prompt
+            for name in PLUGIN_NAMES
+            for prompt in read_json(ROOT / "plugins" / name / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"]
+        ]
+        actual_prompt_chars = sum(len(prompt) for prompt in prompt_values)
+        reduction_percent = (baseline_prompt_chars - actual_prompt_chars) * 100 / baseline_prompt_chars
+        self.assertEqual(12, len(prompt_values))
+        self.assertLessEqual(actual_prompt_chars, 1_339)
+        english_measurement = (
+            f"from {baseline_prompt_chars:,} to {actual_prompt_chars:,} characters, "
+            f"a {reduction_percent:.1f}% character reduction"
+        )
+        self.assertIn(english_measurement, root_readme)
+        self.assertIn(english_measurement, release_notes)
+        self.assertIn(
+            f"{baseline_prompt_chars:,}자에서 {actual_prompt_chars:,}자로 {reduction_percent:.1f}% 감소",
+            korean_readme,
+        )
+        for token in (
+            "skills/context/scripts/context_cli.py",
+            "SHA-256",
+            "schema",
+            "context-common/v2",
+            "required features·commands",
+            "doctor state",
+            "marketplace provenance",
+            "catalog source",
+            "host enabled state",
+            "low-level compatibility input",
+        ):
+            self.assertIn(token, korean_readme)
         self.assertIn("`0.5.1` developer preview는 local release 후보 commit으로 준비됐습니다", korean_readme)
         self.assertIn("local `0.5.1` release 후보 commit도 아직 push되지 않았고", korean_readme)
         self.assertIn("`v0.5.1` tag는 아직 생성·push되지 않았으며", korean_readme)
@@ -530,36 +566,53 @@ class DistributionProofTests(unittest.TestCase):
         for token in ("@file", "@@literal", "1,200", "2,000", "8 KiB", "16 KiB"):
             self.assertIn(token, preview_help)
 
-        for name in PLUGIN_NAMES[1:]:
-            entrypoint = ROOT / "plugins" / name / INIT_ENTRYPOINTS[name]
-            completed = subprocess.run(
-                [sys.executable, str(entrypoint), "--help"],
+        decision_init = subprocess.run(
+            [sys.executable, str(ROOT / "plugins/context-decision" / INIT_ENTRYPOINTS["context-decision"]), "--help"],
+            cwd=ROOT,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        for token in (
+            "path suffix", "SHA-256", "context-common/v2", "required commands",
+            "owner-descriptor feature", "doctor state", "does not attest marketplace provenance",
+            "low-level compatibility", "@file", "@@literal", "1,200", "2,000", "8 KiB",
+            "16 KiB", "0600", "outside the repository", "approval_digest",
+        ):
+            self.assertIn(token, decision_init)
+
+        for name, label in (("context-assumption", "ASM"), ("context-term", "TERM")):
+            init_help = subprocess.run(
+                [sys.executable, str(ROOT / "plugins" / name / INIT_ENTRYPOINTS[name]), "--help"],
                 cwd=ROOT,
                 env=environment,
                 text=True,
                 capture_output=True,
-            )
-            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+                check=True,
+            ).stdout
             for token in (
-                "path suffix",
-                "SHA-256",
-                "context-common/v2",
-                "required commands",
-                "owner-descriptor feature",
-                "doctor state",
-                "does not attest marketplace provenance",
-                "low-level compatibility",
-                "@file",
-                "@@literal",
-                "1,200",
-                "2,000",
-                "8 KiB",
-                "16 KiB",
-                "0600",
-                "outside the repository",
-                "approval_digest",
+                "path suffix", "SHA-256", "context-common/v2", "required commands",
+                "owner-descriptor feature", "doctor state", "does not attest marketplace provenance",
+                "low-level compatibility", f"{label} claim and decline", "--candidate @file",
+                "2,000", "8 KiB", "16 KiB",
             ):
-                self.assertIn(token, completed.stdout)
+                self.assertIn(token, init_help)
+            self.assertNotIn("--sec-", init_help)
+            self.assertNotIn("@@literal", init_help)
+
+            claim_help = subprocess.run(
+                [sys.executable, str(ROOT / "plugins" / name / OWNER_CLIS[name]), "claim", "--help"],
+                cwd=ROOT,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=True,
+            ).stdout
+            self.assertIn("--candidate @FILE", claim_help)
+            self.assertIn("structured candidate JSON input via @file", claim_help)
+            self.assertNotIn("--sec-", claim_help)
+            self.assertNotIn("@@literal", claim_help)
 
     def test_addon_test_helpers_use_unique_import_namespaces(self) -> None:
         contracts = {

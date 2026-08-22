@@ -31,7 +31,7 @@ TERM CLI는 artifact draft, lifecycle owner-result와 `context-owner-validation-
 
 명시적 `$context-term:init`은 release contract가 고정한 core entrypoint path suffix와 SHA-256이 제공된 absolute `--core-cli`와 같을 때만 실행한다. 일치한 core의 schema·protocol·필수 command·`context-owner-descriptor/v2` feature와 doctor state를 직접 확인한 뒤 descriptor/seed를 core `bootstrap`에 전달하고, 실제 doctor ready와 root registry·area descriptor·index bytes를 다시 확인한다. 이 executable handshake는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않는다. Caller-created inventory/doctor는 저수준 compatibility mode 입력일 뿐 canonical init의 신뢰 근거가 아니다. 자동 설치, update, downgrade, migration은 하지 않는다.
 
-common primary claim과 TERM `definition`은 2,000 codepoint다. `--sec-*` body 값은 plain literal이 기본이며 `@file`은 named regular UTF-8 file, `@@literal`은 leading `@` literal로 해석한다. 일반 path-like text는 file로 추측하지 않고 missing·symlink·oversized file은 write 전에 실패한다. candidate와 전체 candidate batch envelope는 각각 canonical UTF-8 16 KiB, owner input은 8 KiB, public output은 실제 canonical UTF-8 32 KiB로 제한한다. common `tags`와 `search_terms` item은 core와 동일하게 40자까지 허용한다. lifecycle clock은 `updated_at`과 `retired_at`이 source `created_at`보다 빠르면 거부한다. 일반 operation은 exact `repository_state=ready`에서만 동작한다. `partial`은 명시적 init repair에만 허용하고 `invalid`는 init을 포함해 항상 거부한다.
+common primary claim과 TERM `definition`은 2,000 codepoint다. `claim`과 `decline`은 structured candidate JSON을 `--candidate @file`로 받는다. candidate와 전체 candidate batch envelope는 각각 canonical UTF-8 16 KiB, owner input은 8 KiB, public output은 실제 canonical UTF-8 32 KiB로 제한한다. common `tags`와 `search_terms` item은 core와 동일하게 40자까지 허용한다. lifecycle clock은 `updated_at`과 `retired_at`이 source `created_at`보다 빠르면 거부한다. 일반 operation은 exact `repository_state=ready`에서만 동작한다. `partial`은 명시적 init repair에만 허용하고 `invalid`는 init을 포함해 항상 거부한다.
 
 ## public CLI
 
@@ -46,4 +46,4 @@ python3 skills/term/scripts/term_cli.py search --signal term-encountered --query
 
 0.5.0은 `context-term/v1` authoritative semantic owner의 첫 distribution release다. TERM은 optional addon이며 설치·활성화·init·기존 용어 문서 변환을 자동 수행하지 않고, exact core handshake와 승인형 transaction 경계를 그대로 따른다.
 
-0.5.1은 release-pinned core path/SHA와 direct handshake, repository-bound approval, actual semantic input limits와 `@file`/`@@literal` 계약을 추가한 developer-preview patch다. `v0.5.1` tag는 아직 생성·push되지 않았고 TERM은 계속 optional experimental surface다.
+0.5.1은 release-pinned core path/SHA와 direct handshake, repository-bound approval, actual semantic input limits와 structured `--candidate @file` 계약을 추가한 developer-preview patch다. `v0.5.1` tag는 아직 생성·push되지 않았고 TERM은 계속 optional experimental surface다.

@@ -15,8 +15,8 @@
     "category": "Productivity",
     "capabilities": ["Read", "Validation"],
     "defaultPrompt": [
-      "Before core execution, verify pinned context_cli.py suffix + SHA-256; handshake schema, protocol, commands, features, doctor.",
-      "This does not attest marketplace provenance/source/enabled; caller inventory is only a low-level compatibility input.",
+      "Before core runs, verify pinned context_cli.py suffix + SHA-256; handshake schema, protocol, commands, features, doctor.",
+      "No marketplace provenance/source/enabled attestation; caller inventory is low-level compatibility input only.",
       "Accept only explicit unverified project premises; decline facts, evidence claims, and accepted decisions."
     ]
   }

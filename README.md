@@ -83,7 +83,7 @@ Run each optional owner's init once. One addon never initializes another addon.
 - Healthy index misses open zero indexed artifact bodies. Stale or missing index recovery opens at most 20 bodies per recall.
 - Hard bounds cover body materialization/open, selected output, candidates/envelopes, and owner input. Index scoring/directory enumeration and end-to-end model tokens are not O(1).
 - Primary claims are at most 2,000 codepoints; DEC `decision` is at most 1,200 codepoints; canonical owner input is at most 8 KiB; the full candidate envelope is at most 16 KiB.
-- Semantic `--sec-*` values are literals by default. `@file` reads a named regular UTF-8 file and `@@literal` preserves one leading `@`; path-like plain text remains literal.
+- Core and DEC `--sec-*` values are literals by default. `@file` reads a named regular UTF-8 file and `@@literal` preserves one leading `@`; path-like plain text remains literal. Experimental ASM and TERM instead receive structured candidate JSON through `--candidate @file`.
 
 ## Verification evidence
 

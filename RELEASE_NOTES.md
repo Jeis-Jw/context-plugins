@@ -21,7 +21,7 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 - Primary claims retain actual-content equality and are limited to 2,000 codepoints; DEC `decision` is limited to 1,200 codepoints.
 - Canonical owner input is limited to 8 KiB and the full candidate envelope to 16 KiB.
-- Semantic `--sec-*` values now use literal text by default, explicit `@file`, and `@@literal` for one leading `@`. Missing, symlinked and oversized files fail before receipt or repository writes.
+- Core and DEC `--sec-*` values now use literal text by default, explicit `@file`, and `@@literal` for one leading `@`. Missing, symlinked and oversized files fail before receipt or repository writes. ASM and TERM receive structured candidate JSON through `--candidate @file` instead.
 
 ## Release boundary
 
