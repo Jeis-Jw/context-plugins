@@ -238,6 +238,38 @@ class TokenIOEvidenceTests(unittest.TestCase):
             }
         self.recorded["stage1"] = measurements
 
+    def test_identifier_like_query_is_precise_and_healthy_miss_opens_no_bodies(self) -> None:
+        precise_metrics = context_cli.IOMetrics()
+        precise = context_cli.recall_repository(
+            self.corpus.root,
+            query="decision-current-0999",
+            areas=["decision"],
+            metrics=precise_metrics,
+        )
+        self.assertEqual(1, precise["returned"])
+        self.assertEqual("context/decision/decision-current-0999.md", precise["items"][0]["path"])
+        self.assertEqual(0, precise_metrics.artifact_opens)
+
+        miss_metrics = context_cli.IOMetrics()
+        missed = context_cli.recall_repository(
+            self.corpus.root,
+            query="no-metadata-overlap-paraphrase",
+            areas=["observation"],
+            metrics=miss_metrics,
+        )
+        self.assertEqual(0, missed["returned"])
+        self.assertFalse(missed["index_fallback"])
+        self.assertEqual(0, miss_metrics.artifact_opens)
+        self.assertEqual(0, miss_metrics.artifact_read_bytes)
+        self.recorded["precision_and_miss"] = {
+            "corpus_entries": self.corpus.CURRENT_COUNTS["observation"],
+            "precise_returned": precise["returned"],
+            "precise_artifact_opens": precise_metrics.artifact_opens,
+            "miss_returned": missed["returned"],
+            "miss_artifact_opens": miss_metrics.artifact_opens,
+            "miss_artifact_directory_lists": miss_metrics.artifact_directory_lists,
+        }
+
     def test_stage1_pack_and_section_use_independent_byte_budgets(self) -> None:
         stage1 = context_cli.recall_repository(self.corpus.root, limit=20)
         stage1_default_bytes = encoded(stage1)

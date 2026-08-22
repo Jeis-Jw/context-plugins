@@ -9,7 +9,7 @@ description: 중앙 대화 audit에서 durable-context 신호가 생겼거나 �
 
 host 또는 model session 안에 작은 ephemeral ledger만 유지한다: 현재 scope·anchor, 이미 읽은 Current `{id,sha256}`, pending 후보의 짧은 참조·성숙도, dismissed/deferred 참조와 evidence anchor. 실제 본문을 복제하거나 repository에 쓰지 않는다. scope, evidence, anchor, index 또는 artifact SHA가 바뀌거나 본문이 session context에서 사라지면 관련 항목만 무효화하고, 새 근거가 없으면 dismissed/deferred 후보를 다시 제안하지 않는다.
 
-1. 이전 맥락이 판단을 바꿀 신호가 있을 때만 `recall`로 index metadata를 먼저 조회한다. 실제 의미 비교가 필요한 관련 item만 `--read`하고, 좁게 선택된 묶음에만 `--pack`을 사용한다. 같은 scope와 `{id,sha256}`는 ledger에서 재사용한다.
+1. 이전 맥락이 판단을 바꿀 신호가 있을 때만 `recall`로 index metadata를 먼저 조회한다. metadata miss에서 임의의 indexed body를 열지 말고 query를 좁히거나 index warning을 처리한다. 실제 의미 비교가 필요한 관련 item만 `--read`하고, 좁게 선택된 묶음에만 `--pack`을 사용한다. 같은 scope와 `{id,sha256}`는 ledger에서 재사용한다.
 2. 설치된 semantic owner가 후보와 관련 artifact의 실제 primary claim, supporting sections, scope와 rationale를 비교한다. hash, fingerprint, ID와 index metadata는 의미 판정 근거가 아니다. conflict 또는 rationale change는 primary 결론 전에 관련 ID와 차이를 알리고 유지·수정·supersede 여부를 확인한다.
 3. 그 외에는 원 답변을 먼저 완성한다. 현재·미래 판단에 재사용될 후보가 충분히 성숙했을 때만 semantic milestone당 한 번, 최대 8개를 capability-first로 추출해 grouped capture를 제안한다.
 4. `context_cli.py capabilities --json`과 host가 이미 발견한 addon capability만 사용한다. v2 descriptor addon은 먼저 `context_cli.py schema --json`의 `features`에 `context-owner-descriptor/v2`가 있는지 확인하며, 없으면 bootstrap을 호출하지 않고 incompatible core로 중단한다. router는 owner process, plugin cache 또는 대체 runtime을 탐색하지 않는다. route 우선순위는 explicit request, specialized owner, observation fallback, handoff, skip이다.

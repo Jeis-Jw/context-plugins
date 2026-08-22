@@ -32,6 +32,7 @@ MAX_USER_BYTES = 32 * 1024
 MAX_CANDIDATE_BYTES = 16 * 1024
 MAX_OWNER_INPUT_BYTES = 2 * 1024
 MAX_APPROVAL_PREVIEW_BYTES = 32 * 1024
+MAX_INDEX_FALLBACK_ARTIFACT_READS = 20
 MAX_OWNER_DESCRIPTOR_BYTES = 8 * 1024
 MAX_PROFILE_FIELDS = 24
 MAX_PROFILE_ITEMS = 12
@@ -1329,7 +1330,13 @@ def render_root_index(seed: str, areas: Sequence[tuple[dict[str, Any], str, str]
     return _replace_block(seed, "areas", rows)
 
 
-def _scan_area_paths(repo: pathlib.Path, area: str, metrics: IOMetrics | None = None) -> Iterator[tuple[pathlib.Path, str]]:
+def _scan_area_paths(
+    repo: pathlib.Path,
+    area: str,
+    metrics: IOMetrics | None = None,
+    *,
+    include_history: bool = True,
+) -> Iterator[tuple[pathlib.Path, str]]:
     root = _ensure_contained(repo, f"context/{area}")
     if metrics:
         metrics.artifact_directory_lists += 1
@@ -1341,6 +1348,8 @@ def _scan_area_paths(repo: pathlib.Path, area: str, metrics: IOMetrics | None = 
                 retired = _ensure_contained(repo, f"context/{area}/retired")
                 if not retired.is_dir():
                     raise ContextError("path_invalid", "retired path must be a directory", {"path": f"context/{area}/retired"}, EXIT_INTEGRITY)
+                if not include_history:
+                    continue
                 if metrics:
                     metrics.artifact_directory_lists += 1
                 with os.scandir(retired) as historical_entries:
@@ -1395,7 +1404,7 @@ def _read_index(path: pathlib.Path, metrics: IOMetrics | None) -> str:
 
 def _query_tokens(query: str) -> list[str]:
     normalized = normalized_key(query)
-    return re.findall(r"[\w]+", normalized, flags=re.UNICODE)
+    return re.findall(r"[\w]+(?:[.-][\w]+)*", normalized, flags=re.UNICODE)
 
 
 def _score_entry_details(row: dict[str, Any], query: str) -> tuple[int, int, int]:
@@ -1445,7 +1454,14 @@ def score_entry(row: dict[str, Any], query: str) -> int:
     return _score_entry_details(row, query)[0]
 
 
-def _fallback_entries(repo: pathlib.Path, area_row: dict[str, Any], metrics: IOMetrics | None) -> list[dict[str, Any]]:
+def _fallback_entries(
+    repo: pathlib.Path,
+    area_row: dict[str, Any],
+    metrics: IOMetrics | None,
+    *,
+    include_history: bool,
+    maximum: int,
+) -> tuple[list[dict[str, Any]], int]:
     descriptor: dict[str, Any] | None = None
     try:
         index_text = _ensure_contained(repo, area_row["path"]).read_text(encoding="utf-8")
@@ -1456,10 +1472,52 @@ def _fallback_entries(repo: pathlib.Path, area_row: dict[str, Any], metrics: IOM
             "area": area_row["area"], "owner": area_row["owner"], "artifact_schema": area_row["artifact_schema"],
             "authority": area_row["authority"], "projection_fields": [],
         }
-    entries = []
-    for path, state in _scan_area_paths(repo, area_row["area"], metrics):
-        entries.append(_entry_from_document(repo, path, metadata, state, metrics, descriptor))
-    return entries
+    candidates = sorted(
+        (path.relative_to(repo).as_posix(), path, state)
+        for path, state in _scan_area_paths(
+            repo,
+            area_row["area"],
+            metrics,
+            include_history=include_history,
+        )
+    )
+    entries = [
+        _entry_from_document(repo, path, metadata, state, metrics, descriptor)
+        for _, path, state in candidates[:maximum]
+    ]
+    return entries, len(candidates)
+
+
+def _unindexed_entries(
+    repo: pathlib.Path,
+    area_row: dict[str, Any],
+    area_index: AreaIndex,
+    descriptor: dict[str, Any] | None,
+    *,
+    include_history: bool,
+    maximum: int,
+    metrics: IOMetrics | None,
+) -> tuple[list[dict[str, Any]], int]:
+    indexed_paths = {row["path"] for row in [*area_index.current, *area_index.history]}
+    missing = sorted(
+        (
+            path.relative_to(repo).as_posix(),
+            path,
+            state,
+        )
+        for path, state in _scan_area_paths(
+            repo,
+            area_row["area"],
+            metrics,
+            include_history=include_history,
+        )
+        if path.relative_to(repo).as_posix() not in indexed_paths
+    )
+    rows = [
+        _entry_from_document(repo, path, area_index.frontmatter, state, metrics, descriptor)
+        for _, path, state in missing[:maximum]
+    ]
+    return rows, len(missing)
 
 
 def _recall_result(items: list[dict[str, Any]], total_matches: int, fallback: bool, warnings: Sequence[str]) -> dict[str, Any]:
@@ -1581,6 +1639,7 @@ def recall_repository(
     all_entries: list[tuple[dict[str, Any], dict[str, Any]]] = []
     warnings: list[str] = []
     fallback = False
+    fallback_read_remaining = MAX_INDEX_FALLBACK_ARTIFACT_READS
     area_indexes: dict[str, AreaIndex] = {}
     area_descriptors: dict[str, dict[str, Any] | None] = {}
     for area_row in selected_areas:
@@ -1601,9 +1660,16 @@ def recall_repository(
             fallback = True
             warnings.append("area_index_invalid")
             area_descriptors[area_row["area"]] = _best_effort_area_descriptor(repo, area_row, root_text)
-            rows = _fallback_entries(repo, area_row, metrics)
-            if not include_history:
-                rows = [row for row in rows if row["state"] == "current"]
+            rows, fallback_count = _fallback_entries(
+                repo,
+                area_row,
+                metrics,
+                include_history=include_history,
+                maximum=fallback_read_remaining,
+            )
+            fallback_read_remaining -= len(rows)
+            if fallback_count > len(rows):
+                warnings.append("index_fallback_truncated")
         for row in rows:
             all_entries.append((row, area_row))
     if read_ids:
@@ -1614,13 +1680,24 @@ def recall_repository(
                 metrics.artifact_stats += 1
             if row["id"] in wanted and not (repo / row["path"]).is_file():
                 missing_selected.append(area_row)
-        for area_row in missing_selected:
+        missing_areas = {area_row["area"]: area_row for area_row in missing_selected}
+        for area_row in [missing_areas[key] for key in sorted(missing_areas)]:
             if strict_index:
                 raise ContextError("index_stale", "selected index link is missing", {"area": area_row["area"]}, EXIT_INTEGRITY)
             fallback = True
             warnings.append("selected_link_missing")
             all_entries = [(row, owner) for row, owner in all_entries if owner["area"] != area_row["area"]]
-            all_entries.extend((row, area_row) for row in _fallback_entries(repo, area_row, metrics))
+            rows, fallback_count = _fallback_entries(
+                repo,
+                area_row,
+                metrics,
+                include_history=include_history,
+                maximum=fallback_read_remaining,
+            )
+            fallback_read_remaining -= len(rows)
+            if fallback_count > len(rows):
+                warnings.append("index_fallback_truncated")
+            all_entries.extend((row, area_row) for row in rows)
         all_entries = [(row, area_row) for row, area_row in all_entries if row["id"] in wanted]
     query_tokens = list(dict.fromkeys(_query_tokens(query)))
     minimum_token_matches = min(2, (len(query_tokens) + 1) // 2)
@@ -1646,15 +1723,29 @@ def recall_repository(
 
     filtered = matched(all_entries)
     if query and not filtered and selected_areas and not fallback and not strict_index:
-        fallback = True
-        warnings.append("index_miss_fallback")
-        fallback_entries: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        remaining = MAX_INDEX_FALLBACK_ARTIFACT_READS
+        missing_total = 0
+        recovery_entries: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for area_row in selected_areas:
-            rows = _fallback_entries(repo, area_row, metrics)
-            if not include_history:
-                rows = [row for row in rows if row["state"] == "current"]
-            fallback_entries.extend((row, area_row) for row in rows)
-        filtered = matched(fallback_entries)
+            area = area_row["area"]
+            rows, missing_count = _unindexed_entries(
+                repo,
+                area_row,
+                area_indexes[area],
+                area_descriptors.get(area),
+                include_history=include_history,
+                maximum=remaining,
+                metrics=metrics,
+            )
+            missing_total += missing_count
+            remaining -= len(rows)
+            recovery_entries.extend((row, area_row) for row in rows)
+        if missing_total:
+            fallback = True
+            warnings.append("index_miss_fallback")
+            if missing_total > MAX_INDEX_FALLBACK_ARTIFACT_READS:
+                warnings.append("index_miss_fallback_truncated")
+            filtered = matched(recovery_entries)
     if query and any(item[3] for item in filtered):
         filtered = [item for item in filtered if item[3] > 0]
     filtered.sort(key=lambda item: item[0]["id"])

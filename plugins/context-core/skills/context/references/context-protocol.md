@@ -12,8 +12,8 @@
 
 ## Read 경계
 
-- healthy Stage 1 recall은 root index와 선택된 area index만 연다. artifact open/list/stat은 0이다.
-- broken area index, 선택된 missing link 또는 non-empty query zero-match는 해당 area scan으로만 fallback하고 warning을 반환한다.
+- healthy Stage 1 metadata hit은 root index와 선택된 area index만 열고 artifact open/list/stat을 하지 않는다. `-`와 `.`이 들어간 identifier-like query는 하나의 distinctive token으로 유지해 공통 fragment만 맞는 broad candidate를 만들지 않는다.
+- valid index의 non-empty query zero-match는 선택 area의 filename만 열거해 index에 없는 artifact만 읽는다. 모두 indexed면 body open은 0이고 fallback으로 표시하지 않는다. 누락 body와 broken area index·선택된 missing link의 recovery body read는 recall 한 번당 합계 20개로 제한하며 초과 시 `index_miss_fallback_truncated` 또는 `index_fallback_truncated` warning을 반환한다.
 - `--strict-index`는 fallback 없이 exit 6 `index_stale`로 실패한다.
 - root index가 없으면 storage error `context_root_missing`이며 plugin dependency error와 다르다.
 
@@ -21,7 +21,7 @@
 
 recall·capture의 artifact body materialization, bounded output과 model·owner invocation 비용은 corpus 크기, 등록 addon 수 또는 누적 turn 수에 비례해 증가하지 않아야 한다.
 
-- runtime 경계는 healthy Stage 1의 index-only read와 artifact open/list/stat 0, Stage 1 4 KiB·body pack 8 KiB, 최대 8개이면서 schema·audit_count·candidates 전체 canonical UTF-8 envelope가 16 KiB 이하인 `context-capture-batch/v1`, owner input 2 KiB, approval preview 32 KiB 상한으로 집행한다. Dict batch는 세 key만 허용하고 audit_count는 bool이 아닌 integer `1`이어야 한다. legacy bare list는 같은 synthetic v1 envelope byte budget으로 유지한다. `context-decision`은 별도로 brief 8 KiB·comparison input 24 KiB·result 32 KiB 상한을 둔다.
+- runtime 경계는 healthy Stage 1의 index-only read와 artifact open/list/stat 0, recovery body open 최대 20개, Stage 1 4 KiB·body pack 8 KiB, 최대 8개이면서 schema·audit_count·candidates 전체 canonical UTF-8 envelope가 16 KiB 이하인 `context-capture-batch/v1`, owner input 2 KiB, approval preview 32 KiB 상한으로 집행한다. Dict batch는 세 key만 허용하고 audit_count는 bool이 아닌 integer `1`이어야 한다. legacy bare list는 같은 synthetic v1 envelope byte budget으로 유지한다. zero-match의 unindexed 확인은 directory entry 수에 따라 증가할 수 있지만 indexed artifact body는 열지 않는다. `context-decision`은 별도로 brief 8 KiB·comparison input 24 KiB·result 32 KiB 상한을 둔다.
 - `tests/context-v1/test_token_io_evidence.py`는 synthetic large corpus의 artifact I/O, candidate·addon 경계와 output byte budget을 계측한다.
 - root·area index bytes를 읽고 metadata row를 score하는 I/O·CPU는 선택한 area index 크기에 따라 증가할 수 있다. 현재 구현은 전체 artifact body materialization을 피하는 것이며 전체 recall 계산량의 O(1)을 보장하지 않는다.
 - 대화 delta당 단일 audit, signal이 없을 때의 침묵, addon의 대화 재판독 금지는 관리형 policy의 의무다. CLI는 `audit_count:1`과 bounded envelope을 검증하지만 host/model이 policy를 실제로 한 번만 수행하는지는 hard runtime guarantee가 아니다.

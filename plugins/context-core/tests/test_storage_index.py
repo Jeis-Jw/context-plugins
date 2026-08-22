@@ -549,10 +549,12 @@ evidence
             )
             artifact_before = artifact_path.read_bytes()
 
-            recalled = context_cli.recall_repository(repo, query="index miss recovery")
+            metrics = context_cli.IOMetrics()
+            recalled = context_cli.recall_repository(repo, query="index miss recovery", metrics=metrics)
             self.assertTrue(recalled["index_fallback"])
             self.assertIn("index_miss_fallback", recalled["warnings"])
             self.assertEqual([identifier], [item["id"] for item in recalled["items"]])
+            self.assertEqual(1, metrics.artifact_opens)
             doctor = context_cli.doctor_repository(repo)
             self.assertEqual("ready", doctor["repository_state"])
             self.assertIn("index_missing_entry", {warning["code"] for warning in doctor["warnings"]})
@@ -562,6 +564,32 @@ evidence
             self.assertEqual([], repaired["warnings"])
             self.assertEqual("ready", context_cli.doctor_repository(repo)["repository_state"])
             self.assertEqual(artifact_before, artifact_path.read_bytes())
+
+    def test_index_miss_body_reads_have_a_hard_cap(self) -> None:
+        with git_repo() as temp:
+            repo = Path(temp)
+            initialize(repo)
+            for index in range(25):
+                identifier = f"ctx_550e8400e29b41d4a71644665544{index:04x}"
+                (repo / f"context/observation/unindexed-{index:02d}.md").write_text(
+                    observation(identifier, f"unindexed recovery {index}", "unindexed recovery fixture"),
+                    encoding="utf-8",
+                )
+            metrics = context_cli.IOMetrics()
+            recalled = context_cli.recall_repository(repo, query="unindexed recovery", metrics=metrics)
+            self.assertTrue(recalled["index_fallback"])
+            self.assertIn("index_miss_fallback", recalled["warnings"])
+            self.assertIn("index_miss_fallback_truncated", recalled["warnings"])
+            self.assertEqual(20, metrics.artifact_opens)
+            self.assertEqual(20, recalled["returned"] + recalled["omitted"])
+
+            (repo / "context/observation/observation.index.md").write_text("broken\n", encoding="utf-8")
+            broken_metrics = context_cli.IOMetrics()
+            broken = context_cli.recall_repository(repo, query="unindexed recovery", metrics=broken_metrics)
+            self.assertTrue(broken["index_fallback"])
+            self.assertIn("area_index_invalid", broken["warnings"])
+            self.assertIn("index_fallback_truncated", broken["warnings"])
+            self.assertEqual(20, broken_metrics.artifact_opens)
 
     def test_missing_at_file_uses_structured_error_envelope(self) -> None:
         with git_repo() as temp:
