@@ -4,7 +4,7 @@ Coding agent가 세션이 바뀌어도 프로젝트의 **결정, 근거, 미검�
 
 관련 맥락만 골라 실제 본문을 읽고, 기존 결정과 충돌하거나 취지가 달라졌다면 먼저 알려줍니다. 새 맥락은 사용자에게 기록 후보를 보여준 뒤 명시적으로 승인받은 경우에만 repository의 `context/`에 저장합니다.
 
-> `0.5.1` developer preview는 local에서 준비됐지만 `v0.5.1` tag와 release commit은 아직 생성·push되지 않았고 marketplace publication도 미완료입니다. 공개 라이선스도 선택되지 않았으므로 실제 사용·복제·재배포 전에는 [현재 배포 상태](#현재-배포-상태)를 확인하세요.
+> `0.5.1` developer preview는 local release 후보 commit으로 준비됐습니다. local `0.5.1` release 후보 commit도 아직 push되지 않았고, `v0.5.1` tag는 아직 생성·push되지 않았으며 marketplace publication도 미완료입니다. 공개 라이선스도 선택되지 않았으므로 실제 사용·복제·재배포 전에는 [현재 배포 상태](#현재-배포-상태)를 확인하세요.
 
 ## 이런 문제를 해결합니다
 

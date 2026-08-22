@@ -498,6 +498,12 @@ class DistributionProofTests(unittest.TestCase):
         ):
             self.assertIn(token, root_readme)
 
+        korean_readme = (ROOT / "README.ko.md").read_text(encoding="utf-8")
+        self.assertIn("`0.5.1` developer preview는 local release 후보 commit으로 준비됐습니다", korean_readme)
+        self.assertIn("local `0.5.1` release 후보 commit도 아직 push되지 않았고", korean_readme)
+        self.assertIn("`v0.5.1` tag는 아직 생성·push되지 않았으며", korean_readme)
+        self.assertNotIn("tag와 release commit은 아직 생성·push되지 않았", korean_readme)
+
     def test_public_help_exposes_capture_limits_and_core_trust(self) -> None:
         environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
         workflow = ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
