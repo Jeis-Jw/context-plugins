@@ -2507,10 +2507,91 @@ def _material(material_id: str, path: str | None, content: str) -> dict[str, Any
     return {"material_id": material_id, "path": path, "content": content}
 
 
-def _bundle_result(preview: dict[str, Any], plan: dict[str, Any], materials: list[dict[str, Any]]) -> dict[str, Any]:
+def repository_identity(repo: pathlib.Path) -> dict[str, Any]:
+    try:
+        worktree = repo.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ContextError("repository_not_found", "Git worktree identity could not be resolved", exit_code=EXIT_NOT_FOUND) from error
+    completed = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel", "--git-common-dir"],
+        cwd=worktree,
+        text=True,
+        capture_output=True,
+    )
+    lines = completed.stdout.splitlines()
+    if completed.returncode or len(lines) != 2:
+        raise ContextError("repository_not_found", "Git worktree identity could not be resolved", exit_code=EXIT_NOT_FOUND)
+    try:
+        observed_worktree = pathlib.Path(lines[0]).resolve(strict=True)
+        common_value = pathlib.Path(lines[1])
+        git_common_dir = (
+            common_value.resolve(strict=True)
+            if common_value.is_absolute()
+            else (worktree / common_value).resolve(strict=True)
+        )
+        if observed_worktree != worktree:
+            raise ContextError("repository_not_found", "repository path is not the resolved Git worktree root", exit_code=EXIT_NOT_FOUND)
+        worktree_stat = worktree.stat()
+        common_stat = git_common_dir.stat()
+    except ContextError:
+        raise
+    except (OSError, RuntimeError) as error:
+        raise ContextError("repository_not_found", "Git worktree identity could not be resolved", exit_code=EXIT_NOT_FOUND) from error
+    return {
+        "schema": "context-repository-identity/v1",
+        "worktree": {
+            "path": str(worktree),
+            "device": str(worktree_stat.st_dev),
+            "inode": str(worktree_stat.st_ino),
+        },
+        "git_common_dir": {
+            "path": str(git_common_dir),
+            "device": str(common_stat.st_dev),
+            "inode": str(common_stat.st_ino),
+        },
+    }
+
+
+def _validate_repository_identity(value: Any) -> None:
+    if not isinstance(value, dict) or set(value) != {"schema", "worktree", "git_common_dir"}:
+        raise ContextError("repository_identity_invalid", "repository identity envelope is invalid", exit_code=EXIT_CONFLICT)
+    if value.get("schema") != "context-repository-identity/v1":
+        raise ContextError("repository_identity_invalid", "repository identity schema is invalid", exit_code=EXIT_CONFLICT)
+    for field in ("worktree", "git_common_dir"):
+        entry = value.get(field)
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"path", "device", "inode"}
+            or not isinstance(entry.get("path"), str)
+            or not pathlib.Path(entry["path"]).is_absolute()
+            or not isinstance(entry.get("device"), str)
+            or not entry["device"].isdigit()
+            or not isinstance(entry.get("inode"), str)
+            or not entry["inode"].isdigit()
+        ):
+            raise ContextError("repository_identity_invalid", "repository identity entry is invalid", {"field": field}, EXIT_CONFLICT)
+
+
+def _require_repository_identity(repo: pathlib.Path, approval_material: Any) -> dict[str, Any]:
+    if not isinstance(approval_material, dict):
+        raise ContextError("bundle_invalid", "approval material is invalid", exit_code=EXIT_CONFLICT)
+    expected = approval_material.get("repository_identity")
+    _validate_repository_identity(expected)
+    actual = repository_identity(repo)
+    if expected != actual:
+        raise ContextError(
+            "repository_identity_mismatch",
+            "approved mutation belongs to a different Git worktree identity",
+            {"expected": expected, "actual": actual},
+            EXIT_CONFLICT,
+        )
+    return actual
+
+
+def _bundle_result(repo: pathlib.Path, preview: dict[str, Any], plan: dict[str, Any], materials: list[dict[str, Any]]) -> dict[str, Any]:
     if len(canonical_json(preview).encode("utf-8")) > MAX_APPROVAL_PREVIEW_BYTES:
         raise ContextError("approval_preview_too_large", "grouped approval preview exceeds 32 KiB; split the candidates", exit_code=EXIT_CONFLICT)
-    approval_material = {"preview": preview, "plan": plan}
+    approval_material = {"repository_identity": repository_identity(repo), "preview": preview, "plan": plan}
     digest = canonical_digest(approval_material)
     bundle = {"schema": "context-mutation-bundle/v1", "approval_material": approval_material, "approval_digest": digest, "materials": materials}
     return {"bundle": bundle, "approval_preview": preview, "approval_digest": digest, "applied": False, "noop": False}
@@ -2942,7 +3023,7 @@ def build_init_bundle(repo: pathlib.Path) -> dict[str, Any]:
         "operations": [{"op": "index_rebuild", "derived_from": [effect_id], "areas": ["observation", "snapshot"], "include_root": True, "before_sha256": before, "after_sha256": after, "seed_materials": material_ids}],
     }
     preview = {"schema": "context-approval-preview/v1", "owner": "context-core", "candidate_id": None, "artifacts": [], "effects": [{"effect_id": effect_id, "action": "initialize_core", "paths": sorted(contents)}]}
-    return _bundle_result(preview, plan, materials)
+    return _bundle_result(repo, preview, plan, materials)
 
 
 def _bootstrap_phase_error(
@@ -3412,7 +3493,7 @@ def build_area_register_bundle(repo: pathlib.Path, descriptor: dict[str, Any], i
         "operations": [{"op": "index_rebuild", "derived_from": [effect_id], "areas": [area], "include_root": True, "before_sha256": {ROOT_INDEX: sha256_bytes(file_bytes(root_before)), area_path: area_before}, "after_sha256": {path: sha256_bytes(file_bytes(content)) for path, content in contents.items()}, "seed_materials": {area_path: "seed_area_index"}}],
     }
     preview = {"schema": "context-approval-preview/v1", "owner": owner, "candidate_id": None, "artifacts": [], "effects": [{"effect_id": effect_id, "action": "register_area", "area": area, "path": area_path}]}
-    result = _bundle_result(preview, plan, materials)
+    result = _bundle_result(repo, preview, plan, materials)
     if resume_prefix:
         result["resume_prefix"] = True
     return result
@@ -3485,7 +3566,7 @@ def build_policy_bundle(repo: pathlib.Path, target: str) -> dict[str, Any]:
         "artifacts": [{"effect_id": effect_id, "path": target, "content": after}],
         "effects": [{"effect_id": effect_id, "action": "install_policy", "path": target}],
     }
-    return _bundle_result(preview, plan, [_material(material_id, target, after)])
+    return _bundle_result(repo, preview, plan, [_material(material_id, target, after)])
 
 
 def _profiled_area_for_owner(
@@ -3583,9 +3664,13 @@ def _virtual_area_index(
     return text
 
 
-def _bundle_owner_result(bundle: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _bundle_owner_result(repo: pathlib.Path, bundle: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     if bundle.get("schema") != "context-mutation-bundle/v1" or bundle.get("approval_digest") != canonical_digest(bundle.get("approval_material")):
         raise ContextError("prior_bundle_invalid", "prior bundle digest is invalid", exit_code=EXIT_CONFLICT)
+    try:
+        _require_repository_identity(repo, bundle.get("approval_material"))
+    except ContextError as error:
+        raise ContextError("prior_bundle_invalid", "prior bundle repository identity is invalid", {"cause": error.code}, EXIT_CONFLICT) from error
     plan = bundle["approval_material"].get("plan", {})
     material = next((item for item in bundle.get("materials", []) if item.get("material_id") == plan.get("owner_result_material")), None)
     if plan.get("source_type") != "owner_result" or material is None or material.get("path") is not None:
@@ -3857,7 +3942,7 @@ def finalize_owner_result(repo: pathlib.Path, owner_result: dict[str, Any], owne
     same_area_prior_digests: list[str] = []
     virtual_text = physical_area_index.text
     for prior in prior_bundles:
-        prior_plan, prior_result = _bundle_owner_result(prior)
+        prior_plan, prior_result = _bundle_owner_result(repo, prior)
         if prior_plan.get("prior_bundle_digests") != prior_digests:
             raise ContextError("prior_bundle_order_invalid", "prior bundle chain differs from exact proposal order", exit_code=EXIT_CONFLICT)
         prior_digest = prior["approval_digest"]
@@ -3993,7 +4078,7 @@ def finalize_owner_result(repo: pathlib.Path, owner_result: dict[str, Any], owne
         plan["transition_topology"] = transition_topology
         plan["prior_same_area_bundle_digests"] = same_area_prior_digests
     preview = {"schema": "context-approval-preview/v1", "owner": owner, "candidate_id": owner_result.get("candidate_id"), "artifacts": [{"effect_id": draft["effect_id"], "path": draft["path"], "content": draft["content"]} for draft in owner_result["artifact_drafts"]], "effects": owner_result["effects"]}
-    return _bundle_result(preview, plan, materials)
+    return _bundle_result(repo, preview, plan, materials)
 
 
 def _filesystem_lookup_areas(repo: pathlib.Path) -> list[dict[str, Any]]:
@@ -4996,6 +5081,7 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
     actual = canonical_digest(bundle.get("approval_material"))
     if approved_digest != bundle.get("approval_digest") or actual != bundle.get("approval_digest"):
         raise ContextError("approval_digest_mismatch", "approved digest does not match the immutable final bundle", exit_code=EXIT_CONFLICT)
+    _require_repository_identity(repo, bundle.get("approval_material"))
     materials = bundle.get("materials", [])
     by_id = {item.get("material_id"): item for item in materials}
     if len(by_id) != len(materials) or any(not LOCAL_ID.fullmatch(str(key)) for key in by_id):

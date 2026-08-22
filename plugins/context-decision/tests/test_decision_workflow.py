@@ -44,6 +44,26 @@ def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
+def repository_identity(repo: Path) -> dict:
+    worktree = repo.resolve(strict=True)
+    completed = subprocess.run(
+        ["git", "rev-parse", "--git-common-dir"],
+        cwd=worktree,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    common_value = Path(completed.stdout.strip())
+    common = common_value.resolve(strict=True) if common_value.is_absolute() else (worktree / common_value).resolve(strict=True)
+    worktree_stat = worktree.stat()
+    common_stat = common.stat()
+    return {
+        "schema": "context-repository-identity/v1",
+        "worktree": {"path": str(worktree), "device": str(worktree_stat.st_dev), "inode": str(worktree_stat.st_ino)},
+        "git_common_dir": {"path": str(common), "device": str(common_stat.st_dev), "inode": str(common_stat.st_ino)},
+    }
+
+
 class DecisionWorkflowTests(unittest.TestCase):
     def _initialized_repository(self, root: Path) -> tuple[Path, Path]:
         repo = root / "repository"
@@ -192,18 +212,19 @@ class DecisionWorkflowTests(unittest.TestCase):
             self.assertEqual(0o600, receipt_path.stat().st_mode & 0o777)
             frozen_bytes = receipt_path.read_bytes()
             receipt = json.loads(frozen_bytes)
-            self.assertEqual(canonical_digest(candidate), receipt["candidate_digest"])
+            workflow_material = receipt["approval_material"]
+            self.assertEqual(canonical_digest(candidate), workflow_material["candidate_digest"])
             self.assertEqual(output["approval_digest"], receipt["approval_digest"])
             self.assertEqual(
                 output["plan_id"],
-                receipt["bundle"]["approval_material"]["plan"]["plan_id"],
+                workflow_material["core_bundle"]["approval_material"]["plan"]["plan_id"],
             )
             legacy_output = {
                 "ok": True,
                 "result": {
-                    "bundle": receipt["bundle"],
+                    "bundle": workflow_material["core_bundle"],
                     "approval_preview": output["approval_preview"],
-                    "approval_digest": output["approval_digest"],
+                    "approval_digest": workflow_material["core_approval_digest"],
                     "applied": False,
                     "noop": False,
                 },
@@ -364,8 +385,70 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "--json",
             )
             self.assertEqual(5, mismatch.returncode, mismatch.stdout + mismatch.stderr)
-            self.assertEqual("receipt_repository_mismatch", json.loads(mismatch.stdout)["error"]["code"])
+            self.assertEqual("repository_identity_mismatch", json.loads(mismatch.stdout)["error"]["code"])
             self.assertEqual([], [path for path in other.rglob("*") if path.is_file() and ".git" not in path.parts])
+
+    def test_tampered_repository_and_rehashed_receipt_cannot_replay_in_identical_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            first_root = root / "first"
+            second_root = root / "second"
+            first_root.mkdir()
+            second_root.mkdir()
+            first, inventory = self._initialized_repository(first_root)
+            second, _ = self._initialized_repository(second_root)
+            candidate_path, attestation_path, _ = self._semantic_inputs(root)
+            receipt_path = root / "replay-receipt.json"
+            preview = run(
+                first,
+                WORKFLOW,
+                "preview",
+                "--host",
+                "codex",
+                "--core-inventory",
+                f"@{inventory}",
+                "--core-cli",
+                str(CORE_CLI),
+                "--candidate",
+                f"@{candidate_path}",
+                "--attestation",
+                f"@{attestation_path}",
+                "--receipt-file",
+                str(receipt_path),
+                "--json",
+            )
+            self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
+            approved_digest = json.loads(preview.stdout)["result"]["approval_digest"]
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            workflow_material = receipt["approval_material"]
+            second_identity = repository_identity(second)
+            workflow_material["repository_identity"] = second_identity
+            core_bundle = workflow_material["core_bundle"]
+            core_bundle["approval_material"]["repository_identity"] = second_identity
+            core_digest = canonical_digest(core_bundle["approval_material"])
+            core_bundle["approval_digest"] = core_digest
+            workflow_material["core_approval_digest"] = core_digest
+            material = dict(receipt)
+            material.pop("receipt_digest")
+            receipt["receipt_digest"] = canonical_digest(material)
+            write_json(receipt_path, receipt)
+            before = digest_tree(second)
+
+            replay = run(
+                second,
+                WORKFLOW,
+                "apply",
+                "--core-cli",
+                str(CORE_CLI),
+                "--receipt-file",
+                str(receipt_path),
+                "--approved-digest",
+                approved_digest,
+                "--json",
+            )
+            self.assertEqual(5, replay.returncode, replay.stdout + replay.stderr)
+            self.assertEqual("approval_digest_mismatch", json.loads(replay.stdout)["error"]["code"])
+            self.assertEqual(before, digest_tree(second))
 
     def test_inline_preview_serializes_explicit_semantics_without_input_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -409,7 +492,7 @@ class DecisionWorkflowTests(unittest.TestCase):
             self.assertFalse((root / "candidate.json").exists())
             self.assertFalse((root / "attestation.json").exists())
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-            self.assertRegex(receipt["candidate_digest"], r"^sha256:[0-9a-f]{64}$")
+            self.assertRegex(receipt["approval_material"]["candidate_digest"], r"^sha256:[0-9a-f]{64}$")
 
             applied = run(
                 repo,

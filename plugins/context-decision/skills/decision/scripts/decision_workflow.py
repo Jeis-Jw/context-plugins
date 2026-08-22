@@ -15,6 +15,7 @@ import decision_cli
 
 
 RECEIPT_SCHEMA = "context-decision-workflow-receipt/v1"
+APPROVAL_SCHEMA = "context-decision-workflow-approval/v1"
 MAX_INPUT_BYTES = 64 * 1024
 MAX_RECEIPT_BYTES = 16 * 1024 * 1024
 
@@ -172,21 +173,48 @@ def _load_receipt(path: pathlib.Path) -> dict[str, Any]:
         raise
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise WorkflowError("receipt_invalid", "workflow receipt could not be read", {"path": str(path)}, 5) from error
-    required = {
-        "schema", "repository", "core_cli", "core_cli_sha256", "candidate_digest",
-        "owner_result_digest", "approval_digest", "bundle", "receipt_digest",
-    }
+    required = {"schema", "approval_material", "approval_digest", "receipt_digest"}
     if not isinstance(receipt, dict) or set(receipt) != required or receipt.get("schema") != RECEIPT_SCHEMA:
         raise WorkflowError("receipt_invalid", "workflow receipt envelope is invalid", exit_code=5)
     material = dict(receipt)
     digest = material.pop("receipt_digest")
     if digest != decision_cli.canonical_digest(material):
         raise WorkflowError("receipt_invalid", "workflow receipt digest is invalid", exit_code=5)
-    bundle = receipt.get("bundle")
+    approval_material = receipt.get("approval_material")
+    approval_fields = {
+        "schema", "repository_identity", "core", "candidate_digest", "owner_result_digest",
+        "core_approval_digest", "core_bundle",
+    }
     if (
-        not isinstance(bundle, dict)
+        not isinstance(approval_material, dict)
+        or set(approval_material) != approval_fields
+        or approval_material.get("schema") != APPROVAL_SCHEMA
+    ):
+        raise WorkflowError("receipt_invalid", "workflow approval material is invalid", exit_code=5)
+    if receipt.get("approval_digest") != decision_cli.canonical_digest(approval_material):
+        raise WorkflowError("approval_digest_mismatch", "workflow approval material changed after approval", exit_code=5)
+    core = approval_material.get("core")
+    bundle = approval_material.get("core_bundle")
+    core_digest = approval_material.get("core_approval_digest")
+    repository_identity = approval_material.get("repository_identity")
+    if (
+        not isinstance(core, dict)
+        or set(core) != {"path", "sha256"}
+        or not isinstance(core.get("path"), str)
+        or not pathlib.Path(core["path"]).is_absolute()
+        or not isinstance(core.get("sha256"), str)
+        or not isinstance(bundle, dict)
         or bundle.get("schema") != "context-mutation-bundle/v1"
-        or bundle.get("approval_digest") != receipt.get("approval_digest")
+        or bundle.get("approval_digest") != core_digest
+        or core_digest != decision_cli.canonical_digest(bundle.get("approval_material"))
+        or not isinstance(bundle.get("approval_material"), dict)
+        or bundle["approval_material"].get("repository_identity") != repository_identity
+        or not all(
+            isinstance(approval_material.get(field), str)
+            and approval_material[field].startswith("sha256:")
+            and len(approval_material[field]) == 71
+            for field in ("candidate_digest", "owner_result_digest", "core_approval_digest")
+        )
     ):
         raise WorkflowError("receipt_invalid", "workflow receipt bundle binding is invalid", exit_code=5)
     return receipt
@@ -294,25 +322,30 @@ def preview(args: argparse.Namespace) -> dict[str, Any]:
             f"@{validation_path}",
         )
     bundle = finalized.get("bundle")
-    approval_digest = finalized.get("approval_digest")
+    core_approval_digest = finalized.get("approval_digest")
     approval_preview = finalized.get("approval_preview")
     try:
         plan_id = bundle["approval_material"]["plan"]["plan_id"]
     except (KeyError, TypeError) as error:
         raise WorkflowError("core_result_invalid", "context-core preview omitted the exact plan", exit_code=7) from error
-    if bundle.get("approval_digest") != approval_digest or not isinstance(approval_preview, dict):
+    if bundle.get("approval_digest") != core_approval_digest or not isinstance(approval_preview, dict):
         raise WorkflowError("core_result_invalid", "context-core preview binding is invalid", exit_code=7)
     if _file_digest(core_cli) != core_cli_sha256:
         raise WorkflowError("core_surface_changed", "context-core surface changed during preview; retry", exit_code=5)
-    receipt: dict[str, Any] = {
-        "schema": RECEIPT_SCHEMA,
-        "repository": str(repo),
-        "core_cli": str(core_cli),
-        "core_cli_sha256": core_cli_sha256,
+    approval_material: dict[str, Any] = {
+        "schema": APPROVAL_SCHEMA,
+        "repository_identity": bundle["approval_material"].get("repository_identity"),
+        "core": {"path": str(core_cli), "sha256": core_cli_sha256},
         "candidate_digest": decision_cli.canonical_digest(candidate),
         "owner_result_digest": decision_cli.canonical_digest(owner_result),
+        "core_approval_digest": core_approval_digest,
+        "core_bundle": bundle,
+    }
+    approval_digest = decision_cli.canonical_digest(approval_material)
+    receipt: dict[str, Any] = {
+        "schema": RECEIPT_SCHEMA,
+        "approval_material": approval_material,
         "approval_digest": approval_digest,
-        "bundle": bundle,
     }
     receipt["receipt_digest"] = decision_cli.canonical_digest(receipt)
     _write_receipt(receipt_path, receipt)
@@ -333,16 +366,16 @@ def apply(args: argparse.Namespace) -> dict[str, Any]:
     repo = decision_cli.repository_root().resolve()
     receipt_path = _receipt_path(args.receipt_file, repo, must_exist=True)
     receipt = _load_receipt(receipt_path)
-    if receipt["repository"] != str(repo):
-        raise WorkflowError("receipt_repository_mismatch", "workflow receipt belongs to another repository", exit_code=5)
     if args.approved_digest != receipt["approval_digest"]:
         raise WorkflowError("approval_digest_mismatch", "approved digest does not match the frozen workflow receipt", exit_code=5)
+    approval_material = receipt["approval_material"]
+    core_binding = approval_material["core"]
     core_cli = _core_cli(args.core_cli)
-    if str(core_cli) != receipt["core_cli"] or _file_digest(core_cli) != receipt["core_cli_sha256"]:
+    if str(core_cli) != core_binding["path"] or _file_digest(core_cli) != core_binding["sha256"]:
         raise WorkflowError("core_surface_changed", "context-core surface changed after preview; create a new preview", exit_code=5)
     with tempfile.TemporaryDirectory(prefix="context-decision-workflow-") as temp:
         bundle_path = pathlib.Path(temp) / "bundle.json"
-        bundle_path.write_text(json.dumps(receipt["bundle"], ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        bundle_path.write_text(json.dumps(approval_material["core_bundle"], ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         applied = _run_core(
             core_cli,
             repo,
@@ -351,13 +384,16 @@ def apply(args: argparse.Namespace) -> dict[str, Any]:
             "--plan-bundle",
             f"@{bundle_path}",
             "--approved-digest",
-            args.approved_digest,
+            approval_material["core_approval_digest"],
         )
+    core_applied_digest = applied.get("approval_digest")
     return {
         "schema": "context-decision-workflow-apply/v1",
         "receipt_file": str(receipt_path),
         "receipt_digest": receipt["receipt_digest"],
         **applied,
+        "core_approval_digest": core_applied_digest,
+        "approval_digest": receipt["approval_digest"],
     }
 
 

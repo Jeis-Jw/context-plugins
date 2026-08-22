@@ -5,6 +5,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -659,6 +660,88 @@ class TransactionCoordinatorTests(unittest.TestCase):
                 context_cli.apply_bundle(repo, hidden, hidden["approval_digest"])
             self.assertEqual("plan_preview_mismatch", hidden_error.exception.code)
             self.assertEqual(before, tree_digest(repo))
+
+    def test_bundle_is_bound_to_exact_repository_identity_but_not_unrelated_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            first = root / "first"
+            second = root / "second"
+            for repo in (first, second):
+                subprocess.run(["git", "init", "-q", str(repo)], check=True)
+                initialize(repo)
+            preview = context_cli.finalize_owner_result(first, observation_owner_result())
+            identity = preview["bundle"]["approval_material"]["repository_identity"]
+            self.assertEqual({"schema", "worktree", "git_common_dir"}, set(identity))
+            self.assertEqual({"path", "device", "inode"}, set(identity["worktree"]))
+            self.assertEqual({"path", "device", "inode"}, set(identity["git_common_dir"]))
+            self.assertTrue(identity["worktree"]["device"].isdigit())
+            self.assertTrue(identity["worktree"]["inode"].isdigit())
+
+            second_before = tree_digest(second)
+            with self.assertRaises(context_cli.ContextError) as replay:
+                context_cli.apply_bundle(second, preview["bundle"], preview["approval_digest"])
+            self.assertEqual("repository_identity_mismatch", replay.exception.code)
+            self.assertEqual(second_before, tree_digest(second))
+
+            (first / "unrelated.txt").write_text("not an approved precondition\n", encoding="utf-8")
+            applied = context_cli.apply_bundle(first, preview["bundle"], preview["approval_digest"])
+            self.assertTrue(applied["applied"])
+            repeated = context_cli.apply_bundle(first, preview["bundle"], preview["approval_digest"])
+            self.assertEqual([], repeated["changed_paths"])
+
+    def test_repository_identity_shape_tamper_and_same_path_recreation_fail_before_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            preview = context_cli.finalize_owner_result(repo, observation_owner_result())
+
+            for label, mutate in (
+                ("missing", lambda identity: identity.pop("git_common_dir")),
+                ("extra", lambda identity: identity.update({"extra": "forged"})),
+            ):
+                with self.subTest(label=label):
+                    forged = copy.deepcopy(preview["bundle"])
+                    mutate(forged["approval_material"]["repository_identity"])
+                    forged["approval_digest"] = context_cli.canonical_digest(forged["approval_material"])
+                    before = tree_digest(repo)
+                    with self.assertRaises(context_cli.ContextError) as malformed:
+                        context_cli.apply_bundle(repo, forged, forged["approval_digest"])
+                    self.assertEqual("repository_identity_invalid", malformed.exception.code)
+                    self.assertEqual(before, tree_digest(repo))
+
+            shutil.rmtree(repo)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            before = tree_digest(repo)
+            with self.assertRaises(context_cli.ContextError) as recreated:
+                context_cli.apply_bundle(repo, preview["bundle"], preview["approval_digest"])
+            self.assertEqual("repository_identity_mismatch", recreated.exception.code)
+            self.assertEqual(before, tree_digest(repo))
+
+    def test_linked_worktree_cannot_replay_approved_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            linked = root / "linked"
+            subprocess.run(["git", "init", "-q", str(source)], check=True)
+            initialize(source)
+            subprocess.run(["git", "-C", str(source), "add", "context"], check=True)
+            subprocess.run(
+                [
+                    "git", "-C", str(source), "-c", "user.name=Context Test", "-c",
+                    "user.email=context@example.invalid", "commit", "-qm", "initialize context",
+                ],
+                check=True,
+            )
+            subprocess.run(["git", "-C", str(source), "worktree", "add", "-q", "--detach", str(linked), "HEAD"], check=True)
+            preview = context_cli.finalize_owner_result(source, observation_owner_result())
+            before = tree_digest(linked)
+            with self.assertRaises(context_cli.ContextError) as replay:
+                context_cli.apply_bundle(linked, preview["bundle"], preview["approval_digest"])
+            self.assertEqual("repository_identity_mismatch", replay.exception.code)
+            self.assertEqual(before, tree_digest(linked))
 
     def test_core_control_transitions_reject_forged_file_operations(self) -> None:
         def forge_file_create(bundle: dict) -> dict:

@@ -37,7 +37,7 @@ recall·capture의 artifact body materialization, bounded output과 model·owner
 
 - semantic owner는 complete `context-owner-result/v1`의 draft/effect/proposed plan만 만든다.
 - `transaction preview`는 exact on-disk precondition, complete material, derived index rebuild와 owner/area authorization을 `context-mutation-bundle/v1`로 봉인한다.
-- `approval_digest`는 canonical `approval_material` 전체의 SHA-256이다. apply는 동일 bundle object와 exact digest만 받는다.
+- `approval_digest`는 canonical `approval_material` 전체의 SHA-256이다. approval material은 preview·plan과 함께 resolved worktree 및 Git common-dir의 absolute path·device·inode decimal string을 exact `context-repository-identity/v1`로 결박한다. apply는 digest 확인 직후 현재 identity와 exact equality를 검증하고 동일 bundle object와 exact digest만 받는다. 다른 clone, linked worktree와 같은 path에 다시 만든 repository는 실패하며 HEAD와 unrelated content는 identity에 포함하지 않는다.
 - context-core coordinator만 repository-realpath root lock 아래 atomic file operation과 deterministic index rebuild를 수행한다.
 - hidden operation, seed 누락, material/digest 불일치, changed precondition, path escape와 symlink segment는 write 전에 fail-closed한다.
 
