@@ -1,0 +1,24 @@
+{
+  "name": "context-term",
+  "version": "0.4.1",
+  "description": "Authoritative project terminology with scoped canonical slots and bounded lifecycle transitions.",
+  "author": {
+    "name": "Jinwuk-Lee",
+    "url": "https://github.com/Jeis-Jw"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Context Term",
+    "shortDescription": "Keep project-specific terms precise and scoped.",
+    "longDescription": "Captures project-specific terms and definitions as authoritative artifacts, recalls them only after an encountered terminology signal, and supersedes, deprecates, or annotates them through context-core approval and storage.",
+    "developerName": "Jinwuk-Lee",
+    "category": "Productivity",
+    "capabilities": ["Read", "Validation"],
+    "defaultPrompt": [
+      "Require the exact installed and enabled context-core@context-plugins source, context-common/v2 protocol, and context-owner-descriptor/v2 feature before any non-static operation.",
+      "Claim only an explicitly project-specific term and definition; decline generic dictionary meanings and observation, decision, or assumption candidates.",
+      "Use search/read only after an exact term-encountered signal, never query every word automatically, compare both actual term and definition claims for same_claim, and never use IDs, hashes, fingerprints, or index metadata as semantic evidence.",
+      "Produce owner results and validation receipts only; delegate every repository write, index update, CAS check, lock, and apply to context-core after exact approval_digest approval."
+    ]
+  }
+}

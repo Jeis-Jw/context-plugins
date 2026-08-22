@@ -61,6 +61,11 @@
     "assumption_routing_boundaries": {"input": "decision, assumption and explicit observation candidates with host-collected owner outcomes", "expected": ["decision_proposed", "assumption_provisional", "cross_owner_declines", "write_zero"]},
     "assumption_owner_conflict": {"input": "faulty ASM claim and valid DEC claim rebound to the same dual-specialized candidate", "expected": ["owner_conflict", "multiple_specialized_owners_claimed", "write_zero"]},
     "assumption_approval_transaction": {"input": "validated ASM capture result previewed then applied in a temporary repository", "expected": ["preview_write_zero", "wrong_digest_rejected", "exact_digest_applied", "doctor_ready"]},
-    "assumption_receipt_spoof_rejection": {"input": "tampered profiled owner result or validation receipt passed to public core preview", "expected": ["owner_validation_invalid", "artifact_write_zero", "index_write_zero"]}
+    "assumption_receipt_spoof_rejection": {"input": "tampered profiled owner result or validation receipt passed to public core preview", "expected": ["owner_validation_invalid", "artifact_write_zero", "index_write_zero"]},
+    "term_mixed_registration_routing": {"input": "public core, DEC, ASM and TERM surfaces with v1/v2 mixed registration and a project terminology candidate", "expected": ["mixed_v1_v2_ready", "term_authoritative_proposed", "decision_assumption_observation_decline", "write_zero_after_init"]},
+    "term_owner_conflict": {"input": "valid DEC claim and intentionally faulty TERM claim rebound to one dual-specialized candidate", "expected": ["owner_conflict", "multiple_specialized_owners_claimed", "write_zero"]},
+    "term_approval_transaction": {"input": "validated TERM capture receipt passed through public core preview and exact-digest apply in a temporary repository", "expected": ["preview_write_zero", "wrong_digest_rejected", "exact_digest_applied", "authoritative_read"]},
+    "term_receipt_spoof_rejection": {"input": "tampered TERM owner result or descriptor-bound receipt passed to public core preview", "expected": ["owner_validation_invalid", "artifact_write_zero", "index_write_zero"]},
+    "term_slot_lifecycle": {"input": "Current TERM followed by descendant-scope intersections across the actual term, aliases and deprecated_terms canonical key sets, then an approved deprecate transition", "expected": ["primary_alias_deprecated_cross_collisions", "term_slot_conflict", "collision_write_zero", "history_do_not_follow", "doctor_ready"]}
   }
 }

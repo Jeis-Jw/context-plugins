@@ -1,0 +1,5 @@
+{
+  "name": "context-term",
+  "version": "0.4.1",
+  "description": "Authoritative project terminology with scoped canonical slots and signal-gated recall."
+}

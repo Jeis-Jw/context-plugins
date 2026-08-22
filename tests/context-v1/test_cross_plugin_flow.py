@@ -29,10 +29,12 @@ def load(name: str, path: Path):
 context_cli = load("context_cli_cross", ROOT / "plugins/context-core/skills/context/scripts/context_cli.py")
 decision_cli = load("decision_cli_cross", ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py")
 assumption_cli = load("assumption_cli_cross", ROOT / "plugins/context-assumption/skills/assumption/scripts/assumption_cli.py")
+term_cli = load("term_cli_cross", ROOT / "plugins/context-term/skills/term/scripts/term_cli.py")
 CORE_CLI = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
 DECISION_CLI = ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py"
 DECISION_INIT = ROOT / "plugins/context-decision/skills/init/scripts/decision_init.py"
 ASSUMPTION_CLI = ROOT / "plugins/context-assumption/skills/assumption/scripts/assumption_cli.py"
+TERM_CLI = ROOT / "plugins/context-term/skills/term/scripts/term_cli.py"
 
 
 def run_cli(repo: Path, cli: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -170,6 +172,47 @@ def bootstrap_three_owners(root: Path, repo: Path) -> dict:
     }
 
 
+def bootstrap_term_owners(root: Path, repo: Path) -> dict:
+    state = bootstrap_three_owners(root, repo)
+    inventory, doctor = public_preflight(root, repo, prefix="term-init")
+    term_plan = public_result(run_cli(
+        repo,
+        TERM_CLI,
+        "init",
+        *preflight_arguments(inventory, doctor),
+        "--json",
+    ))
+    descriptor = write_json(
+        root / "term-descriptor.json",
+        term_plan["owner_descriptor"],
+        canonical=True,
+    )
+    seed = root / "term.index.md"
+    seed.write_text(term_plan["index_seed"], encoding="utf-8")
+    term_bootstrap = public_result(run_cli(
+        repo,
+        CORE_CLI,
+        "bootstrap",
+        "--descriptor", f"@{descriptor}",
+        "--index-seed", f"@{seed}",
+        "--host", "codex",
+        "--json",
+    ))
+    inventory, doctor = public_preflight(root, repo, prefix="term-ready")
+    term_capabilities = public_result(run_cli(repo, TERM_CLI, "capabilities", "--json"))
+    state.update({
+        "inventory": inventory,
+        "doctor": doctor,
+        "term_bootstrap": term_bootstrap,
+        "term_descriptor": term_plan["owner_descriptor"],
+        "capabilities": {
+            "schema": "context-owner-capabilities/v1",
+            "owners": [*state["capabilities"]["owners"], *term_capabilities["owners"]],
+        },
+    })
+    return state
+
+
 def assumption_candidate(candidate_id: str = "cand_123e4567e89b42d3a456426614174100") -> dict:
     claim = "외부 인증 공급자의 장애율이 이번 분기에도 0.1% 미만일 것이다."
     return {
@@ -206,6 +249,47 @@ def assumption_attestation(value: dict) -> dict:
         "assertions": [
             {"name": "assumption_present", "value": True, "evidence_pointers": ["/owner_inputs/assumption/assumption"]},
             {"name": "unverified_ok", "value": True, "evidence_pointers": ["/owner_inputs/assumption/unverified_ok"]},
+        ],
+    }
+
+
+def term_candidate(candidate_id: str = "cand_123e4567e89b42d3a456426614174600") -> dict:
+    definition = "이 프로젝트에서 browser session과 backend API 사이의 인증 경계를 소유하는 서비스다."
+    return {
+        "schema": "context-capture-candidate/v1",
+        "candidate_id": candidate_id,
+        "title": "BFF 프로젝트 용어",
+        "claim": definition,
+        "summary": "인증 아키텍처에서 사용하는 project-specific 의미를 고정한다.",
+        "captured_from": "conversation",
+        "requested_kind": "term",
+        "specialized_kinds": ["term"],
+        "fallback_kind": None,
+        "scope_hint": "project/auth",
+        "source_refs": ["conversation:test"],
+        "search_terms": ["BFF", "terminology"],
+        "owner_inputs": {
+            "term": {
+                "term": "BFF",
+                "definition": definition,
+                "project_signal": "project-special-meaning",
+                "aliases": ["Backend for Frontend"],
+                "deprecated_terms": ["API Facade"],
+                "related": ["Session Owner"],
+            },
+        },
+    }
+
+
+def term_attestation(value: dict) -> dict:
+    return {
+        "schema": "context-semantic-attestation/v1",
+        "operation": "claim",
+        "input_schema": value["schema"],
+        "input_digest": term_cli.canonical_digest(value),
+        "assertions": [
+            {"name": "term_identified", "value": True, "evidence_pointers": ["/owner_inputs/term/term"]},
+            {"name": "definition_present", "value": True, "evidence_pointers": ["/owner_inputs/term/definition"]},
         ],
     }
 
@@ -972,6 +1056,513 @@ class CrossPluginFlowTests(unittest.TestCase):
             self.assertEqual(5, rejected_result.returncode, rejected_result.stdout + rejected_result.stderr)
             self.assertEqual("owner_validation_invalid", json.loads(rejected_result.stdout)["error"]["code"])
             self.assertEqual(before, repository_bytes(repo))
+
+    def test_acceptance_62_term_mixed_registration_and_routing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            state = bootstrap_term_owners(root, repo)
+            self.assertEqual("applied", state["term_bootstrap"]["phases"][1]["status"])
+            doctor = public_result(run_cli(repo, CORE_CLI, "doctor", "--json"))
+            self.assertEqual(("ready", []), (doctor["repository_state"], doctor["issues"]))
+            root_index = (repo / context_cli.ROOT_INDEX).read_text(encoding="utf-8")
+            self.assertEqual(
+                {"assumption", "term"},
+                {item["area"] for item in context_cli.parse_root_profiles(root_index)},
+            )
+            self.assertEqual(
+                state["term_descriptor"],
+                context_cli.parse_area_profile(
+                    (repo / "context/term/term.index.md").read_text(encoding="utf-8")
+                ),
+            )
+            self.assertIsNone(context_cli.parse_area_profile(
+                (repo / "context/decision/decision.index.md").read_text(encoding="utf-8")
+            ))
+            self.assertEqual(
+                {"observation", "snapshot", "decision", "assumption", "term"},
+                {item["kind"] for item in state["capabilities"]["owners"]},
+            )
+
+            before = repository_bytes(repo)
+            preflight = preflight_arguments(state["inventory"], state["doctor"])
+            candidate = term_candidate()
+            candidate_path = write_json(root / "term-route-candidate.json", candidate)
+            proof_path = write_json(root / "term-route-attestation.json", term_attestation(candidate))
+            term_claim = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "claim",
+                "--candidate", f"@{candidate_path}",
+                "--attestation", f"@{proof_path}",
+                "--route-only",
+                *preflight,
+                "--json",
+            ))
+            by_kind = {item["kind"]: item for item in state["capabilities"]["owners"]}
+            decision_decline = generic_decline(
+                candidate,
+                by_kind["decision"],
+                "project terminology is outside DEC authority",
+            )
+            assumption_decline = generic_decline(
+                candidate,
+                by_kind["assumption"],
+                "authoritative terminology is outside ASM authority",
+            )
+            observation_decline = generic_decline(
+                candidate,
+                by_kind["observation"],
+                "terminology definition is not an observed evidence claim",
+            )
+            batch_path = write_json(root / "term-route-batch.json", {
+                "schema": "context-capture-batch/v1",
+                "audit_count": 1,
+                "candidates": [candidate],
+            })
+            results_path = write_json(
+                root / "term-route-results.json",
+                [term_claim, decision_decline, assumption_decline, observation_decline],
+            )
+            capabilities_path = write_json(root / "term-route-capabilities.json", state["capabilities"])
+            routed = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "candidate",
+                "route",
+                "--batch", f"@{batch_path}",
+                "--capabilities", f"@{capabilities_path}",
+                "--claim-results", f"@{results_path}",
+                "--json",
+            ))
+            self.assertEqual("proposed", routed["routes"][0]["status"])
+            self.assertEqual("context-term", routed["routes"][0]["owner"])
+            self.assertEqual("authoritative", routed["routes"][0]["authority"])
+            self.assertEqual(
+                ["claim", "decline", "decline", "decline"],
+                [term_claim["decision"], decision_decline["decision"], assumption_decline["decision"], observation_decline["decision"]],
+            )
+
+            observation = copy.deepcopy(choice("cand_123e4567e89b42d3a456426614174601"))
+            observation.update({
+                "requested_kind": "observation",
+                "specialized_kinds": ["observation"],
+                "fallback_kind": None,
+                "claim": "Safari에서 third-party cookie가 차단된다.",
+                "owner_inputs": {
+                    "observation": {
+                        "observation": "Safari에서 third-party cookie가 차단된다.",
+                        "evidence": ["재현 fixture"],
+                    },
+                },
+            })
+            explicit = {
+                "observation": observation,
+                "decision": choice("cand_123e4567e89b42d3a456426614174602"),
+                "assumption": assumption_candidate("cand_123e4567e89b42d3a456426614174603"),
+            }
+            for label, foreign in explicit.items():
+                foreign_path = write_json(root / f"term-decline-{label}.json", foreign)
+                declined = public_result(run_cli(
+                    repo,
+                    TERM_CLI,
+                    "claim",
+                    "--candidate", f"@{foreign_path}",
+                    "--attestation", f"@{proof_path}",
+                    "--route-only",
+                    *preflight,
+                    "--json",
+                ))
+                self.assertEqual("decline", declined["decision"])
+                self.assertEqual(foreign, declined["semantic_inputs"][0]["value"])
+            self.assertEqual(before, repository_bytes(repo))
+
+    def test_acceptance_63_term_owner_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            state = bootstrap_term_owners(root, repo)
+            before = repository_bytes(repo)
+            preflight = preflight_arguments(state["inventory"], state["doctor"])
+
+            base = term_candidate("cand_123e4567e89b42d3a456426614174610")
+            base_path = write_json(root / "term-conflict-base.json", base)
+            base_proof = write_json(root / "term-conflict-base-proof.json", term_attestation(base))
+            actual_term_claim = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "claim",
+                "--candidate", f"@{base_path}",
+                "--attestation", f"@{base_proof}",
+                "--route-only",
+                *preflight,
+                "--json",
+            ))
+            dual = copy.deepcopy(base)
+            dual.update({
+                "requested_kind": None,
+                "specialized_kinds": ["term", "decision"],
+                "evidence": ["결정 권한자가 현재 따를 선택으로 확정했다."],
+            })
+            dual["owner_inputs"]["decision"] = {
+                "decision": dual["claim"],
+                "rationale": "프로젝트 내부에서 이 이름과 정의를 현재 표준으로 사용한다.",
+                "rejected_alternatives": ["API Facade: 다른 의미와 충돌해 반려"],
+                "decision_key": "bff-terminology",
+            }
+            dual_path = write_json(root / "term-conflict-dual.json", dual)
+            decision_proof = write_json(root / "term-conflict-decision-proof.json", decision_attestation(dual))
+            decision_claim = public_result(run_cli(
+                repo,
+                DECISION_CLI,
+                "capture",
+                "--candidate", f"@{dual_path}",
+                "--attestation", f"@{decision_proof}",
+                *preflight,
+                "--json",
+            ))
+            dual_term_proof = write_json(root / "term-conflict-term-proof.json", term_attestation(dual))
+            real_term_outcome = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "claim",
+                "--candidate", f"@{dual_path}",
+                "--attestation", f"@{dual_term_proof}",
+                "--route-only",
+                *preflight,
+                "--json",
+            ))
+            self.assertEqual("decline", real_term_outcome["decision"])
+
+            faulty_term_claim = copy.deepcopy(actual_term_claim)
+            digest = term_cli.canonical_digest(dual)
+            faulty_term_claim["semantic_inputs"][0].update({"input_digest": digest, "value": dual})
+            faulty_term_claim["semantic_attestations"][0] = term_attestation(dual)
+            capabilities_path = write_json(root / "term-conflict-capabilities.json", state["capabilities"])
+            batch_path = write_json(root / "term-conflict-batch.json", {
+                "schema": "context-capture-batch/v1",
+                "audit_count": 1,
+                "candidates": [dual],
+            })
+            results_path = write_json(root / "term-conflict-results.json", [faulty_term_claim, decision_claim])
+            routed = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "candidate",
+                "route",
+                "--batch", f"@{batch_path}",
+                "--capabilities", f"@{capabilities_path}",
+                "--claim-results", f"@{results_path}",
+                "--json",
+            ))
+            self.assertEqual("owner_conflict", routed["routes"][0]["status"])
+            self.assertEqual("multiple_specialized_owners_claimed", routed["routes"][0]["reason"])
+            self.assertEqual(routed["routes"], routed["conflicts"])
+            self.assertEqual(before, repository_bytes(repo))
+
+    def test_acceptance_64_term_approval_transaction(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            state = bootstrap_term_owners(root, repo)
+            preflight = preflight_arguments(state["inventory"], state["doctor"])
+            candidate = term_candidate("cand_123e4567e89b42d3a456426614174620")
+            candidate_path = write_json(root / "term-capture-candidate.json", candidate)
+            proof_path = write_json(root / "term-capture-proof.json", term_attestation(candidate))
+            owner_result = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "claim",
+                "--candidate", f"@{candidate_path}",
+                "--attestation", f"@{proof_path}",
+                "--identifier", "ctx_550e8400e29b41d4a716446655440060",
+                "--created-at", "2026-08-22T09:00:00+09:00",
+                *preflight,
+                "--json",
+            ))
+            owner_result_path = write_json(root / "term-capture-result.json", owner_result)
+            receipt = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "batch",
+                "validate",
+                "--owner-result", f"@{owner_result_path}",
+                *preflight,
+                "--json",
+            ))
+            receipt_path = write_json(root / "term-capture-receipt.json", receipt)
+            before_preview = repository_bytes(repo)
+            preview = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "preview",
+                "--owner-result", f"@{owner_result_path}",
+                "--owner-validation", f"@{receipt_path}",
+                "--json",
+            ))
+            self.assertFalse(preview["applied"])
+            self.assertEqual(before_preview, repository_bytes(repo))
+            bundle_path = write_json(root / "term-capture-bundle.json", preview["bundle"])
+            rejected = run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "apply",
+                "--plan-bundle", f"@{bundle_path}",
+                "--approved-digest", "sha256:" + "0" * 64,
+                "--json",
+            )
+            self.assertEqual(5, rejected.returncode, rejected.stdout + rejected.stderr)
+            self.assertEqual("approval_digest_mismatch", json.loads(rejected.stdout)["error"]["code"])
+            self.assertEqual(before_preview, repository_bytes(repo))
+            applied = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "apply",
+                "--plan-bundle", f"@{bundle_path}",
+                "--approved-digest", preview["approval_digest"],
+                "--json",
+            ))
+            self.assertTrue(applied["applied"])
+            read = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "read",
+                "--signal", term_cli.SIGNAL,
+                "--id", "ctx_550e8400e29b41d4a716446655440060",
+                *preflight,
+                "--json",
+            ))
+            self.assertEqual("authoritative", read["authority"])
+            self.assertEqual(candidate["claim"], read["sections"]["정의"])
+            self.assertEqual("ready", public_result(run_cli(repo, CORE_CLI, "doctor", "--json"))["repository_state"])
+
+    def test_acceptance_65_term_receipt_spoof_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            state = bootstrap_term_owners(root, repo)
+            preflight = preflight_arguments(state["inventory"], state["doctor"])
+            candidate = term_candidate("cand_123e4567e89b42d3a456426614174630")
+            candidate_path = write_json(root / "term-spoof-candidate.json", candidate)
+            proof_path = write_json(root / "term-spoof-proof.json", term_attestation(candidate))
+            owner_result = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "claim",
+                "--candidate", f"@{candidate_path}",
+                "--attestation", f"@{proof_path}",
+                "--identifier", "ctx_550e8400e29b41d4a716446655440061",
+                "--created-at", "2026-08-22T09:00:00+09:00",
+                *preflight,
+                "--json",
+            ))
+            owner_result_path = write_json(root / "term-spoof-result.json", owner_result)
+            receipt = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "batch",
+                "validate",
+                "--owner-result", f"@{owner_result_path}",
+                *preflight,
+                "--json",
+            ))
+            before = repository_bytes(repo)
+            spoofed_receipt = copy.deepcopy(receipt)
+            spoofed_receipt["descriptor_digest"] = "sha256:" + "f" * 64
+            spoofed_receipt_path = write_json(root / "term-spoofed-receipt.json", spoofed_receipt)
+            rejected_receipt = run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "preview",
+                "--owner-result", f"@{owner_result_path}",
+                "--owner-validation", f"@{spoofed_receipt_path}",
+                "--json",
+            )
+            self.assertEqual(5, rejected_receipt.returncode, rejected_receipt.stdout + rejected_receipt.stderr)
+            self.assertEqual("owner_validation_invalid", json.loads(rejected_receipt.stdout)["error"]["code"])
+            self.assertEqual(before, repository_bytes(repo))
+
+            spoofed_result = copy.deepcopy(owner_result)
+            spoofed_result["artifact_drafts"][0]["content"] += "\n"
+            spoofed_result_path = write_json(root / "term-spoofed-result.json", spoofed_result)
+            receipt_path = write_json(root / "term-valid-receipt.json", receipt)
+            rejected_result = run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "preview",
+                "--owner-result", f"@{spoofed_result_path}",
+                "--owner-validation", f"@{receipt_path}",
+                "--json",
+            )
+            self.assertEqual(5, rejected_result.returncode, rejected_result.stdout + rejected_result.stderr)
+            self.assertEqual("owner_validation_invalid", json.loads(rejected_result.stdout)["error"]["code"])
+            self.assertEqual(before, repository_bytes(repo))
+
+    def test_acceptance_66_term_slot_and_lifecycle(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            state = bootstrap_term_owners(root, repo)
+            preflight = preflight_arguments(state["inventory"], state["doctor"])
+            candidate = term_candidate("cand_123e4567e89b42d3a456426614174640")
+            candidate_path = write_json(root / "term-slot-base.json", candidate)
+            proof_path = write_json(root / "term-slot-base-proof.json", term_attestation(candidate))
+            owner_result = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "claim",
+                "--candidate", f"@{candidate_path}",
+                "--attestation", f"@{proof_path}",
+                "--identifier", "ctx_550e8400e29b41d4a716446655440062",
+                "--created-at", "2026-08-22T09:00:00+09:00",
+                *preflight,
+                "--json",
+            ))
+            owner_result_path = write_json(root / "term-slot-base-result.json", owner_result)
+            receipt = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "batch",
+                "validate",
+                "--owner-result", f"@{owner_result_path}",
+                *preflight,
+                "--json",
+            ))
+            receipt_path = write_json(root / "term-slot-base-receipt.json", receipt)
+            preview = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "preview",
+                "--owner-result", f"@{owner_result_path}",
+                "--owner-validation", f"@{receipt_path}",
+                "--json",
+            ))
+            bundle_path = write_json(root / "term-slot-base-bundle.json", preview["bundle"])
+            public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "apply",
+                "--plan-bundle", f"@{bundle_path}",
+                "--approved-digest", preview["approval_digest"],
+                "--json",
+            ))
+
+            collision_cases = (
+                ("primary-primary", "  bff!!  ", ["BFF Gateway"], ["Old BFF Gateway"]),
+                ("primary-alias", "Backend for Frontend", ["Backend Adapter"], ["Old Backend Adapter"]),
+                ("primary-deprecated", "API Facade", ["Facade Gateway"], ["Old Facade Gateway"]),
+                ("alias-alias", "UI Gateway", ["Backend for Frontend"], ["Old UI Gateway"]),
+                ("alias-deprecated", "Auth Gateway", ["API Facade"], ["Old Auth Gateway"]),
+                ("deprecated-deprecated", "Term Gateway", ["Term Adapter"], ["API Facade"]),
+            )
+            for index, (name, term, aliases, deprecated_terms) in enumerate(collision_cases):
+                with self.subTest(collision=name):
+                    collision = term_candidate(f"cand_123e4567e89b42d3a4564266141746{41 + index:02d}")
+                    collision.update({"title": f"{name} descendant collision", "scope_hint": "project/auth/api"})
+                    collision["owner_inputs"]["term"].update({
+                        "term": term,
+                        "aliases": aliases,
+                        "deprecated_terms": deprecated_terms,
+                    })
+                    collision_path = write_json(root / f"term-slot-{name}.json", collision)
+                    collision_proof = write_json(root / f"term-slot-{name}-proof.json", term_attestation(collision))
+                    collision_result = public_result(run_cli(
+                        repo,
+                        TERM_CLI,
+                        "claim",
+                        "--candidate", f"@{collision_path}",
+                        "--attestation", f"@{collision_proof}",
+                        "--identifier", f"ctx_550e8400e29b41d4a7164466554400{0x63 + index:02x}",
+                        "--created-at", "2026-08-22T09:10:00+09:00",
+                        *preflight,
+                        "--json",
+                    ))
+                    collision_result_path = write_json(root / f"term-slot-{name}-result.json", collision_result)
+                    before_collision = repository_bytes(repo)
+                    rejected = run_cli(
+                        repo,
+                        TERM_CLI,
+                        "batch",
+                        "validate",
+                        "--owner-result", f"@{collision_result_path}",
+                        *preflight,
+                        "--json",
+                    )
+                    self.assertEqual(5, rejected.returncode, rejected.stdout + rejected.stderr)
+                    self.assertEqual("term_slot_conflict", json.loads(rejected.stdout)["error"]["code"])
+                    self.assertEqual(before_collision, repository_bytes(repo))
+
+            deprecated = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "deprecate",
+                "--id", "ctx_550e8400e29b41d4a716446655440062",
+                "--reason", "새 gateway 구조에서는 이 명칭을 더 이상 쓰지 않는다.",
+                "--replacement-term", "Session Gateway",
+                "--retired-at", "2026-08-22T10:00:00+09:00",
+                *preflight,
+                "--json",
+            ))
+            deprecated_path = write_json(root / "term-deprecate-result.json", deprecated)
+            deprecate_receipt = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "batch",
+                "validate",
+                "--owner-result", f"@{deprecated_path}",
+                *preflight,
+                "--json",
+            ))
+            deprecate_receipt_path = write_json(root / "term-deprecate-receipt.json", deprecate_receipt)
+            lifecycle_preview = public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "preview",
+                "--owner-result", f"@{deprecated_path}",
+                "--owner-validation", f"@{deprecate_receipt_path}",
+                "--json",
+            ))
+            lifecycle_bundle = write_json(root / "term-deprecate-bundle.json", lifecycle_preview["bundle"])
+            public_result(run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "apply",
+                "--plan-bundle", f"@{lifecycle_bundle}",
+                "--approved-digest", lifecycle_preview["approval_digest"],
+                "--json",
+            ))
+            read = public_result(run_cli(
+                repo,
+                TERM_CLI,
+                "read",
+                "--signal", term_cli.SIGNAL,
+                "--id", "ctx_550e8400e29b41d4a716446655440062",
+                *preflight,
+                "--json",
+            ))
+            self.assertEqual(("history", True), (read["state"], read["do_not_follow"]))
+            self.assertEqual("deprecated", read["frontmatter"]["retired_reason"])
+            self.assertEqual("Session Gateway", read["frontmatter"]["replacement_term"])
+            self.assertEqual("ready", public_result(run_cli(repo, CORE_CLI, "doctor", "--json"))["repository_state"])
 
 
 if __name__ == "__main__":
