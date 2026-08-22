@@ -285,23 +285,34 @@ class DistributionProofTests(unittest.TestCase):
 
         self.assertTrue((ROOT / "plugins/context-core/skills/context/SKILL.md").is_file())
         self.assertTrue((ROOT / "plugins/context-decision/skills/decision/SKILL.md").is_file())
+        for manifest in sorted(ROOT.glob("plugins/*/.codex-plugin/plugin.json")):
+            prompts = read_json(manifest)["interface"]["defaultPrompt"]
+            self.assertLessEqual(len(prompts), 3, manifest)
+            self.assertTrue(prompts, manifest)
+            for prompt in prompts:
+                self.assertTrue(prompt.strip(), manifest)
+                self.assertLessEqual(len(prompt), 128, f"{manifest}: {prompt}")
+
         decision_root = ROOT / "plugins/context-decision"
         init_entrypoint = decision_root / "skills/init/scripts/decision_init.py"
         init_skill = (decision_root / "skills/init/SKILL.md").read_text(encoding="utf-8")
-        default_prompt = "\n".join(read_json(decision_root / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"])
+        decision_skill = (decision_root / "skills/decision/SKILL.md").read_text(encoding="utf-8")
         self.assertTrue(init_entrypoint.is_file())
         self.assertIn("decision_init.py", init_skill)
         self.assertIn("--core-cli", init_skill)
-        for token in (
-            "context-core@context-plugins",
-            "context-common/v2",
-            "repository_state=ready, partial, invalid, or absent",
-            "managed policy",
-            "compare actual Current bodies",
-            "Never install, enable, or update plugins",
-            "context-core coordinator",
-        ):
-            self.assertIn(token, default_prompt)
+        for manifest in sorted(ROOT.glob("plugins/*/.codex-plugin/plugin.json")):
+            prompts = read_json(manifest)["interface"]["defaultPrompt"]
+            self.assertLessEqual(len(prompts), 3, manifest)
+            self.assertTrue(prompts, manifest)
+            for prompt in prompts:
+                self.assertTrue(prompt.strip(), manifest)
+                self.assertLessEqual(len(prompt), 128, f"{manifest}: {prompt}")
+
+        decision_skill = (decision_root / "skills/decision/SKILL.md").read_text(encoding="utf-8")
+        for token in ("context-common/v2", "partial/invalid", "cache path", "managed block"):
+            self.assertIn(token, init_skill)
+        for token in ("실제", "conflict", "exact digest", "context-core만 소유"):
+            self.assertIn(token, decision_skill)
         for name in PLUGIN_NAMES[1:]:
             semantic_root = ROOT / "plugins" / name
             self.assertFalse((semantic_root / "skills/context").exists())

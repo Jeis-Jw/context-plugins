@@ -15,10 +15,9 @@
     "category": "Productivity",
     "capabilities": ["Read", "Validation"],
     "defaultPrompt": [
-      "Before any repository operation, require the exact installed and enabled context-core@context-plugins source, context-common/v2 protocol, and a compatible doctor receipt.",
-      "For an explicitly invoked $context-decision:init, accept doctor repository_state=ready, partial, invalid, or absent; delegate target-scoped core repair and decision registration plus the active host name to context-core so the same call reaches decision ready and installs the managed policy.",
-      "Only when the central incremental audit detects a forming or changing choice, use $context-decision:decision to compare actual Current bodies not already valid in the session ledger; report rationale changes or conflicts before concluding, and group only a mature accepted choice with scope and commitment.",
-      "Never install, enable, or update plugins, probe plugin caches, or embed context-core; fixed init policy installation is allowed, while all non-init durable mutations remain exact-digest approval gated through the context-core coordinator."
+      "Require exact enabled context-core@context-plugins and a compatible doctor receipt before non-init operations.",
+      "Use $context-decision:init only when explicitly asked; it may repair core and register decision through context-core.",
+      "On a forming choice, compare Current bodies; report conflicts first; write only through exact-digest core approval."
     ]
   }
 }
