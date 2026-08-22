@@ -65,6 +65,8 @@ receipt의 workflow approval material은 exact `context-repository-identity/v1`,
 
 preview의 repository와 host configuration write는 0이다. 명시적 transient receipt만 repository와 Git metadata 밖에 mode `0600`으로 만들며 durable context가 아니다. 민감한 decision content가 포함되므로 caller는 workflow 종료 뒤 명시적으로 폐기한다. 승인된 apply의 context/index write는 계속 context-core만 수행한다. lifecycle, prior-bundle 조합과 진단에는 기존 저수준 surface를 사용할 수 있다.
 
+inline `--sec-*`는 plain literal을 기본으로 하고 explicit `@file`과 leading `@` literal용 `@@text`를 core body argument와 같은 의미로 해석한다. path-like plain text는 file로 추측하지 않으며 missing·symlink·8 KiB 초과 file은 receipt/repository write 전에 거부한다. common primary claim 2,000 codepoint, DEC decision 1,200 codepoint, canonical owner input 8 KiB와 candidate envelope 16 KiB를 각각 적용하고 오류는 실제 크기·상한·초과량을 반환한다.
+
 ## Recall과 init
 
 `search`는 `decision.index.md` metadata만 읽는다. `read`와 `brief`는 선택된 DEC만 연다. brief는 `결정`, `취지`, `반려대안`만 포함하고 최대 8 KiB다. 낮은 순위 item을 통째로 제외하며 section 중간 절단은 하지 않는다. History에는 항상 `do_not_follow:true`와 lifecycle reason을 붙인다.

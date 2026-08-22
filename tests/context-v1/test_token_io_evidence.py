@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -42,12 +43,12 @@ def candidate(number: int) -> dict:
     }
 
 
-def observation_owner_input(size: int) -> dict:
-    value = {"observation": "o" * 1200, "evidence": ["e" * 10], "impact": ""}
+def opaque_owner_input(size: int) -> dict:
+    value = {"payload": ""}
     remaining = size - encoded(value)
-    if not 1 <= remaining <= 800:
+    if remaining < 0:
         raise AssertionError(f"unrepresentable owner input boundary: {size}")
-    value["impact"] = "x" * remaining
+    value["payload"] = "x" * remaining
     assert encoded(value) == size
     return value
 
@@ -371,18 +372,24 @@ class TokenIOEvidenceTests(unittest.TestCase):
         self.assertEqual("candidate_batch_too_large", caught.exception.code)
         measured.append({"candidates": 9, "result": caught.exception.code})
 
+        external_capability = context_cli.builtin_capability("observation")
+        external_capability["owner"] = "addon-boundary"
+        capabilities = {"schema": "context-owner-capabilities/v1", "owners": [external_capability]}
         boundary = candidate(0)
-        boundary["owner_inputs"]["observation"] = observation_owner_input(2 * 1024)
-        self.assertEqual([boundary], context_cli.validate_candidate_batch([boundary], context_cli.capabilities_result()))
+        boundary["owner_inputs"]["observation"] = opaque_owner_input(8 * 1024)
+        self.assertEqual([boundary], context_cli.validate_candidate_batch([boundary], capabilities))
         over = candidate(0)
-        over["owner_inputs"]["observation"] = observation_owner_input(2 * 1024)
-        over["owner_inputs"]["observation"]["impact"] += "x"
-        self.assertEqual(2 * 1024 + 1, encoded(over["owner_inputs"]["observation"]))
+        over["owner_inputs"]["observation"] = opaque_owner_input(8 * 1024 + 1)
+        self.assertEqual(8 * 1024 + 1, encoded(over["owner_inputs"]["observation"]))
         with self.assertRaises(context_cli.ContextError) as caught:
-            context_cli.validate_candidate_batch([over], context_cli.capabilities_result())
+            context_cli.validate_candidate_batch([over], capabilities)
         self.assertEqual("candidate_too_large", caught.exception.code)
+        self.assertEqual(
+            {"kind": "observation", "actual_bytes": 8193, "maximum_bytes": 8192, "over_by_bytes": 1},
+            caught.exception.details,
+        )
         self.recorded["candidate_batches"] = measured
-        self.recorded["owner_input_boundary"] = {"accepted_bytes": 2048, "rejected_bytes": 2049}
+        self.recorded["owner_input_boundary"] = {"accepted_bytes": 8192, "rejected_bytes": 8193}
 
     def test_addon_count_does_not_multiply_audit_or_router_process_work(self) -> None:
         measurements = []
@@ -431,10 +438,12 @@ class TokenIOEvidenceTests(unittest.TestCase):
         }
         preview_bytes = encoded(preview)
         self.assertLessEqual(preview_bytes, 32 * 1024)
-        result = context_cli._bundle_result(preview, {}, [])
-        self.assertEqual(preview, result["approval_preview"])
-        self.assertEqual(semantic_content, result["bundle"]["approval_material"]["preview"]["artifacts"][0]["content"])
-        self.assertIn("전체 반려대안", result["approval_preview"]["artifacts"][0]["content"])
+        with tempfile.TemporaryDirectory() as temp:
+            subprocess.run(["git", "init", "-q", temp], check=True)
+            result = context_cli._bundle_result(Path(temp), preview, {}, [])
+            self.assertEqual(preview, result["approval_preview"])
+            self.assertEqual(semantic_content, result["bundle"]["approval_material"]["preview"]["artifacts"][0]["content"])
+            self.assertIn("전체 반려대안", result["approval_preview"]["artifacts"][0]["content"])
         self.recorded["approval_preview"] = {"accepted_bytes": preview_bytes, "semantic_content_bytes": len(semantic_content.encode("utf-8"))}
 
     def test_grouped_preview_over_32k_rejects_instead_of_truncating(self) -> None:
@@ -445,9 +454,11 @@ class TokenIOEvidenceTests(unittest.TestCase):
             "artifacts": [{"effect_id": "effect", "path": "context/observation/x.md", "content": "가" * (33 * 1024)}],
             "effects": [],
         }
-        with self.assertRaises(context_cli.ContextError) as caught:
-            context_cli._bundle_result(preview, {}, [])
-        self.assertEqual("approval_preview_too_large", caught.exception.code)
+        with tempfile.TemporaryDirectory() as temp:
+            subprocess.run(["git", "init", "-q", temp], check=True)
+            with self.assertRaises(context_cli.ContextError) as caught:
+                context_cli._bundle_result(Path(temp), preview, {}, [])
+            self.assertEqual("approval_preview_too_large", caught.exception.code)
 
     def test_stdlib_only_imports(self) -> None:
         allowed = set(sys.stdlib_module_names) | {"__future__"}

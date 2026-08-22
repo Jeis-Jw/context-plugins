@@ -31,7 +31,7 @@ class AcceptanceKernelContractTests(unittest.TestCase):
         module = ast.parse(source)
         allowed = {
             "__future__", "argparse", "contextlib", "dataclasses", "datetime", "fcntl", "hashlib", "json", "os", "pathlib",
-            "re", "shutil", "subprocess", "sys", "tempfile", "typing", "unicodedata", "uuid"
+            "re", "shutil", "stat", "subprocess", "sys", "tempfile", "typing", "unicodedata", "uuid"
         }
         imported = set()
         for node in ast.walk(module):

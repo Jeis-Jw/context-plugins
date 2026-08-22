@@ -17,7 +17,7 @@
 - Integrated: semantic owner가 complete draft와 plan을 만들고, `context-core`가 grouped preview를 봉인한 뒤 유일한 physical coordinator로 적용합니다.
 - Generic addon: canonical `context-owner-descriptor/v2`가 closed field types, H2 order, index projection과 generic lifecycle topology를 선언합니다. `supersede_current`는 predecessor→successor와 successor→predecessor reference recipe를 모두 요구합니다. semantic receipt는 의미 claim을 증명하지만 core의 target-byte structural validation을 대체하지 않습니다.
 - 각 user turn에서는 새 의미만 같은 응답 pass에서 별도 호출 없이 audit합니다. 신호가 없으면 아무 상태도 표시하지 않고, 신호가 있을 때만 metadata recall과 선택된 실제 본문 read를 수행합니다.
-- candidate batch의 16 KiB 상한은 `context-capture-batch/v1`의 `schema`, `audit_count`, `candidates`를 포함한 전체 canonical UTF-8 envelope에 적용하며 최대 8개 count 상한을 별도로 유지합니다. Dict envelope은 이 세 key만 허용하고 `audit_count`는 bool이 아닌 integer `1`이어야 합니다. 기존 bare list 입력은 synthetic v1 envelope로 계속 지원합니다.
+- common primary claim은 2,000 codepoint, 각 owner input은 canonical UTF-8 8 KiB로 제한합니다. candidate batch의 16 KiB 상한은 `context-capture-batch/v1`의 `schema`, `audit_count`, `candidates`를 포함한 전체 canonical UTF-8 envelope에 적용하며 최대 8개 count 상한을 별도로 유지합니다. Dict envelope은 이 세 key만 허용하고 `audit_count`는 bool이 아닌 integer `1`이어야 합니다. 기존 bare list 입력은 synthetic v1 envelope로 계속 지원합니다.
 - 이미 읽은 `{id,sha256}`와 pending·dismissed 참조는 session-local ephemeral ledger로 재사용하며, 본문을 복제하거나 repository에 저장하지 않습니다.
 - Audit, route, claim, draft, preview와 denied apply는 repository와 host configuration을 변경하지 않습니다.
 - 명시적 `init`과 addon init용 `bootstrap`만 fixed `core_init|area_register|policy_install`을 coordinator 검증으로 직접 적용합니다. 일반 artifact mutation의 exact digest approval은 유지되며 `refresh --fix index`만 derived index를 승인 없이 즉시 rebuild합니다.

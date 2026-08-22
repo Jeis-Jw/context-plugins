@@ -36,4 +36,4 @@ core는 target bytes를 descriptor로 다시 검증하고 preview/apply/lock 후
 
 `schema`와 `capabilities`만 core 없이 호출할 수 있다. 저수준 compatibility operation은 exact host inventory와 core doctor receipt를 요구한다. 일반 operation은 ready만 허용하고, partial/invalid는 fail-closed한다. canonical init adapter는 caller-created inventory/doctor를 받지 않는다. semantic CLI의 release pin과 supplied core CLI의 absolute path suffix·SHA-256을 먼저 대조하고, 일치한 core의 schema·protocol·feature·필수 command·doctor state를 직접 handshake한다. bootstrap 뒤 public doctor와 registry/descriptor/index bytes를 사후 검증한다.
 
-canonical byte budget은 owner input 2 KiB, candidate 16 KiB, 실제 public output 32 KiB다. candidate batch는 최대 8개이며 `context-capture-batch/v1`의 schema·audit_count·candidates 전체 canonical UTF-8 envelope가 16 KiB 이하여야 한다.
+common primary claim은 2,000 codepoint, ASM `assumption`은 1,200 codepoint다. canonical byte budget은 owner input 8 KiB, candidate 16 KiB, 실제 public output 32 KiB다. candidate batch는 최대 8개이며 `context-capture-batch/v1`의 schema·audit_count·candidates 전체 canonical UTF-8 envelope가 16 KiB 이하여야 한다.

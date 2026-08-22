@@ -40,3 +40,5 @@ python3 /loaded/context-decision/skills/decision/scripts/decision_workflow.py ap
 ```
 
 고급 lifecycle·decline 또는 이미 고정한 input을 재사용할 때만 `candidate prepare`/`capture`나 workflow의 `--candidate @file --attestation @file` mode를 사용한다.
+
+inline `--sec-*` 값은 plain text가 기본이다. `@file`만 named regular UTF-8 file을 읽고 `@@text`는 leading `@`를 보존한 literal이다. 일반 path-like text는 file로 추측하지 않는다. missing·symlink·8 KiB 초과 file은 receipt와 repository write 전에 실패한다. common primary claim은 2,000 codepoint, DEC `decision`은 1,200 codepoint, owner input은 canonical UTF-8 8 KiB, candidate envelope는 16 KiB다.

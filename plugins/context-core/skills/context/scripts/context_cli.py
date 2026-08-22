@@ -12,6 +12,7 @@ import json
 import os
 import pathlib
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -30,7 +31,8 @@ MAX_SECTION_ITEM_BYTES = 2 * 1024
 MAX_RECALL_BATCH_BYTES = 8 * 1024
 MAX_USER_BYTES = 32 * 1024
 MAX_CANDIDATE_BYTES = 16 * 1024
-MAX_OWNER_INPUT_BYTES = 2 * 1024
+MAX_OWNER_INPUT_BYTES = 8 * 1024
+MAX_PRIMARY_CLAIM_CODEPOINTS = 2000
 MAX_APPROVAL_PREVIEW_BYTES = 32 * 1024
 MAX_INDEX_FALLBACK_ARTIFACT_READS = 20
 MAX_OWNER_DESCRIPTOR_BYTES = 8 * 1024
@@ -1902,6 +1904,22 @@ def _candidate_batch_bytes(batch: Any, candidates: list[dict[str, Any]]) -> int:
     return len(canonical_json(envelope).encode("utf-8"))
 
 
+def _byte_size_details(actual: int, maximum: int) -> dict[str, int]:
+    return {
+        "actual_bytes": actual,
+        "maximum_bytes": maximum,
+        "over_by_bytes": max(0, actual - maximum),
+    }
+
+
+def _codepoint_size_details(actual: int, maximum: int) -> dict[str, int]:
+    return {
+        "actual_codepoints": actual,
+        "maximum_codepoints": maximum,
+        "over_by_codepoints": max(0, actual - maximum),
+    }
+
+
 def validate_candidate_batch(batch: Any, capabilities: Any) -> list[dict[str, Any]]:
     if isinstance(batch, dict):
         expected = {"schema", "audit_count", "candidates"}
@@ -1926,8 +1944,14 @@ def validate_candidate_batch(batch: Any, capabilities: Any) -> list[dict[str, An
         raise ContextError("candidate_invalid", "candidate batch must be an array or v1 envelope", exit_code=EXIT_CONFLICT)
     if len(candidates) > 8:
         raise ContextError("candidate_batch_too_large", "candidate batch exceeds the v1 count budget", {"maximum": 8}, EXIT_CONFLICT)
-    if _candidate_batch_bytes(batch, candidates) > MAX_CANDIDATE_BYTES:
-        raise ContextError("candidate_batch_too_large", "candidate batch exceeds 16 KiB", exit_code=EXIT_CONFLICT)
+    batch_bytes = _candidate_batch_bytes(batch, candidates)
+    if batch_bytes > MAX_CANDIDATE_BYTES:
+        raise ContextError(
+            "candidate_batch_too_large",
+            "candidate batch exceeds 16 KiB",
+            _byte_size_details(batch_bytes, MAX_CANDIDATE_BYTES),
+            EXIT_CONFLICT,
+        )
     capability_by_kind = {item["kind"]: item for item in _capability_list(capabilities)}
     required = {
         "schema", "candidate_id", "title", "claim", "summary", "captured_from", "requested_kind",
@@ -1953,8 +1977,16 @@ def validate_candidate_batch(batch: Any, capabilities: Any) -> list[dict[str, An
         candidate_ids.add(identifier)
         if not _substantive(candidate.get("title")) or len(candidate["title"]) > 120 or "\n" in candidate["title"]:
             raise ContextError("candidate_invalid", "candidate title is invalid")
-        if not _substantive(candidate.get("claim")) or len(candidate["claim"]) > 320:
+        claim = candidate.get("claim")
+        if not _substantive(claim):
             raise ContextError("candidate_invalid", "candidate claim is invalid")
+        if len(claim) > MAX_PRIMARY_CLAIM_CODEPOINTS:
+            raise ContextError(
+                "candidate_invalid",
+                "candidate claim exceeds the common 2,000-codepoint limit",
+                {"field": "claim", **_codepoint_size_details(len(claim), MAX_PRIMARY_CLAIM_CODEPOINTS)},
+                EXIT_CONFLICT,
+            )
         if not _substantive(candidate.get("summary")) or len(candidate["summary"]) > 280 or "\n" in candidate["summary"]:
             raise ContextError("candidate_invalid", "candidate summary is invalid")
         if candidate.get("captured_from") not in {"conversation", "workspace", "manual", "import"}:
@@ -1978,8 +2010,14 @@ def validate_candidate_batch(batch: Any, capabilities: Any) -> list[dict[str, An
         if set(owner_inputs) - relevant:
             raise ContextError("candidate_invalid", "owner_inputs contains an unrouted kind", {"kinds": sorted(set(owner_inputs) - relevant)})
         for kind, owner_input in owner_inputs.items():
-            if len(canonical_json(owner_input).encode("utf-8")) > MAX_OWNER_INPUT_BYTES:
-                raise ContextError("candidate_too_large", "owner input exceeds 2 KiB", {"kind": kind}, EXIT_CONFLICT)
+            owner_input_bytes = len(canonical_json(owner_input).encode("utf-8"))
+            if owner_input_bytes > MAX_OWNER_INPUT_BYTES:
+                raise ContextError(
+                    "candidate_too_large",
+                    "owner input exceeds 8 KiB",
+                    {"kind": kind, **_byte_size_details(owner_input_bytes, MAX_OWNER_INPUT_BYTES)},
+                    EXIT_CONFLICT,
+                )
             capability = capability_by_kind.get(kind)
             if capability is not None and capability["owner"] == "context-core":
                 _validate_owner_inputs(kind, owner_input)
@@ -2143,6 +2181,14 @@ def direct_candidate(
     if kind_hint is not None and (kind != "observation" or kind_hint != "decision"):
         raise ContextError("candidate_invalid", "kind_hint is only supported for decision-like observations")
     normalized_inputs = _validate_owner_inputs(kind, owner_inputs)
+    owner_input_bytes = len(canonical_json(normalized_inputs).encode("utf-8"))
+    if owner_input_bytes > MAX_OWNER_INPUT_BYTES:
+        raise ContextError(
+            "candidate_too_large",
+            "owner input exceeds 8 KiB",
+            {"kind": kind, **_byte_size_details(owner_input_bytes, MAX_OWNER_INPUT_BYTES)},
+            EXIT_CONFLICT,
+        )
     primary = normalized_inputs["current_context" if kind == "snapshot" else "observation"]
     candidate: dict[str, Any] = {
         "schema": "context-capture-candidate/v1",
@@ -2161,8 +2207,14 @@ def direct_candidate(
     }
     if kind_hint is not None:
         candidate["kind_hint"] = kind_hint
-    if len(canonical_json(candidate).encode("utf-8")) > MAX_CANDIDATE_BYTES:
-        raise ContextError("candidate_too_large", "candidate exceeds the v1 byte budget", exit_code=EXIT_CONFLICT)
+    candidate_bytes = len(canonical_json(candidate).encode("utf-8"))
+    if candidate_bytes > MAX_CANDIDATE_BYTES:
+        raise ContextError(
+            "candidate_too_large",
+            "candidate exceeds the v1 byte budget",
+            _byte_size_details(candidate_bytes, MAX_CANDIDATE_BYTES),
+            EXIT_CONFLICT,
+        )
     return candidate
 
 
@@ -5938,13 +5990,73 @@ def _load_text_argument(value: str) -> str:
     return _read_input_file(value[1:])
 
 
+def _read_body_file(path: pathlib.Path) -> str:
+    if path.is_symlink():
+        raise ContextError(
+            "input_unavailable",
+            "body input must be a regular non-symlink UTF-8 file",
+            {"path": str(path), "reason": "symlink"},
+            EXIT_NOT_FOUND,
+        )
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(path, flags)
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ContextError(
+                "input_unavailable",
+                "body input must be a regular non-symlink UTF-8 file",
+                {"path": str(path), "reason": "not_regular"},
+                EXIT_NOT_FOUND,
+            )
+        if metadata.st_size > MAX_OWNER_INPUT_BYTES:
+            raise ContextError(
+                "input_too_large",
+                "body input file exceeds 8 KiB",
+                {"path": str(path), **_byte_size_details(metadata.st_size, MAX_OWNER_INPUT_BYTES)},
+                EXIT_CONFLICT,
+            )
+        chunks: list[bytes] = []
+        remaining = MAX_OWNER_INPUT_BYTES + 1
+        while remaining:
+            chunk = os.read(descriptor, min(remaining, 64 * 1024))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        payload = b"".join(chunks)
+        if len(payload) > MAX_OWNER_INPUT_BYTES:
+            raise ContextError(
+                "input_too_large",
+                "body input file exceeds 8 KiB",
+                {"path": str(path), **_byte_size_details(len(payload), MAX_OWNER_INPUT_BYTES)},
+                EXIT_CONFLICT,
+            )
+        return payload.decode("utf-8")
+    except ContextError:
+        raise
+    except (OSError, UnicodeError) as error:
+        raise ContextError(
+            "input_unavailable",
+            "body input must be a regular non-symlink UTF-8 file",
+            {"path": str(path)},
+            EXIT_NOT_FOUND,
+        ) from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 def _load_body_argument(value: str) -> str:
     if value.startswith("@@"):
         return value[1:]
     if value == "@-":
         return sys.stdin.read()
     if value.startswith("@"):
-        return _read_input_file(value[1:])
+        return _read_body_file(pathlib.Path(value[1:]))
     return value
 
 

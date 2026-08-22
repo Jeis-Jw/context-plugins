@@ -224,10 +224,13 @@ class TermSecurityRegressionTests(unittest.TestCase):
             attacks.append(("closed", extra, "candidate_invalid"))
             owner_large = copy.deepcopy(value)
             owner_large["owner_inputs"]["term"]["aliases"] = [
-                f"alias-{index}-" + "x" * 105 for index in range(12)
+                f"alias-{index}-" + "가" * 105 for index in range(12)
             ]
             owner_large["owner_inputs"]["term"]["related"] = [
-                f"related-{index}-" + "y" * 100 for index in range(12)
+                f"related-{index}-" + "나" * 100 for index in range(12)
+            ]
+            owner_large["owner_inputs"]["term"]["deprecated_terms"] = [
+                f"old-{index}-" + "다" * 100 for index in range(12)
             ]
             attacks.append(("owner-large", owner_large, "owner_input_too_large"))
             candidate_large = copy.deepcopy(value)

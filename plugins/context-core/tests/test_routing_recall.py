@@ -288,7 +288,7 @@ class RoutingRecallTests(unittest.TestCase):
         self.assertEqual("schema_removed_field", caught.exception.code)
 
         oversized = copy.deepcopy(first)
-        oversized["owner_inputs"]["observation"]["observation"] = "가" * 2100
+        oversized["owner_inputs"]["observation"]["observation"] = "가" * 3000
         with self.assertRaises(context_cli.ContextError) as caught:
             context_cli.route_candidates([oversized], context_cli.capabilities_result(), [])
         self.assertEqual("candidate_too_large", caught.exception.code)

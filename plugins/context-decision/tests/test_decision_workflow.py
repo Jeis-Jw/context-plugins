@@ -478,6 +478,114 @@ class DecisionWorkflowTests(unittest.TestCase):
             self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
             self.assertTrue(json.loads(applied.stdout)["result"]["applied"])
 
+    def test_inline_body_files_fail_closed_before_receipt_or_repository_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = self._initialized_repository(root)
+            body = root / "body.txt"
+            body.write_text("safe body\n", encoding="utf-8")
+            link = root / "body-link.txt"
+            link.symlink_to(body)
+            oversized = root / "oversized.txt"
+            oversized.write_bytes(b"x" * 8193)
+            before = digest_tree(repo)
+
+            for label, argument, code, size in (
+                ("missing", f"@{root / 'missing.txt'}", "input_unavailable", None),
+                ("symlink", f"@{link}", "input_unavailable", None),
+                ("oversized", f"@{oversized}", "input_too_large", 8193),
+            ):
+                with self.subTest(label=label):
+                    receipt = root / f"{label}-receipt.json"
+                    inline = self._inline_arguments()
+                    inline[inline.index("--sec-rationale") + 1] = argument
+                    completed = run(
+                        repo,
+                        WORKFLOW,
+                        "preview",
+                        "--host",
+                        "codex",
+                        "--core-cli",
+                        str(CORE_CLI),
+                        *inline,
+                        "--attest-explicit-choice",
+                        "--attest-scope-identified",
+                        "--attest-commitment-present",
+                        "--receipt-file",
+                        str(receipt),
+                        "--json",
+                    )
+                    self.assertNotEqual(0, completed.returncode, completed.stdout + completed.stderr)
+                    error = json.loads(completed.stdout)["error"]
+                    self.assertEqual(code, error["code"])
+                    if size is not None:
+                        self.assertEqual(
+                            {"actual_bytes": 8193, "maximum_bytes": 8192, "over_by_bytes": 1},
+                            {key: error["details"][key] for key in ("actual_bytes", "maximum_bytes", "over_by_bytes")},
+                        )
+                    self.assertFalse(receipt.exists())
+                    self.assertEqual(before, digest_tree(repo))
+
+    def test_dogfood_decision_body_427_codepoints_and_2182_owner_bytes_previews(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = self._initialized_repository(root)
+            receipt = root / "dogfood-receipt.json"
+            decision = "결" * 427
+            decision_file = root / "decision.txt"
+            decision_file.write_text(decision + "\n", encoding="utf-8")
+            values = {
+                "decision": decision,
+                "rationale": "",
+                "rejected_alternatives": ["notes/rejected.md"],
+                "decision_key": "dogfood-limit",
+            }
+            base_bytes = len(json.dumps(values, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+            values["rationale"] = "r" * (2182 - base_bytes)
+            self.assertEqual(427, len(decision))
+            self.assertEqual(2182, len(json.dumps(values, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")))
+            before = digest_tree(repo)
+            preview = run(
+                repo,
+                WORKFLOW,
+                "preview",
+                "--host",
+                "codex",
+                "--core-cli",
+                str(CORE_CLI),
+                "--inline",
+                "--candidate-id",
+                "cand_950e8400e29b41d4a716446655440000",
+                "--title",
+                "Dogfood decision size",
+                "--summary",
+                "기존 2 KiB 제한을 넘는 실제 결정 입력을 보존한다.",
+                "--scope",
+                "project/dogfood",
+                "--decision-key",
+                values["decision_key"],
+                "--captured-from",
+                "conversation",
+                "--commitment-evidence",
+                "결정권자가 현재 따를 선택으로 확정했다.",
+                "--sec-decision",
+                f"@{decision_file}",
+                "--sec-rationale",
+                values["rationale"],
+                "--sec-alternatives",
+                values["rejected_alternatives"][0],
+                "--attest-explicit-choice",
+                "--attest-scope-identified",
+                "--attest-commitment-present",
+                "--receipt-file",
+                str(receipt),
+                "--json",
+            )
+            self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
+            self.assertTrue(receipt.is_file())
+            self.assertFalse(json.loads(preview.stdout)["result"]["applied"])
+            self.assertEqual(before, digest_tree(repo))
+
     def test_file_and_inline_inputs_cannot_be_mixed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

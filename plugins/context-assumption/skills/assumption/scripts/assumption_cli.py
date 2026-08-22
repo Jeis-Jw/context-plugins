@@ -23,9 +23,10 @@ PROTOCOL = "context-common/v2"
 REQUIRED_FEATURE = "context-owner-descriptor/v2"
 ASSUMPTION_INDEX = "context/assumption/assumption.index.md"
 SIGNAL = "assumption-relevant"
-MAX_OWNER_INPUT_BYTES = 2 * 1024
+MAX_OWNER_INPUT_BYTES = 8 * 1024
 MAX_CANDIDATE_BYTES = 16 * 1024
 MAX_PUBLIC_OUTPUT_BYTES = 32 * 1024
+MAX_PRIMARY_CLAIM_CODEPOINTS = 2000
 ID_RE = re.compile(r"^ctx_[0-9a-f]{32}$")
 LOCAL_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
 ENTRY_RE = re.compile(r"^.*<!-- context-entry (\{.*\}) -->$")
@@ -46,7 +47,7 @@ REQUIRED_PLUGIN = {
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
     "entrypoint": "skills/context/scripts/context_cli.py",
-    "entrypoint_sha256": "sha256:92dc345d2c0178a98740e89f07aad1f32fcef261ff921acd267486d1678d180a",
+    "entrypoint_sha256": "sha256:ec8055e0c7fd77dc31876b98728d32b2bd5fddc5d236436747948148c5d06217",
 }
 
 
@@ -113,6 +114,22 @@ def bytes_digest(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
 
 
+def _byte_size_details(actual: int, maximum: int) -> dict[str, int]:
+    return {
+        "actual_bytes": actual,
+        "maximum_bytes": maximum,
+        "over_by_bytes": max(0, actual - maximum),
+    }
+
+
+def _codepoint_size_details(actual: int, maximum: int) -> dict[str, int]:
+    return {
+        "actual_codepoints": actual,
+        "maximum_codepoints": maximum,
+        "over_by_codepoints": max(0, actual - maximum),
+    }
+
+
 def required_core_surface(value: str) -> pathlib.Path:
     supplied = pathlib.Path(value)
     try:
@@ -165,8 +182,15 @@ def _substantive(value: Any, *, maximum: int, field: str) -> str:
     if not isinstance(value, str):
         raise AssumptionError("schema_invalid", f"{field} must be a string")
     result = nfc(value.strip())
-    if not result or result in PLACEHOLDERS or len(result) > maximum:
-        raise AssumptionError("schema_invalid", f"{field} is empty, placeholder, or too long")
+    if not result or result in PLACEHOLDERS:
+        raise AssumptionError("schema_invalid", f"{field} is empty or a placeholder")
+    if len(result) > maximum:
+        raise AssumptionError(
+            "schema_invalid",
+            f"{field} exceeds its {maximum}-codepoint limit",
+            {"field": field, **_codepoint_size_details(len(result), maximum)},
+            EXIT_CONFLICT,
+        )
     return result
 
 
@@ -446,11 +470,17 @@ def validate_transport_candidate(candidate: Any) -> dict[str, Any]:
         or set(candidate) - CANDIDATE_FIELDS
     ):
         raise AssumptionError("candidate_invalid", "candidate envelope is incomplete", exit_code=EXIT_CONFLICT)
-    if len(canonical_json(candidate).encode("utf-8")) > MAX_CANDIDATE_BYTES:
-        raise AssumptionError("candidate_too_large", "candidate exceeds the 16 KiB protocol budget", exit_code=EXIT_CONFLICT)
+    candidate_bytes = len(canonical_json(candidate).encode("utf-8"))
+    if candidate_bytes > MAX_CANDIDATE_BYTES:
+        raise AssumptionError(
+            "candidate_too_large",
+            "candidate exceeds the 16 KiB protocol budget",
+            _byte_size_details(candidate_bytes, MAX_CANDIDATE_BYTES),
+            EXIT_CONFLICT,
+        )
     if not isinstance(candidate.get("candidate_id"), str) or re.fullmatch(r"cand_[0-9a-f]{32}", candidate["candidate_id"]) is None:
         raise AssumptionError("candidate_invalid", "candidate_id is invalid")
-    for name, maximum in (("title", 120), ("claim", 320), ("summary", 280)):
+    for name, maximum in (("title", 120), ("claim", MAX_PRIMARY_CLAIM_CODEPOINTS), ("summary", 280)):
         _substantive(candidate.get(name), maximum=maximum, field=name)
     if candidate.get("captured_from") not in {"conversation", "workspace", "manual", "import"}:
         raise AssumptionError("candidate_invalid", "captured_from is invalid")
@@ -472,8 +502,14 @@ def validate_transport_candidate(candidate: Any) -> dict[str, Any]:
     for kind, value in owner_inputs.items():
         if not isinstance(value, dict):
             raise AssumptionError("candidate_invalid", "each owner input must be an object", {"kind": kind}, EXIT_CONFLICT)
-        if len(canonical_json(value).encode("utf-8")) > MAX_OWNER_INPUT_BYTES:
-            raise AssumptionError("owner_input_too_large", "owner input exceeds the 2 KiB protocol budget", {"kind": kind}, EXIT_CONFLICT)
+        owner_input_bytes = len(canonical_json(value).encode("utf-8"))
+        if owner_input_bytes > MAX_OWNER_INPUT_BYTES:
+            raise AssumptionError(
+                "owner_input_too_large",
+                "owner input exceeds the 8 KiB protocol budget",
+                {"kind": kind, **_byte_size_details(owner_input_bytes, MAX_OWNER_INPUT_BYTES)},
+                EXIT_CONFLICT,
+            )
     for field, maximum, item_maximum in (("evidence", 2, 240), ("tags", 12, 120), ("search_terms", 12, 120), ("source_refs", 12, 500)):
         if field in candidate:
             _string_list(candidate[field], field, maximum=maximum, item_maximum=item_maximum)
@@ -505,7 +541,12 @@ def validate_candidate_batch(batch: Any) -> dict[str, Any]:
         raise AssumptionError("candidate_batch_too_large", "candidate batch exceeds eight items", exit_code=EXIT_CONFLICT)
     batch_bytes = len(canonical_json(batch).encode("utf-8"))
     if batch_bytes > MAX_CANDIDATE_BYTES:
-        raise AssumptionError("candidate_batch_too_large", "candidate batch exceeds the 16 KiB protocol budget", exit_code=EXIT_CONFLICT)
+        raise AssumptionError(
+            "candidate_batch_too_large",
+            "candidate batch exceeds the 16 KiB protocol budget",
+            _byte_size_details(batch_bytes, MAX_CANDIDATE_BYTES),
+            EXIT_CONFLICT,
+        )
     for candidate in candidates:
         validate_transport_candidate(candidate)
     identifiers = [candidate["candidate_id"] for candidate in candidates]

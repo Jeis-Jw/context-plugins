@@ -270,7 +270,8 @@ class AssumptionSecurityRegressionTests(unittest.TestCase):
             extra["unknown"] = True
             attacks.append(("closed", extra, "candidate_invalid"))
             owner_large = copy.deepcopy(value)
-            owner_large["owner_inputs"]["assumption"]["basis"] = ["x" * 500] * 4
+            owner_large["owner_inputs"]["assumption"]["basis"] = ["가" * 500] * 4
+            owner_large["owner_inputs"]["assumption"]["confirm_conditions"] = ["나" * 300] * 8
             attacks.append(("owner-large", owner_large, "owner_input_too_large"))
             candidate_large = copy.deepcopy(value)
             candidate_large["title"] = "x" * 17000

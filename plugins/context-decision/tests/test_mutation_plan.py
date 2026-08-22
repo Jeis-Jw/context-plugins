@@ -41,15 +41,11 @@ class MutationPlanTests(unittest.TestCase):
             decision_cli.parse_decision_index(result["index_seed"])
 
     def test_required_plugin_identity_matches_manual_dependency_contract(self) -> None:
+        expected = json.loads(
+            (helpers.PLUGIN.parents[1] / "tests/context-v1/fixtures/host-inventory/required-plugin.json").read_text(encoding="utf-8")
+        )
         self.assertEqual(
-            {
-                "marketplace": "context-plugins",
-                "plugin": "context-core",
-                "selector": "context-core@context-plugins",
-                "source": "Jeis-Jw/context-plugins",
-                "provider": "Jinwuk-Lee (Jeis-Jw)",
-                "required_protocol": "context-common/v2",
-            },
+            expected,
             decision_cli.REQUIRED_PLUGIN,
         )
         self.assertFalse(decision_cli.schema_result()["physical_write"])

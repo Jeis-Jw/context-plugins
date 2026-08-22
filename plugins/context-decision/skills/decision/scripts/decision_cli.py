@@ -6,8 +6,10 @@ import argparse
 import datetime
 import hashlib
 import json
+import os
 import pathlib
 import re
+import stat
 import subprocess
 import sys
 import unicodedata
@@ -25,6 +27,10 @@ MAX_BRIEF_BYTES = 8 * 1024
 MAX_SPEC_VIEW_BYTES = 32 * 1024
 MAX_CHECK_BYTES = 24 * 1024
 MAX_CHECK_RESULT_BYTES = 32 * 1024
+MAX_CANDIDATE_BYTES = 16 * 1024
+MAX_OWNER_INPUT_BYTES = 8 * 1024
+MAX_PRIMARY_CLAIM_CODEPOINTS = 2000
+MAX_DECISION_CODEPOINTS = 1200
 MAX_OMITTED_ID_SAMPLE = 8
 PLACEHOLDERS = {"...", "TODO", "TBD", "해당 없음"}
 ID_RE = re.compile(r"^ctx_[0-9a-f]{32}$")
@@ -51,7 +57,7 @@ REQUIRED_PLUGIN = {
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
     "entrypoint": "skills/context/scripts/context_cli.py",
-    "entrypoint_sha256": "sha256:92dc345d2c0178a98740e89f07aad1f32fcef261ff921acd267486d1678d180a",
+    "entrypoint_sha256": "sha256:ec8055e0c7fd77dc31876b98728d32b2bd5fddc5d236436747948148c5d06217",
 }
 OBSERVED_PLUGIN_FIELDS = ("marketplace", "plugin", "source", "enabled", "protocol", "repository_state")
 PREFLIGHT_MESSAGES = {
@@ -134,6 +140,22 @@ def file_digest(content: str) -> str:
 
 def bytes_digest(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def _byte_size_details(actual: int, maximum: int) -> dict[str, int]:
+    return {
+        "actual_bytes": actual,
+        "maximum_bytes": maximum,
+        "over_by_bytes": max(0, actual - maximum),
+    }
+
+
+def _codepoint_size_details(actual: int, maximum: int) -> dict[str, int]:
+    return {
+        "actual_codepoints": actual,
+        "maximum_codepoints": maximum,
+        "over_by_codepoints": max(0, actual - maximum),
+    }
 
 
 def required_core_surface(value: str) -> pathlib.Path:
@@ -519,7 +541,7 @@ def decision_capability() -> dict[str, Any]:
         },
         "draft_fields": {
             "required": {
-                "decision": {"type": "string", "min_chars": 1, "max_chars": 1200},
+                "decision": {"type": "string", "min_chars": 1, "max_chars": MAX_DECISION_CODEPOINTS},
                 "rationale": {"type": "string", "min_chars": 1, "max_chars": 1200},
                 "rejected_alternatives": {"type": "string_list", "min_items": 1, "max_items": 8, "max_item_chars": 500},
                 "decision_key": {"type": "string", "min_chars": 1, "max_chars": 80},
@@ -555,8 +577,15 @@ def schema_result() -> dict[str, Any]:
 
 
 def _bounded_string(value: Any, field: str, maximum: int) -> str:
-    if not isinstance(value, str) or not value.strip() or value.strip() in PLACEHOLDERS or len(value) > maximum:
+    if not isinstance(value, str) or not value.strip() or value.strip() in PLACEHOLDERS:
         raise DecisionError("candidate_invalid", f"{field} must be a substantive string up to {maximum} codepoints", {"field": field})
+    if len(value) > maximum:
+        raise DecisionError(
+            "candidate_invalid",
+            f"{field} exceeds its {maximum}-codepoint limit",
+            {"field": field, **_codepoint_size_details(len(value), maximum)},
+            EXIT_CONFLICT,
+        )
     return value.strip()
 
 
@@ -595,7 +624,7 @@ def validate_candidate(candidate: dict[str, Any]) -> tuple[str, str, dict[str, A
     allowed = {"decision", "rationale", "rejected_alternatives", "decision_key", "constraints", "tradeoffs", "revisit_when", "revisit_on"}
     if set(values) - allowed:
         raise DecisionError("candidate_invalid", "decision owner input has undeclared fields", {"fields": sorted(set(values) - allowed)})
-    decision = _bounded_string(values.get("decision"), "decision", 1200)
+    decision = _bounded_string(values.get("decision"), "decision", MAX_DECISION_CODEPOINTS)
     _bounded_string(values.get("rationale"), "rationale", 1200)
     _bounded_list(values.get("rejected_alternatives"), "rejected_alternatives", minimum=1, item_maximum=500)
     key = canonical_decision_key(values.get("decision_key"))
@@ -605,7 +634,7 @@ def validate_candidate(candidate: dict[str, Any]) -> tuple[str, str, dict[str, A
     if "revisit_on" in values:
         _validate_date(values["revisit_on"], "revisit_on")
     _bounded_string(candidate.get("title"), "title", 120)
-    _bounded_string(candidate.get("claim"), "claim", 320)
+    _bounded_string(candidate.get("claim"), "claim", MAX_PRIMARY_CLAIM_CODEPOINTS)
     _bounded_string(candidate.get("summary"), "summary", 280)
     if candidate.get("captured_from") not in {"conversation", "workspace", "manual", "import"}:
         raise DecisionError("candidate_invalid", "captured_from is invalid")
@@ -617,9 +646,23 @@ def validate_candidate(candidate: dict[str, Any]) -> tuple[str, str, dict[str, A
     for field, item_maximum in (("source_refs", 500), ("tags", 40), ("search_terms", 40)):
         if field in candidate:
             _bounded_list(candidate[field], field, maximum=12, item_maximum=item_maximum)
-    if len(canonical_json(values).encode("utf-8")) > 2 * 1024:
-        raise DecisionError("candidate_too_large", "decision owner input exceeds 2 KiB", exit_code=EXIT_CONFLICT)
-    if normalized_key(candidate["claim"]) != normalized_key(decision):
+    owner_input_bytes = len(canonical_json(values).encode("utf-8"))
+    if owner_input_bytes > MAX_OWNER_INPUT_BYTES:
+        raise DecisionError(
+            "owner_input_too_large",
+            "decision owner input exceeds 8 KiB",
+            {"kind": "decision", **_byte_size_details(owner_input_bytes, MAX_OWNER_INPUT_BYTES)},
+            EXIT_CONFLICT,
+        )
+    candidate_bytes = len(canonical_json(candidate).encode("utf-8"))
+    if candidate_bytes > MAX_CANDIDATE_BYTES:
+        raise DecisionError(
+            "candidate_too_large",
+            "candidate exceeds the 16 KiB protocol budget",
+            _byte_size_details(candidate_bytes, MAX_CANDIDATE_BYTES),
+            EXIT_CONFLICT,
+        )
+    if candidate.get("claim") != decision:
         raise DecisionError("candidate_invalid", "candidate claim must match the decision primary claim")
     return scope, key, values
 
@@ -2212,21 +2255,95 @@ def require_core_preflight(args: argparse.Namespace, *, allow_absent: bool = Fal
     return rendered
 
 
+def _read_body_file(path: pathlib.Path) -> str:
+    if path.is_symlink():
+        raise DecisionError(
+            "input_unavailable",
+            "body input must be a regular non-symlink UTF-8 file",
+            {"path": str(path), "reason": "symlink"},
+            EXIT_NOT_FOUND,
+        )
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(path, flags)
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise DecisionError(
+                "input_unavailable",
+                "body input must be a regular non-symlink UTF-8 file",
+                {"path": str(path), "reason": "not_regular"},
+                EXIT_NOT_FOUND,
+            )
+        if metadata.st_size > MAX_OWNER_INPUT_BYTES:
+            raise DecisionError(
+                "input_too_large",
+                "body input file exceeds 8 KiB",
+                {"path": str(path), **_byte_size_details(metadata.st_size, MAX_OWNER_INPUT_BYTES)},
+                EXIT_CONFLICT,
+            )
+        chunks: list[bytes] = []
+        remaining = MAX_OWNER_INPUT_BYTES + 1
+        while remaining:
+            chunk = os.read(descriptor, min(remaining, 64 * 1024))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        payload = b"".join(chunks)
+        if len(payload) > MAX_OWNER_INPUT_BYTES:
+            raise DecisionError(
+                "input_too_large",
+                "body input file exceeds 8 KiB",
+                {"path": str(path), **_byte_size_details(len(payload), MAX_OWNER_INPUT_BYTES)},
+                EXIT_CONFLICT,
+            )
+        return payload.decode("utf-8")
+    except DecisionError:
+        raise
+    except (OSError, UnicodeError) as error:
+        raise DecisionError(
+            "input_unavailable",
+            "body input must be a regular non-symlink UTF-8 file",
+            {"path": str(path)},
+            EXIT_NOT_FOUND,
+        ) from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def load_body_argument(value: str) -> str:
+    if value.startswith("@@"):
+        return value[1:]
+    if value == "@-":
+        return sys.stdin.read()
+    if value.startswith("@"):
+        return _read_body_file(pathlib.Path(value[1:]))
+    return value
+
+
 def build_direct_candidate(args: argparse.Namespace) -> dict[str, Any]:
+    def semantic_body(value: str) -> str:
+        return nfc(load_body_argument(value).strip())
+
+    decision = semantic_body(args.sec_decision)
     values: dict[str, Any] = {
-        "decision": args.sec_decision,
-        "rationale": args.sec_rationale,
-        "rejected_alternatives": args.sec_alternatives,
+        "decision": decision,
+        "rationale": semantic_body(args.sec_rationale),
+        "rejected_alternatives": [semantic_body(value) for value in args.sec_alternatives],
         "decision_key": args.decision_key,
     }
     for key, argument in (("constraints", args.sec_constraints), ("tradeoffs", args.sec_tradeoffs), ("revisit_when", args.sec_revisit)):
         if argument:
-            values[key] = argument
+            values[key] = [semantic_body(value) for value in argument]
     if args.revisit_on:
         values["revisit_on"] = args.revisit_on
     candidate = {
         "schema": "context-capture-candidate/v1", "candidate_id": args.candidate_id,
-        "title": args.title, "claim": args.sec_decision, "summary": args.summary, "captured_from": args.captured_from,
+        "title": args.title, "claim": decision, "summary": args.summary, "captured_from": args.captured_from,
         "requested_kind": "decision", "specialized_kinds": ["decision"], "fallback_kind": None,
         "scope_hint": args.scope, "source_refs": args.source_ref, "tags": args.tag, "search_terms": args.search_term,
         "evidence": args.commitment_evidence,

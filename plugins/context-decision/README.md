@@ -24,6 +24,8 @@ missing/source mismatch/disabled/incompatible 실패는 exact source와 manual a
 
 Host는 `schema`/`capabilities`를 제외한 모든 저수준 compatibility CLI 호출에 `--host`, `--core-inventory @file`, `--core-doctor @file`을 전달합니다. canonical init과 일반 `decision_workflow.py preview --inline`은 caller-created inventory/doctor 대신 release-pinned core CLI의 schema와 doctor를 직접 handshake합니다. workflow는 caller가 명시한 semantic field와 세 attestation을 exact input에 결박해 approval preview를 만들며 evidence나 판단을 발명하지 않습니다. 고급 lifecycle·decline에는 `candidate prepare`와 `capture`를 사용하며 fact/idea는 draft 없이 종료합니다.
 
+inline `--sec-*`는 plain text가 기본이며 explicit `@file`과 leading `@` literal용 `@@text`를 지원합니다. 일반 path-like text는 file로 추측하지 않습니다. common primary claim은 2,000 codepoint, DEC decision은 1,200 codepoint, owner input은 canonical UTF-8 8 KiB, candidate envelope는 16 KiB입니다. missing·symlink·oversized body file과 limit 초과는 receipt/repository write 전에 실제 크기 진단과 함께 실패합니다.
+
 ## Product flow
 
 context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하고, 선택의 형성·변경 신호가 있을 때만 context-decision을 부릅니다. 같은 scope·anchor와 `{id,sha256}`의 본문이 session context에 남아 있을 때만 재사용하며, 본문이 없거나 관련 anchor가 바뀌면 `check`가 metadata로 후보를 줄이고 Current DEC의 실제 `결정`, `취지`, `반려대안`을 제공합니다.
