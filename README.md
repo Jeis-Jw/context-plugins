@@ -1,10 +1,10 @@
 # Context Plugins
 
-Coding agent가 세션이 바뀌어도 프로젝트의 **결정, 근거, 현재 상태와 작업 인계**를 이어가도록 돕는 Git/Markdown 기반 플러그인입니다.
+Coding agent가 세션이 바뀌어도 프로젝트의 **결정, 근거, 미검증 전제, 프로젝트 용어, 현재 상태와 작업 인계**를 이어가도록 돕는 Git/Markdown 기반 플러그인입니다.
 
 관련 맥락만 골라 실제 본문을 읽고, 기존 결정과 충돌하거나 취지가 달라졌다면 먼저 알려줍니다. 새 맥락은 사용자에게 기록 후보를 보여준 뒤 명시적으로 승인받은 경우에만 repository의 `context/`에 저장합니다.
 
-> 현재 `0.4.1` source와 marketplace manifest는 공개되어 있지만, fresh host에서의 end-to-end 설치와 marketplace catalog 배포는 아직 검증되지 않았습니다. 공개 라이선스도 아직 선택되지 않았으므로 실제 사용·복제·재배포 전에는 [현재 배포 상태](#현재-배포-상태)를 확인하세요.
+> `0.5.0`의 네 플러그인 manifest·local catalog·tests를 하나의 local release unit으로 준비한 상태이며 아직 push 또는 중앙 marketplace publication을 수행하지 않았습니다. fresh host end-to-end 설치도 미검증이고 공개 라이선스도 선택되지 않았으므로 실제 사용·복제·재배포 전에는 [현재 배포 상태](#현재-배포-상태)를 확인하세요.
 
 ## 이런 문제를 해결합니다
 
@@ -22,8 +22,10 @@ Context Plugins는 모든 대화를 보관하지 않습니다. 현재 판단에 
 |---|---|---|
 | `context-core` | 관련 맥락 recall, 작업 인계 `SNAP`, 재사용 가능한 근거 `OBS`, 승인 preview와 안전한 기록 | 기본 플러그인 |
 | `context-decision` | 기존 `DEC` 본문 비교, 충돌·취지 변경 알림, 반려 대안과 superseded history 보존 | `context-core@context-plugins` 필요 |
+| `context-assumption` | 미검증 전제 `ASM`, 확인·반증 조건, confirm/refute/supersede lifecycle | `context-core@context-plugins` 필요, 선택 설치 |
+| `context-term` | 프로젝트 전용 용어 `TERM`, canonical definition과 alias/deprecation lifecycle | `context-core@context-plugins` 필요, 선택 설치 |
 
-결정 관리가 필요 없다면 `context-core`만 사용할 수 있습니다. 기존 결정과의 연속성까지 관리하려면 두 플러그인을 함께 설치합니다.
+`context-core`만 사용할 수 있고, 필요한 semantic owner만 추가로 설치합니다. DEC, ASM, TERM은 서로를 자동 설치하거나 대신 초기화하지 않습니다.
 
 ## 동작 방식
 
@@ -55,6 +57,8 @@ context/*.md와 index를 하나의 transaction으로 갱신
 codex plugin marketplace add Jeis-Jw/context-plugins --ref main
 codex plugin add context-core@context-plugins
 codex plugin add context-decision@context-plugins
+codex plugin add context-assumption@context-plugins  # 선택
+codex plugin add context-term@context-plugins        # 선택
 ```
 
 ### Claude Code
@@ -63,20 +67,24 @@ codex plugin add context-decision@context-plugins
 claude plugin marketplace add Jeis-Jw/context-plugins
 claude plugin install context-core@context-plugins
 claude plugin install context-decision@context-plugins
+claude plugin install context-assumption@context-plugins  # 선택
+claude plugin install context-term@context-plugins        # 선택
 ```
 
-`context-core`만 쓸 경우 마지막 `context-decision` 설치 명령은 생략합니다. 설치 scope와 활성화 범위는 host가 제공하는 수단 안에서 사용자가 직접 정해야 하며, 플러그인이 다른 플러그인을 자동 설치·활성화하거나 host 설정을 임의로 바꾸지 않습니다.
+`context-decision`, `context-assumption`, `context-term`은 필요한 것만 선택합니다. 설치 scope와 활성화 범위는 host가 제공하는 수단 안에서 사용자가 직접 정해야 하며, 플러그인이 다른 플러그인을 자동 설치·활성화·update하거나 host 설정을 임의로 바꾸지 않습니다.
 
 설치 후 host를 reload하거나 새 session을 여세요.
 
 ## 처음 한 번 초기화
 
-사용할 repository에서 다음 중 하나를 요청합니다.
+사용할 repository에서 설치한 surface에 맞게 요청합니다.
 
 - `context-core`만 설치했다면: `$context-core:init`
-- 두 플러그인을 설치했다면: `$context-decision:init`
+- DEC를 설치했다면: `$context-decision:init`
+- ASM을 설치했다면: `$context-assumption:init`
+- TERM을 설치했다면: `$context-term:init`
 
-`$context-decision:init`은 설치된 exact `context-core`를 확인한 뒤 core storage와 decision area를 함께 준비하므로 `$context-core:init`을 먼저 실행할 필요가 없습니다.
+각 addon init은 설치된 exact `context-core`를 확인한 뒤 core storage와 자기 area를 함께 준비하므로 `$context-core:init`을 먼저 실행할 필요가 없습니다. addon을 둘 이상 설치했다면 각 addon init을 한 번씩 실행합니다. 한 addon init이 다른 addon area를 자동 등록하지는 않습니다.
 
 초기화가 성공하면 응답에서 다음을 확인할 수 있습니다.
 
@@ -96,6 +104,8 @@ claude plugin install context-decision@context-plugins
 | 새 선택의 충돌 확인 | “이 선택이 기존 결정과 충돌하는지 먼저 확인해줘.” |
 | scope의 현재 결정을 읽기용 명세로 보기 | “`project/auth`의 Current DEC를 spec view로 조립해줘.” |
 | 중요한 근거 보존 | “이번 운영 결과를 재사용 가능한 observation 후보로 만들어줘.” |
+| 미검증 전제 추적 | “외부 IdP 응답이 5초 이내라는 전제를 assumption 후보로 만들고 확인·반증 조건을 붙여줘.” |
+| 프로젝트 용어 확인 | “이 프로젝트에서 BFF가 뜻하는 정의와 alias를 term context에서 확인해줘.” |
 | 작업 인계 | “여기서 중단할 수 있게 현재 상태를 snapshot으로 정리해줘.” |
 | 결정 변경 | “기존 결정을 유지할지 supersede할지 실제 취지까지 비교해줘.” |
 
@@ -107,6 +117,8 @@ claude plugin install context-decision@context-plugins
 context/
   context.index.md
   decision/       # DEC: 현재 따를 결정과 superseded history
+  assumption/     # ASM: 아직 검증되지 않은 project-scoped 전제
+  term/           # TERM: 프로젝트 전용 용어와 canonical definition
   observation/    # OBS: 판단을 뒷받침하는 비권위 근거와 발견
   snapshot/       # SNAP: 다음 session을 위한 작업 인계
 ```
@@ -114,6 +126,8 @@ context/
 | 종류 | 의미 | 권위 |
 |---|---|---|
 | `DEC` | 무엇을 선택했고 왜 따르는지, 무엇을 반려했는지 | Current 문서는 authoritative |
+| `ASM` | 아직 검증되지 않았지만 후속 판단을 바꿀 수 있는 전제 | Current 문서는 provisional |
+| `TERM` | 프로젝트 안에서 사용할 용어와 canonical definition | Current 문서는 authoritative |
 | `OBS` | 재사용할 사실, 증거, 시행착오 | 판단을 돕는 evidence |
 | `SNAP` | 미완료 작업의 현재 상태와 다음 행동 | 재개용 staging |
 
@@ -133,11 +147,11 @@ context/
 
 | 항목 | 상태 |
 |---|---|
-| GitHub source | [`Jeis-Jw/context-plugins`](https://github.com/Jeis-Jw/context-plugins)에 public |
-| 현재 version | `0.4.1` |
+| GitHub repository | [`Jeis-Jw/context-plugins`](https://github.com/Jeis-Jw/context-plugins) repository는 public이지만 이 local `0.5.0` release unit은 아직 push하지 않음 |
+| 준비 중인 version | `0.5.0` — 네 plugin manifest·두 local catalog·distribution proof 정렬 |
 | Marketplace identity | `context-plugins` |
 | Storage protocol | `context-common/v2` |
-| Codex·Claude Code manifests | repository에 포함 |
+| Codex·Claude Code manifests | local release unit에 포함, publication evidence 아님 |
 | Fresh host live install | 아직 미검증 |
 | 중앙 marketplace catalog 배포 | 아직 미완료 |
 | 공개 라이선스 | 아직 미선택 — `LICENSE` 추가 전에는 사용·복제·재배포 권한이 자동 부여되지 않음 |
@@ -148,4 +162,6 @@ context/
 
 - [`context-core` 상세 동작](./plugins/context-core/README.md)
 - [`context-decision` 상세 동작과 오류 안내](./plugins/context-decision/README.md)
+- [`context-assumption` 전제와 lifecycle 계약](./plugins/context-assumption/README.md)
+- [`context-term` 용어 정본과 recall 계약](./plugins/context-term/README.md)
 - [기존 distribution에서의 migration 경계](./MIGRATION.md)

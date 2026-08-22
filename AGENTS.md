@@ -1,12 +1,12 @@
 # Context Plugins 작업정책
 
-- 이 저장소는 `context-manager`의 독립 plugin component이며 `context-core`, `context-decision`과 향후 semantic owner plugin을 소유한다.
+- 이 저장소는 `context-manager`의 독립 plugin component이며 `context-core`, `context-decision`, `context-assumption`, `context-term`과 향후 semantic owner plugin을 소유한다.
 - public product/runtime contract는 root README, plugin README, `skills/**/references/*.md`, executable schema와 tests가 소유한다.
 - 이 저장소에는 `wiki/`를 만들지 않는다. durable project context는 repository root의 `context/`에 저장한다.
 - `context-core`는 storage, index, routing, approval과 physical write를 소유하고 semantic owner는 자기 artifact의 의미, comparison과 lifecycle을 소유한다.
 - 의미 동일성·conflict·rationale change는 hash, ID나 index metadata가 아니라 실제 body, scope와 rationale로 판단한다.
 - 일반 durable write는 complete preview의 exact approval digest를 사용하며 `context-core` coordinator만 적용한다.
-- `context-decision`은 `context-core@context-plugins`, source `Jeis-Jw/context-plugins`, protocol `context-common/v2`를 exact dependency로 요구한다.
+- `context-decision`, `context-assumption`, `context-term`은 `context-core@context-plugins`, source `Jeis-Jw/context-plugins`, protocol `context-common/v2`를 exact dependency로 요구한다.
 - source, marketplace, version 또는 protocol 변경은 두 host catalogs, plugin manifests, fixtures, public docs와 distribution tests를 함께 갱신한다.
 - 외부 remote 생성, push, marketplace publication과 license 선택은 별도 명시 승인 없이는 수행하지 않는다.
 

@@ -42,3 +42,5 @@ python3 skills/assumption/scripts/assumption_cli.py search --signal assumption-r
 ```
 
 모든 non-static 명령에는 exact core host inventory와 doctor receipt가 필요하다.
+
+0.5.0은 `context-assumption/v1` provisional semantic owner의 첫 distribution release다. ASM은 optional addon이며 설치·활성화·init·기존 맥락 변환을 자동 수행하지 않고, exact core handshake와 승인형 transaction 경계를 그대로 따른다.

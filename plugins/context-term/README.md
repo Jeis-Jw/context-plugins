@@ -43,3 +43,5 @@ python3 skills/term/scripts/term_cli.py search --signal term-encountered --query
 ```
 
 모든 non-static 명령에는 exact core host inventory와 doctor receipt가 필요하다.
+
+0.5.0은 `context-term/v1` authoritative semantic owner의 첫 distribution release다. TERM은 optional addon이며 설치·활성화·init·기존 용어 문서 변환을 자동 수행하지 않고, exact core handshake와 승인형 transaction 경계를 그대로 따른다.

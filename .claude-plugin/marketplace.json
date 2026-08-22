@@ -8,14 +8,26 @@
     {
       "name": "context-core",
       "source": "./plugins/context-core",
-      "description": "대화 중 scoped recall·본문 비교·승인형 capture 제안과 단일 physical write coordinator를 제공하는 shared-context runtime",
-      "version": "0.4.1"
+      "description": "Shared-context runtime for proactive scoped recall, approval-gated capture suggestions, handoffs, evidence, and coordinated writes.",
+      "version": "0.5.0"
     },
     {
       "name": "context-decision",
       "source": "./plugins/context-decision",
-      "description": "기존 결정 본문을 먼저 비교하고 충돌·취지 변경을 알린 뒤 승인된 결정과 history를 보존하는 decision continuity plugin",
-      "version": "0.4.1"
+      "description": "Decision continuity with pre-decision body comparison, rationale-change and conflict notices, and approval-gated capture.",
+      "version": "0.5.0"
+    },
+    {
+      "name": "context-assumption",
+      "source": "./plugins/context-assumption",
+      "description": "Provisional project assumptions with evidence-bound confirmation, refutation, and supersession.",
+      "version": "0.5.0"
+    },
+    {
+      "name": "context-term",
+      "source": "./plugins/context-term",
+      "description": "Authoritative project terminology with scoped canonical slots and signal-gated recall.",
+      "version": "0.5.0"
     }
   ]
 }

@@ -36,3 +36,5 @@
 0.4.0은 source repository와 marketplace를 `Jeis-Jw/context-plugins` / `context-plugins`로 분리한 distribution breaking release입니다. storage protocol은 `context-common/v2`를 유지하며 기존 설치를 자동 변경하지 않습니다.
 
 0.4.1은 목적에 맞는 context 판정 기준과 recall 비용 경계를 명문화하고, managed policy의 정본과 runtime 설치 본문을 함께 정렬한 patch release입니다.
+
+0.5.0은 read-only DEC spec view, generic `context-owner-descriptor/v2` structural validation, optional ASM·TERM owner 등록, full-envelope candidate batch 상한을 하나의 호환 release unit으로 묶습니다. `context-common/v2`와 기존 SNAP·OBS·DEC bytes는 유지하며 addon 설치나 artifact migration을 자동 수행하지 않습니다.

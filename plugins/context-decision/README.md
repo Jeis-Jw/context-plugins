@@ -55,3 +55,5 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 0.4.0은 exact dependency를 `context-core@context-plugins`, source `Jeis-Jw/context-plugins`로 옮긴 distribution breaking release입니다. `context-common/v2` artifact 호환성은 유지하지만 기존 marketplace 설치를 자동 전환하지 않습니다.
 
 0.4.1은 `context-core`의 판정·비용 계약 개선과 distribution version을 맞춘 patch release이며 decision semantics와 `context-common/v2` 계약은 변경하지 않습니다.
+
+0.5.0은 Current DEC의 `결정`·`취지`만 조립하는 read-only `spec-view`와 네 plugin distribution parity를 추가합니다. DEC storage schema와 `context-common/v2`는 유지되고 ASM·TERM 설치 또는 기존 artifact migration은 자동으로 일어나지 않습니다.

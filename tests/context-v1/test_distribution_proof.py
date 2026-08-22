@@ -17,7 +17,29 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PHASE0 = ROOT / "tests/context-v1/phase0/phase0_contract.py"
-PLUGIN_NAMES = ("context-core", "context-decision")
+PLUGIN_NAMES = ("context-core", "context-decision", "context-assumption", "context-term")
+OWNER_SKILLS = {
+    "context-core": "context",
+    "context-decision": "decision",
+    "context-assumption": "assumption",
+    "context-term": "term",
+}
+OWNER_CLIS = {
+    name: f"skills/{skill}/scripts/{skill}_cli.py"
+    for name, skill in OWNER_SKILLS.items()
+}
+INIT_ENTRYPOINTS = {
+    "context-core": "skills/context/scripts/context_cli.py",
+    "context-decision": "skills/init/scripts/decision_init.py",
+    "context-assumption": "skills/init/scripts/assumption_init.py",
+    "context-term": "skills/init/scripts/term_init.py",
+}
+SCHEMA_NAMES = {
+    "context-core": "context-core-schema/v1",
+    "context-decision": "context-decision-schema/v1",
+    "context-assumption": "context-assumption-schema/v1",
+    "context-term": "context-term-schema/v1",
+}
 FORBIDDEN_KEYS = {
     "dependencies",
     "dependency",
@@ -176,6 +198,8 @@ class DistributionProofTests(unittest.TestCase):
         codex_marketplace = read_json(ROOT / ".agents/plugins/marketplace.json")
         self.assertEqual("context-plugins", claude_marketplace["name"])
         self.assertEqual("context-plugins", codex_marketplace["name"])
+        self.assertEqual(list(PLUGIN_NAMES), [item["name"] for item in claude_marketplace["plugins"]])
+        self.assertEqual(list(PLUGIN_NAMES), [item["name"] for item in codex_marketplace["plugins"]])
         claude_entries = {item["name"]: item for item in claude_marketplace["plugins"]}
         codex_entries = {item["name"]: item for item in codex_marketplace["plugins"]}
 
@@ -183,37 +207,81 @@ class DistributionProofTests(unittest.TestCase):
             root = ROOT / "plugins" / name
             claude = read_json(root / ".claude-plugin/plugin.json")
             codex = read_json(root / ".codex-plugin/plugin.json")
-            self.assertEqual("0.4.1", claude["version"])
+            self.assertEqual(name, claude["name"])
+            self.assertEqual(name, codex["name"])
+            self.assertEqual("0.5.0", claude["version"])
             self.assertEqual(claude["version"], codex["version"])
             self.assertEqual(claude["version"], claude_entries[name]["version"])
             self.assertEqual(claude["version"], codex_entries[name]["version"])
+            self.assertEqual(claude["description"], claude_entries[name]["description"])
+            self.assertEqual(codex["description"], codex_entries[name]["description"])
             self.assertEqual(f"./plugins/{name}", claude_entries[name]["source"])
             self.assertEqual({"source": "local", "path": f"./plugins/{name}"}, codex_entries[name]["source"])
-            self.assertEqual("AVAILABLE", codex_entries[name]["policy"]["installation"])
+            self.assertEqual(
+                {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+                codex_entries[name]["policy"],
+            )
+            self.assertEqual("Productivity", codex_entries[name]["category"])
             for document in (claude, codex, claude_entries[name], codex_entries[name]):
                 self.assertFalse(FORBIDDEN_KEYS & recursive_keys(document))
+            plugin_readme = (root / "README.md").read_text(encoding="utf-8")
+            self.assertIn("0.5.0", plugin_readme)
+            if name in {"context-core", "context-decision"}:
+                self.assertIn("0.4.1", plugin_readme)
 
             skills = root / codex["skills"]
             self.assertTrue(skills.is_dir())
             with tempfile.TemporaryDirectory() as temp:
                 cached = Path(temp) / name
                 shutil.copytree(root, cached)
-                owner_skill = "context" if name == "context-core" else "decision"
-                for relative in ("skills/init/SKILL.md", f"skills/{owner_skill}/SKILL.md"):
+                for relative in ("skills/init/SKILL.md", f"skills/{OWNER_SKILLS[name]}/SKILL.md"):
                     self.assertTrue((cached / relative).is_file())
-                if name == "context-decision":
-                    loaded_skill = cached / "skills/init/SKILL.md"
-                    sibling_entrypoint = loaded_skill.parent / "scripts/decision_init.py"
-                    environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
-                    environment.pop("CLAUDE_PLUGIN_ROOT", None)
-                    resolved = subprocess.run(
-                        [sys.executable, str(sibling_entrypoint), "--help"],
-                        cwd=temp,
-                        env=environment,
-                        text=True,
-                        capture_output=True,
-                    )
+                owner_cli = cached / OWNER_CLIS[name]
+                init_entrypoint = cached / INIT_ENTRYPOINTS[name]
+                self.assertTrue(owner_cli.is_file())
+                self.assertTrue(init_entrypoint.is_file())
+                environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+                environment.pop("CLAUDE_PLUGIN_ROOT", None)
+                before = digest_tree(cached)
+                for command in (
+                    [sys.executable, str(owner_cli), "--help"],
+                    [sys.executable, str(init_entrypoint), *("init", "--help")]
+                    if name == "context-core"
+                    else [sys.executable, str(init_entrypoint), "--help"],
+                ):
+                    resolved = subprocess.run(command, cwd=temp, env=environment, text=True, capture_output=True)
                     self.assertEqual(0, resolved.returncode, resolved.stdout + resolved.stderr)
+                schema_probe = subprocess.run(
+                    [sys.executable, str(owner_cli), "schema", "--json"],
+                    cwd=temp,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                )
+                capabilities_probe = subprocess.run(
+                    [sys.executable, str(owner_cli), "capabilities", "--json"],
+                    cwd=temp,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(0, schema_probe.returncode, schema_probe.stdout + schema_probe.stderr)
+                self.assertEqual(0, capabilities_probe.returncode, capabilities_probe.stdout + capabilities_probe.stderr)
+                schema = json.loads(schema_probe.stdout)
+                capabilities = json.loads(capabilities_probe.stdout)
+                self.assertTrue(schema["ok"])
+                self.assertTrue(capabilities["ok"])
+                self.assertEqual(SCHEMA_NAMES[name], schema["result"]["schema"])
+                self.assertEqual("context-owner-capabilities/v1", capabilities["result"]["schema"])
+                self.assertTrue(capabilities["result"]["owners"])
+                self.assertEqual({name}, {item["owner"] for item in capabilities["result"]["owners"]})
+                if name != "context-core":
+                    schema_owner = schema["result"].get("owner")
+                    if schema_owner is None:
+                        schema_owner = schema["result"]["owner_descriptor"]["owner"]
+                    self.assertEqual(name, schema_owner)
+                    self.assertFalse(schema["result"]["physical_write"])
+                self.assertEqual(before, digest_tree(cached))
 
         self.assertTrue((ROOT / "plugins/context-core/skills/context/SKILL.md").is_file())
         self.assertTrue((ROOT / "plugins/context-decision/skills/decision/SKILL.md").is_file())
@@ -234,18 +302,39 @@ class DistributionProofTests(unittest.TestCase):
             "context-core coordinator",
         ):
             self.assertIn(token, default_prompt)
-        self.assertFalse((decision_root / "skills/context").exists())
-        self.assertFalse(any(path.name == "context_cli.py" for path in decision_root.rglob("*.py")))
+        for name in PLUGIN_NAMES[1:]:
+            semantic_root = ROOT / "plugins" / name
+            self.assertFalse((semantic_root / "skills/context").exists())
+            self.assertFalse(any(path.name == "context_cli.py" for path in semantic_root.rglob("*.py")))
+            owner_source = (semantic_root / OWNER_CLIS[name]).read_text(encoding="utf-8")
+            for physical_write in (".write_text(", ".write_bytes(", ".mkdir(", ".unlink(", "os.replace("):
+                self.assertNotIn(physical_write, owner_source)
+
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        for token in (
+            "0.5.0",
+            "context-assumption",
+            "context-term",
+            "local release unit",
+            "아직 push",
+            "Fresh host live install",
+            "중앙 marketplace catalog 배포",
+            "아직 미선택",
+        ):
+            self.assertIn(token, readme)
+        self.assertFalse((ROOT / "LICENSE").exists())
+        self.assertFalse((ROOT / "wiki").exists())
+        migration = (ROOT / "MIGRATION.md").read_text(encoding="utf-8")
+        for token in ("0.5.0 additive semantic owners", "context-common/v2", "not rewritten", "not provided"):
+            self.assertIn(token, migration)
 
     def test_forbidden_install_and_host_mutation_calls_are_absent(self) -> None:
-        targets = [
-            ROOT / "plugins/context-core/.claude-plugin/plugin.json",
-            ROOT / "plugins/context-core/.codex-plugin/plugin.json",
-            ROOT / "plugins/context-decision/.claude-plugin/plugin.json",
-            ROOT / "plugins/context-decision/.codex-plugin/plugin.json",
-            ROOT / ".claude-plugin/marketplace.json",
-            ROOT / ".agents/plugins/marketplace.json",
-        ]
+        targets = [ROOT / ".claude-plugin/marketplace.json", ROOT / ".agents/plugins/marketplace.json"]
+        targets.extend(
+            ROOT / "plugins" / name / host / "plugin.json"
+            for name in PLUGIN_NAMES
+            for host in (".claude-plugin", ".codex-plugin")
+        )
         text = "\n".join(path.read_text(encoding="utf-8") for path in targets).casefold()
         for forbidden in (
             "installed_by_default",
@@ -258,10 +347,7 @@ class DistributionProofTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, text)
 
-        scripts = (
-            ROOT / "plugins/context-core/skills/context/scripts/context_cli.py",
-            ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py",
-        )
+        scripts = tuple(ROOT / "plugins" / name / OWNER_CLIS[name] for name in PLUGIN_NAMES)
         for script in scripts:
             tree = ast.parse(script.read_text(encoding="utf-8"), filename=str(script))
             imported = {
@@ -285,9 +371,25 @@ class DistributionProofTests(unittest.TestCase):
                     self.assertIsInstance(command, ast.Constant)
                     self.assertEqual("git", command.value)
 
-        decision_source = scripts[1].read_text(encoding="utf-8")
-        for physical_write in (".write_text(", ".write_bytes(", ".mkdir(", ".unlink(", "os.replace("):
-            self.assertNotIn(physical_write, decision_source)
+        for script in scripts[1:]:
+            semantic_source = script.read_text(encoding="utf-8")
+            for physical_write in (".write_text(", ".write_bytes(", ".mkdir(", ".unlink(", "os.replace("):
+                self.assertNotIn(physical_write, semantic_source)
+
+        all_python = "\n".join(
+            path.read_text(encoding="utf-8").casefold()
+            for name in PLUGIN_NAMES
+            for path in (ROOT / "plugins" / name).rglob("*.py")
+        )
+        for forbidden_command in (
+            "codex plugin add",
+            "claude plugin install",
+            "plugin marketplace add",
+            "auto_install(",
+            "auto_enable(",
+            "auto_update(",
+        ):
+            self.assertNotIn(forbidden_command, all_python)
 
 
 if __name__ == "__main__":

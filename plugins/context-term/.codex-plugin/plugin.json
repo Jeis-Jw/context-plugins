@@ -1,6 +1,6 @@
 {
   "name": "context-term",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Authoritative project terminology with scoped canonical slots and bounded lifecycle transitions.",
   "author": {
     "name": "Jinwuk-Lee",

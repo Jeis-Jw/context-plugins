@@ -27,3 +27,11 @@ The coordinate change is a breaking distribution migration even though the stora
 ## Knowledge boundary
 
 The source repository's `wiki/` and `context/` corpus are not imported. This repository initializes a fresh `context/` root and decision area; any non-init DEC or OBS requires its own actual-body review and exact approval digest.
+
+## 0.5.0 additive semantic owners
+
+`0.5.0` adds optional `context-assumption` and `context-term` plugins plus the generic `context-owner-descriptor/v2` registration path. The storage protocol remains `context-common/v2`; existing SNAP, OBS and DEC artifacts are not rewritten.
+
+Users install only the owners they need and explicitly run each installed addon's init. No plugin automatically installs, enables, updates or initializes another plugin. Existing notes, assumptions, glossary files or older context artifacts are not inferred or migrated into ASM/TERM automatically; each durable artifact still requires its own semantic review and exact approval digest.
+
+Rollback is distribution-level: stop using or uninstall the optional addon while leaving its repository artifacts untouched. Automatic downgrade, descriptor mutation, area deletion and corpus cleanup are not provided.
