@@ -22,7 +22,7 @@
 - `core_uninitialized`: plugin 설치 문제가 아닙니다. installed `context-core` public `bootstrap` surface가 같은 호출에서 core seed와 decision area를 순서대로 적용합니다. 별도 core init 호출은 필요하지 않습니다.
 missing/source mismatch/disabled/incompatible 실패는 exact source와 manual action을 표시하며 repository와 host configuration bytes를 바꾸지 않습니다. Storage-level `context_root_missing`은 core read surface의 별도 오류이며 addon preflight에서는 installed core의 bootstrap-required `core_uninitialized`로 분류합니다. doctor의 partial/invalid `issues|warnings`는 성공 preflight의 diagnostics로 전달합니다.
 
-Host는 `schema`/`capabilities`를 제외한 모든 CLI 호출에 `--host`, `--core-inventory @file`, `--core-doctor @file`을 전달합니다. Direct DEC는 `candidate prepare --candidate-id ... --commitment-evidence ...`로 exact candidate를 고정한 뒤 semantic owner가 판독하고, accepted choice만 `capture --candidate @file --attestation @file`로 draft합니다. fact/idea는 `capture --candidate @file --decline-reason ...`로 draft 없이 종료합니다.
+Host는 `schema`/`capabilities`를 제외한 모든 저수준 CLI 호출에 `--host`, `--core-inventory @file`, `--core-doctor @file`을 전달합니다. 일반 DEC는 `decision_workflow.py preview --inline` 한 번으로 caller가 명시한 semantic field와 세 attestation을 exact input에 결박하고 approval preview를 만듭니다. CLI는 evidence나 판단을 발명하지 않습니다. 고급 lifecycle·decline에는 `candidate prepare`와 `capture`를 사용하며 fact/idea는 draft 없이 종료합니다.
 
 ## Product flow
 

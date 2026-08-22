@@ -489,6 +489,8 @@ def schema_result() -> dict[str, Any]:
         "workflow_surface": {
             "entrypoint": "decision_workflow.py",
             "commands": ["preview", "apply"],
+            "preview_input_modes": ["inline", "files"],
+            "inline_assertions": ["explicit_choice", "scope_identified", "commitment_present"],
             "receipt_schema": "context-decision-workflow-receipt/v1",
         },
     }
@@ -2128,7 +2130,7 @@ def require_core_preflight(args: argparse.Namespace, *, allow_absent: bool = Fal
     return rendered
 
 
-def _direct_candidate(args: argparse.Namespace) -> dict[str, Any]:
+def build_direct_candidate(args: argparse.Namespace) -> dict[str, Any]:
     values: dict[str, Any] = {
         "decision": args.sec_decision,
         "rationale": args.sec_rationale,
@@ -2299,7 +2301,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "init":
         return build_init_plan(preflight)
     if args.command == "candidate" and args.candidate_command == "prepare":
-        return _direct_candidate(args)
+        return build_direct_candidate(args)
     if args.command == "draft":
         candidate = _load_json_argument(args.candidate, allow_stdin=True)
         return build_claim_result(candidate, _load_json_argument(args.attestation))

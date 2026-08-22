@@ -129,6 +129,35 @@ class DecisionWorkflowTests(unittest.TestCase):
         write_json(attestation_path, attestation)
         return candidate_path, attestation_path, candidate
 
+    def _inline_arguments(self) -> list[str]:
+        return [
+            "--inline",
+            "--candidate-id",
+            "cand_550e8400e29b41d4a716446655440000",
+            "--title",
+            "인증 세션 소유권",
+            "--summary",
+            "OAuth callback과 cookie 경계를 BFF로 통합한다.",
+            "--scope",
+            "project/auth",
+            "--decision-key",
+            "session-owner",
+            "--captured-from",
+            "conversation",
+            "--commitment-evidence",
+            "결정 권한자가 현재 따를 선택으로 확정했다.",
+            "--sec-decision",
+            "인증 세션은 BFF가 소유한다.",
+            "--sec-rationale",
+            "브라우저별 cookie 차이를 서버 경계 안으로 모은다.",
+            "--sec-alternatives",
+            "SPA token 소유: XSS 노출이 커져 반려",
+            "--tag",
+            "auth",
+            "--search-term",
+            "session-owner",
+        ]
+
     def test_preview_freezes_one_bundle_and_apply_uses_only_that_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -337,6 +366,94 @@ class DecisionWorkflowTests(unittest.TestCase):
             self.assertEqual(5, mismatch.returncode, mismatch.stdout + mismatch.stderr)
             self.assertEqual("receipt_repository_mismatch", json.loads(mismatch.stdout)["error"]["code"])
             self.assertEqual([], [path for path in other.rglob("*") if path.is_file() and ".git" not in path.parts])
+
+    def test_inline_preview_serializes_explicit_semantics_without_input_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo, inventory = self._initialized_repository(root)
+            receipt_path = root / "inline-receipt.json"
+            base = [
+                "preview",
+                "--host",
+                "codex",
+                "--core-inventory",
+                f"@{inventory}",
+                "--core-cli",
+                str(CORE_CLI),
+                *self._inline_arguments(),
+                "--receipt-file",
+                str(receipt_path),
+                "--json",
+            ]
+            before = digest_tree(repo)
+            unattested = run(repo, WORKFLOW, *base)
+            self.assertEqual(5, unattested.returncode, unattested.stdout + unattested.stderr)
+            self.assertEqual("semantic_attestation_required", json.loads(unattested.stdout)["error"]["code"])
+            self.assertFalse(receipt_path.exists())
+            self.assertEqual(before, digest_tree(repo))
+
+            preview = run(
+                repo,
+                WORKFLOW,
+                *base[:-3],
+                "--attest-explicit-choice",
+                "--attest-scope-identified",
+                "--attest-commitment-present",
+                *base[-3:],
+            )
+            self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
+            output = json.loads(preview.stdout)["result"]
+            self.assertEqual("cand_550e8400e29b41d4a716446655440000", output["candidate_id"])
+            self.assertFalse(output["applied"])
+            self.assertEqual(before, digest_tree(repo))
+            self.assertFalse((root / "candidate.json").exists())
+            self.assertFalse((root / "attestation.json").exists())
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertRegex(receipt["candidate_digest"], r"^sha256:[0-9a-f]{64}$")
+
+            applied = run(
+                repo,
+                WORKFLOW,
+                "apply",
+                "--core-cli",
+                str(CORE_CLI),
+                "--receipt-file",
+                str(receipt_path),
+                "--approved-digest",
+                output["approval_digest"],
+                "--json",
+            )
+            self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+            self.assertTrue(json.loads(applied.stdout)["result"]["applied"])
+
+    def test_file_and_inline_inputs_cannot_be_mixed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo, inventory = self._initialized_repository(root)
+            receipt_path = root / "mixed-receipt.json"
+            mixed = run(
+                repo,
+                WORKFLOW,
+                "preview",
+                "--host",
+                "codex",
+                "--core-inventory",
+                f"@{inventory}",
+                "--core-cli",
+                str(CORE_CLI),
+                "--candidate",
+                "@/does/not/exist.json",
+                "--candidate-id",
+                "cand_550e8400e29b41d4a716446655440000",
+                "--attestation",
+                "@/does/not/exist.json",
+                "--receipt-file",
+                str(receipt_path),
+                "--json",
+            )
+            self.assertEqual(2, mixed.returncode, mixed.stdout + mixed.stderr)
+            self.assertEqual("usage_invalid", json.loads(mixed.stdout)["error"]["code"])
+            self.assertFalse(receipt_path.exists())
 
 
 if __name__ == "__main__":

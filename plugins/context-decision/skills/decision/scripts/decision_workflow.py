@@ -200,14 +200,74 @@ def _require_ready_core(host: str, inventory: Any, doctor: dict[str, Any]) -> di
     return rendered
 
 
+INLINE_FIELDS = (
+    "candidate_id",
+    "title",
+    "summary",
+    "scope",
+    "decision_key",
+    "captured_from",
+    "commitment_evidence",
+    "sec_decision",
+    "sec_rationale",
+    "sec_alternatives",
+)
+ATTESTATION_FLAGS = (
+    "attest_explicit_choice",
+    "attest_scope_identified",
+    "attest_commitment_present",
+)
+
+
+def _semantic_inputs(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
+    if not args.inline:
+        inline_values = [
+            name
+            for name in (*INLINE_FIELDS, "sec_constraints", "sec_tradeoffs", "sec_revisit", "revisit_on", "source_ref", "tag", "search_term", "informed_by", *ATTESTATION_FLAGS)
+            if getattr(args, name)
+        ]
+        if inline_values:
+            raise WorkflowError("usage_invalid", "file input cannot be mixed with inline semantic fields", {"fields": inline_values})
+        if args.attestation is None:
+            raise WorkflowError("usage_invalid", "file input requires --attestation @file")
+        return _load_json_argument(args.candidate), _load_json_argument(args.attestation)
+
+    if args.attestation is not None:
+        raise WorkflowError("usage_invalid", "inline input cannot be mixed with --attestation")
+    missing = [name for name in INLINE_FIELDS if not getattr(args, name)]
+    if missing:
+        raise WorkflowError("usage_invalid", "inline semantic input is incomplete", {"fields": missing})
+    missing_assertions = [name for name in ATTESTATION_FLAGS if not getattr(args, name)]
+    if missing_assertions:
+        raise WorkflowError(
+            "semantic_attestation_required",
+            "inline preview requires the caller to explicitly attest all decision claim assertions",
+            {"flags": ["--" + name.replace("_", "-") for name in missing_assertions]},
+            5,
+        )
+    candidate = decision_cli.build_direct_candidate(args)
+    attestation = {
+        "schema": "context-semantic-attestation/v1",
+        "operation": "claim",
+        "input_schema": candidate["schema"],
+        "input_digest": decision_cli.canonical_digest(candidate),
+        "assertions": [
+            {"name": "explicit_choice", "value": True, "evidence_pointers": ["/owner_inputs/decision/decision"]},
+            {"name": "scope_identified", "value": True, "evidence_pointers": ["/scope_hint"]},
+            {"name": "commitment_present", "value": True, "evidence_pointers": ["/evidence/0"]},
+        ],
+    }
+    decision_cli.validate_attestation(attestation, candidate, "claim", decision_cli.decision_capability()["claim_assertions"])
+    return candidate, attestation
+
+
 def preview(args: argparse.Namespace) -> dict[str, Any]:
     repo = decision_cli.repository_root().resolve()
     receipt_path = _receipt_path(args.receipt_file, repo, must_exist=False)
     core_cli = _core_cli(args.core_cli)
     core_cli_sha256 = _file_digest(core_cli)
     inventory = _load_json_argument(args.core_inventory)
-    candidate = _load_json_argument(args.candidate)
-    attestation = _load_json_argument(args.attestation)
+    candidate, attestation = _semantic_inputs(args)
     doctor = _run_core(core_cli, repo, "doctor")
     preflight = _require_ready_core(args.host, inventory, doctor)
     owner_result = decision_cli.build_claim_result(
@@ -308,8 +368,31 @@ def build_parser() -> argparse.ArgumentParser:
     preview_parser.add_argument("--host", choices=("codex", "claude-code"), required=True)
     preview_parser.add_argument("--core-inventory", required=True)
     preview_parser.add_argument("--core-cli", required=True)
-    preview_parser.add_argument("--candidate", required=True)
-    preview_parser.add_argument("--attestation", required=True)
+    source = preview_parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--candidate")
+    source.add_argument("--inline", action="store_true")
+    preview_parser.add_argument("--attestation")
+    preview_parser.add_argument("--candidate-id")
+    preview_parser.add_argument("--title")
+    preview_parser.add_argument("--summary")
+    preview_parser.add_argument("--scope")
+    preview_parser.add_argument("--decision-key")
+    preview_parser.add_argument("--captured-from", choices=("conversation", "workspace", "manual", "import"))
+    preview_parser.add_argument("--commitment-evidence", action="append", default=[])
+    preview_parser.add_argument("--sec-decision")
+    preview_parser.add_argument("--sec-rationale")
+    preview_parser.add_argument("--sec-alternatives", action="append", default=[])
+    preview_parser.add_argument("--sec-constraints", action="append", default=[])
+    preview_parser.add_argument("--sec-tradeoffs", action="append", default=[])
+    preview_parser.add_argument("--sec-revisit", action="append", default=[])
+    preview_parser.add_argument("--revisit-on")
+    preview_parser.add_argument("--source-ref", action="append", default=[])
+    preview_parser.add_argument("--tag", action="append", default=[])
+    preview_parser.add_argument("--search-term", action="append", default=[])
+    preview_parser.add_argument("--informed-by", action="append", default=[])
+    preview_parser.add_argument("--attest-explicit-choice", action="store_true")
+    preview_parser.add_argument("--attest-scope-identified", action="store_true")
+    preview_parser.add_argument("--attest-commitment-present", action="store_true")
     preview_parser.add_argument("--ack-conflicts", action="append", default=[])
     preview_parser.add_argument("--receipt-file", required=True)
     preview_parser.add_argument("--json", action="store_true")

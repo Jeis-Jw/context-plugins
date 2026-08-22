@@ -59,7 +59,7 @@ Receipt 없는 final owner plan이나 altered receipt는 `plan validate`에서 �
 
 ## Frozen workflow receipt
 
-일반 단일 capture의 public golden path는 `decision_workflow.py preview`와 `apply`다. `preview`는 host inventory와 loaded core CLI를 입력받아 current core doctor, owner-result 생성, same-batch validation과 core transaction preview를 한 process에서 순서대로 한 번씩 수행한다. complete approval preview와 exact digest만 stdout에 반환하고 bundle/materials는 명시된 repository 밖의 새 `context-decision-workflow-receipt/v1` 파일에 저장한다.
+일반 단일 capture의 public golden path는 `decision_workflow.py preview --inline`과 `apply`다. caller는 decision semantic field와 `explicit_choice`, `scope_identified`, `commitment_present`를 각각 명시적으로 attest한다. workflow는 그 입력을 exact candidate·attestation으로 직렬화할 뿐 semantic evidence나 판정을 만들지 않는다. `preview`는 host inventory와 loaded core CLI를 입력받아 current core doctor, owner-result 생성, same-batch validation과 core transaction preview를 한 process에서 순서대로 한 번씩 수행한다. complete approval preview와 exact digest만 stdout에 반환하고 bundle/materials는 명시된 repository 밖의 새 `context-decision-workflow-receipt/v1` 파일에 저장한다. 이미 고정한 semantic input을 재사용하는 고급 경로에는 `--candidate @file --attestation @file` mode를 유지한다.
 
 receipt는 repository realpath, core CLI path와 SHA-256, candidate/owner-result digest, approval digest와 exact bundle을 결박한다. 기존 receipt overwrite, repository 안 receipt, 다른 repository에서의 apply, 변경된 core CLI와 잘못된 digest는 write 전에 실패한다. `apply`는 receipt의 bundle을 다시 만들지 않고 context-core `transaction apply`에 전달하며 receipt 자체도 변경하지 않는다.
 

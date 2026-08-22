@@ -350,11 +350,17 @@ class PluginContractTests(unittest.TestCase):
         combined = "\n".join((decision, init, protocol))
         for token in (
             "--host", "--core-inventory", "--core-doctor", "candidate prepare", "capture --candidate", "decline",
-            "decision_workflow.py preview", "--receipt-file", "--approved-digest", "frozen receipt",
+            "decision_workflow.py preview", "--inline", "--attest-explicit-choice", "--receipt-file",
+            "--approved-digest", "frozen receipt",
         ):
             self.assertIn(token, combined)
         schema = json.loads(run_cli(ROOT, "schema", "--json").stdout)["result"]
         self.assertEqual("decision_workflow.py", schema["workflow_surface"]["entrypoint"])
+        self.assertEqual(["inline", "files"], schema["workflow_surface"]["preview_input_modes"])
+        self.assertEqual(
+            ["explicit_choice", "scope_identified", "commitment_present"],
+            schema["workflow_surface"]["inline_assertions"],
+        )
         self.assertTrue(WORKFLOW_PATH.is_file())
 
 
