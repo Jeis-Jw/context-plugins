@@ -42,7 +42,7 @@ def candidate(candidate_id: str, *, requested: str | None = None, specialized: l
                 "decision_key": "session-owner",
             },
             "observation": {
-                "observation": "대화에서 BFF 소유 합의가 있었다.",
+                "observation": "인증 세션은 BFF가 소유한다.",
                 "evidence": ["결정 권한자가 현재 따를 선택으로 확정했다."],
             },
         },
