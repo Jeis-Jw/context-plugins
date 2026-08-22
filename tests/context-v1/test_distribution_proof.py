@@ -492,6 +492,7 @@ class DistributionProofTests(unittest.TestCase):
             self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
             for token in ("outside the repository", "0600", "approval_digest", "receipt_digest"):
                 self.assertIn(token, completed.stdout)
+
         preview_help = subprocess.run(
             [sys.executable, str(workflow), "preview", "--help"],
             cwd=ROOT,
@@ -533,6 +534,19 @@ class DistributionProofTests(unittest.TestCase):
                 "approval_digest",
             ):
                 self.assertIn(token, completed.stdout)
+
+    def test_addon_test_helpers_use_unique_import_namespaces(self) -> None:
+        contracts = {
+            "context-assumption": "assumption_test_support",
+            "context-term": "term_test_support",
+        }
+        for plugin, support in contracts.items():
+            tests_root = ROOT / "plugins" / plugin / "tests"
+            self.assertTrue((tests_root / f"{support}.py").is_file())
+            for test_path in tests_root.glob("test_*.py"):
+                source = test_path.read_text(encoding="utf-8")
+                self.assertNotIn("import helpers", source, test_path)
+                self.assertIn(f"import {support} as helpers", source, test_path)
 
 
 if __name__ == "__main__":

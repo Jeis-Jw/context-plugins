@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import helpers
+import assumption_test_support as helpers
 
 
 assumption_cli = helpers.assumption_cli
