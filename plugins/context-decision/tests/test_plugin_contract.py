@@ -28,6 +28,7 @@ def load(name: str, path: Path):
 
 phase0 = load("phase0_distribution_contract", PHASE0)
 CLI_PATH = ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py"
+WORKFLOW_PATH = ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
 INIT_PATH = ROOT / "plugins/context-decision/skills/init/scripts/decision_init.py"
 CORE_CLI_PATH = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
 
@@ -347,8 +348,14 @@ class PluginContractTests(unittest.TestCase):
         init = (ROOT / "plugins/context-decision/skills/init/SKILL.md").read_text(encoding="utf-8")
         protocol = (ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.md").read_text(encoding="utf-8")
         combined = "\n".join((decision, init, protocol))
-        for token in ("--host", "--core-inventory", "--core-doctor", "candidate prepare", "capture --candidate", "decline"):
+        for token in (
+            "--host", "--core-inventory", "--core-doctor", "candidate prepare", "capture --candidate", "decline",
+            "decision_workflow.py preview", "--receipt-file", "--approved-digest", "frozen receipt",
+        ):
             self.assertIn(token, combined)
+        schema = json.loads(run_cli(ROOT, "schema", "--json").stdout)["result"]
+        self.assertEqual("decision_workflow.py", schema["workflow_surface"]["entrypoint"])
+        self.assertTrue(WORKFLOW_PATH.is_file())
 
 
 if __name__ == "__main__":

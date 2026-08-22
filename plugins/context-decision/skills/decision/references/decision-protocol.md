@@ -57,6 +57,14 @@ capture는 one current draft/effect/create operation을 반환한다. ID와 `cre
 
 Receipt 없는 final owner plan이나 altered receipt는 `plan validate`에서 실패한다.
 
+## Frozen workflow receipt
+
+일반 단일 capture의 public golden path는 `decision_workflow.py preview`와 `apply`다. `preview`는 host inventory와 loaded core CLI를 입력받아 current core doctor, owner-result 생성, same-batch validation과 core transaction preview를 한 process에서 순서대로 한 번씩 수행한다. complete approval preview와 exact digest만 stdout에 반환하고 bundle/materials는 명시된 repository 밖의 새 `context-decision-workflow-receipt/v1` 파일에 저장한다.
+
+receipt는 repository realpath, core CLI path와 SHA-256, candidate/owner-result digest, approval digest와 exact bundle을 결박한다. 기존 receipt overwrite, repository 안 receipt, 다른 repository에서의 apply, 변경된 core CLI와 잘못된 digest는 write 전에 실패한다. `apply`는 receipt의 bundle을 다시 만들지 않고 context-core `transaction apply`에 전달하며 receipt 자체도 변경하지 않는다.
+
+preview의 repository와 host configuration write는 0이다. 명시적 transient receipt만 repository와 Git metadata 밖에 mode `0600`으로 만들며 durable context가 아니다. 민감한 decision content가 포함되므로 caller는 workflow 종료 뒤 명시적으로 폐기한다. 승인된 apply의 context/index write는 계속 context-core만 수행한다. lifecycle, prior-bundle 조합과 진단에는 기존 저수준 surface를 사용할 수 있다.
+
 ## Recall과 init
 
 `search`는 `decision.index.md` metadata만 읽는다. `read`와 `brief`는 선택된 DEC만 연다. brief는 `결정`, `취지`, `반려대안`만 포함하고 최대 8 KiB다. 낮은 순위 item을 통째로 제외하며 section 중간 절단은 하지 않는다. History에는 항상 `do_not_follow:true`와 lifecycle reason을 붙인다.

@@ -486,6 +486,11 @@ def schema_result() -> dict[str, Any]:
         "required_plugin": REQUIRED_PLUGIN,
         "core_sections": list(CORE_SECTIONS),
         "commands": ["init", "schema", "capabilities", "candidate prepare", "check", "draft", "capture", "search", "read", "brief", "spec-view", "conflicts", "supersede", "import-fallback", "withdraw", "annotate", "revisit", "batch validate", "plan validate"],
+        "workflow_surface": {
+            "entrypoint": "decision_workflow.py",
+            "commands": ["preview", "apply"],
+            "receipt_schema": "context-decision-workflow-receipt/v1",
+        },
     }
 
 

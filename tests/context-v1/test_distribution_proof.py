@@ -281,6 +281,17 @@ class DistributionProofTests(unittest.TestCase):
                         schema_owner = schema["result"]["owner_descriptor"]["owner"]
                     self.assertEqual(name, schema_owner)
                     self.assertFalse(schema["result"]["physical_write"])
+                if name == "context-decision":
+                    workflow_entrypoint = cached / "skills/decision/scripts/decision_workflow.py"
+                    self.assertTrue(workflow_entrypoint.is_file())
+                    workflow_help = subprocess.run(
+                        [sys.executable, str(workflow_entrypoint), "--help"],
+                        cwd=temp,
+                        env=environment,
+                        text=True,
+                        capture_output=True,
+                    )
+                    self.assertEqual(0, workflow_help.returncode, workflow_help.stdout + workflow_help.stderr)
                 self.assertEqual(before, digest_tree(cached))
 
         self.assertTrue((ROOT / "plugins/context-core/skills/context/SKILL.md").is_file())
