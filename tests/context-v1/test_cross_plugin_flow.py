@@ -349,7 +349,7 @@ def choice(candidate_id: str = "cand_550e8400e29b41d4a716446655440000", *, infor
                 "decision_key": "session-owner",
             },
             "observation": {
-                "observation": "대화에서 인증 세션을 BFF가 소유하기로 합의했다는 진술이 있었다.",
+                "observation": "인증 세션은 BFF가 소유한다.",
                 "evidence": ["결정 권한자가 현재 따를 선택으로 확정했다."],
             },
         },

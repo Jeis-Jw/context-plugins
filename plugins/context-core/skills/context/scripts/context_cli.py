@@ -2020,7 +2020,7 @@ def validate_candidate_batch(batch: Any, capabilities: Any) -> list[dict[str, An
                 )
             capability = capability_by_kind.get(kind)
             if capability is not None and capability["owner"] == "context-core":
-                _validate_owner_inputs(kind, owner_input)
+                _validate_builtin_candidate_primary(candidate, kind, owner_input)
     return candidates
 
 
@@ -2155,6 +2155,27 @@ def _validate_owner_inputs(kind: str, value: Any) -> dict[str, Any]:
             normalized[name] = items
         else:
             raise ContextError("candidate_invalid", "unsupported capability field type", {"field": name})
+    return normalized
+
+
+def _validate_builtin_candidate_primary(
+    candidate: dict[str, Any],
+    kind: str,
+    owner_input: Any,
+) -> dict[str, Any]:
+    normalized = _validate_owner_inputs(kind, owner_input)
+    primary_field = "current_context" if kind == "snapshot" else "observation"
+    if candidate.get("claim") != normalized[primary_field]:
+        raise ContextError(
+            "candidate_primary_claim_mismatch",
+            "candidate claim must equal the built-in owner's actual primary field",
+            {
+                "kind": kind,
+                "claim_field": "claim",
+                "owner_primary_field": f"owner_inputs.{kind}.{primary_field}",
+            },
+            EXIT_CONFLICT,
+        )
     return normalized
 
 
@@ -2309,7 +2330,7 @@ def draft_owner_result(
     inputs = candidate.get("owner_inputs")
     if not isinstance(inputs, dict) or set(inputs) != {kind}:
         raise ContextError("candidate_invalid", "candidate owner_inputs must contain only the target kind")
-    owner_inputs = _validate_owner_inputs(kind, inputs[kind])
+    owner_inputs = _validate_builtin_candidate_primary(candidate, kind, inputs[kind])
     capability = builtin_capability(kind)
     _validate_attestation(attestation, "claim", candidate, set(capability["claim_assertions"]))
     created_at = _timestamp(now)
@@ -2423,6 +2444,13 @@ def validate_owner_result(
         if operation in inputs or item.get("input_schema") != item.get("value", {}).get("schema") or item.get("input_digest") != canonical_digest(item.get("value")):
             raise ContextError("semantic_input_invalid", "semantic input schema or digest is invalid", exit_code=EXIT_CONFLICT)
         inputs[operation] = item
+    if "claim" in inputs and result["owner"] == "context-core" and kind in BUILTIN_AREAS:
+        candidate = inputs["claim"]["value"]
+        _validate_builtin_candidate_primary(
+            candidate,
+            kind,
+            candidate.get("owner_inputs", {}).get(kind),
+        )
     attestations: dict[str, dict[str, Any]] = {}
     for attestation in result["semantic_attestations"]:
         operation = attestation.get("operation")
