@@ -32,6 +32,27 @@ def same_claim_attestation(value: dict) -> dict:
     }
 
 
+def exact_candidate_batch(target_bytes: int) -> dict:
+    template = []
+    for index in range(3):
+        value = helpers.candidate(candidate_id="cand_" + f"{index + 1:032x}")
+        value["source_refs"] = []
+        template.append(value)
+    for fixed_count in range(36):
+        candidates = copy.deepcopy(template)
+        for slot in range(fixed_count):
+            candidates[slot // 12]["source_refs"].append(f"{slot:02d}-" + "x" * 497)
+        tail = candidates[fixed_count // 12]["source_refs"]
+        tail.append("가")
+        batch = {"schema": "context-capture-batch/v1", "audit_count": 1, "candidates": candidates}
+        delta = target_bytes - len(assumption_cli.canonical_json(batch).encode("utf-8"))
+        if 0 <= delta <= 498:
+            tail[-1] += "x" * delta
+            if len(assumption_cli.canonical_json(batch).encode("utf-8")) == target_bytes:
+                return batch
+    raise AssertionError(f"could not construct exact {target_bytes}-byte batch")
+
+
 class AssumptionSecurityRegressionTests(unittest.TestCase):
     def _initialized(self, root: Path, *, captured: bool = True) -> tuple[Path, list[str]]:
         repo = root / "repo"
@@ -53,6 +74,43 @@ class AssumptionSecurityRegressionTests(unittest.TestCase):
         self.assertNotIn("result", payload)
         self.assertEqual(before, helpers.tree_digest(repo))
         return payload
+
+    def test_public_candidate_batch_uses_full_utf8_envelope_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo, preflight = self._initialized(root, captured=False)
+            before = helpers.tree_digest(repo)
+            exact = exact_candidate_batch(assumption_cli.MAX_CANDIDATE_BYTES)
+            self.assertIn("가", assumption_cli.canonical_json(exact))
+            self.assertLess(
+                len(assumption_cli.canonical_json(exact["candidates"]).encode("utf-8")),
+                assumption_cli.MAX_CANDIDATE_BYTES,
+            )
+            exact_path = write_json(root / "batch-16384.json", exact)
+            accepted = helpers.run_cli(repo, "candidate-batch", "validate", "--batch", f"@{exact_path}", *preflight, "--json")
+            self.assertEqual(0, accepted.returncode, accepted.stdout + accepted.stderr)
+            self.assertEqual(16384, json.loads(accepted.stdout)["result"]["canonical_bytes"])
+
+            over = copy.deepcopy(exact)
+            over["candidates"][-1]["source_refs"][-1] += "x"
+            self.assertEqual(16385, len(assumption_cli.canonical_json(over).encode("utf-8")))
+            self.assertLessEqual(
+                len(assumption_cli.canonical_json(over["candidates"]).encode("utf-8")),
+                assumption_cli.MAX_CANDIDATE_BYTES,
+            )
+            over_path = write_json(root / "batch-16385.json", over)
+            rejected = helpers.run_cli(repo, "candidate-batch", "validate", "--batch", f"@{over_path}", *preflight, "--json")
+            payload = self._assert_rejected_noop(repo, rejected, before)
+            self.assertEqual("candidate_batch_too_large", payload["error"]["code"])
+
+            eight = {"schema": "context-capture-batch/v1", "audit_count": 1, "candidates": [helpers.candidate(candidate_id="cand_" + f"{index + 1:032x}") for index in range(8)]}
+            eight_path = write_json(root / "batch-eight.json", eight)
+            self.assertEqual(0, helpers.run_cli(repo, "candidate-batch", "validate", "--batch", f"@{eight_path}", *preflight, "--json").returncode)
+            nine = {"schema": "context-capture-batch/v1", "audit_count": 1, "candidates": [helpers.candidate(candidate_id="cand_" + f"{index + 1:032x}") for index in range(9)]}
+            nine_path = write_json(root / "batch-nine.json", nine)
+            count_rejected = helpers.run_cli(repo, "candidate-batch", "validate", "--batch", f"@{nine_path}", *preflight, "--json")
+            count_payload = self._assert_rejected_noop(repo, count_rejected, before)
+            self.assertEqual("candidate_batch_too_large", count_payload["error"]["code"])
 
     def test_public_receipt_rejects_detached_claim_and_semantic_annotate(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

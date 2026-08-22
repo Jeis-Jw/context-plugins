@@ -34,6 +34,6 @@ OBS의 observed/evidence claim과 DEC의 explicit choice/commitment claim은 이
 - supersede: `same-claim-input`으로 양쪽 실제 `가정`을 읽고, 별도 model semantic 판정이 `same_semantic_claim`을 attest한 경우에만 `supersede`한다.
 - annotate: 의미 본문을 보존하는 metadata 변경만 허용한다.
 
-항상 `batch validate`로 descriptor/capability/result/index digest가 결박된 v2 receipt를 만든 후 context-core preview에 전달한다. 사용자의 exact `approval_digest` 승인 전에는 apply를 요청하지 않는다.
+candidate batch는 최대 8개이며 `context-capture-batch/v1` schema·audit_count·candidates 전체 canonical UTF-8 envelope가 16 KiB 이하여야 한다. 항상 `batch validate`로 descriptor/capability/result/index digest가 결박된 v2 receipt를 만든 후 context-core preview에 전달한다. 사용자의 exact `approval_digest` 승인 전에는 apply를 요청하지 않는다.
 
 상세 계약은 [assumption-protocol.md](references/assumption-protocol.md)를 따른다.

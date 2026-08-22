@@ -1802,18 +1802,40 @@ def _capability_list(value: Any) -> list[dict[str, Any]]:
     return output
 
 
+def _candidate_batch_bytes(batch: Any, candidates: list[dict[str, Any]]) -> int:
+    envelope = batch if isinstance(batch, dict) else {
+        "schema": "context-capture-batch/v1",
+        "audit_count": 1,
+        "candidates": candidates,
+    }
+    return len(canonical_json(envelope).encode("utf-8"))
+
+
 def validate_candidate_batch(batch: Any, capabilities: Any) -> list[dict[str, Any]]:
-    if isinstance(batch, dict) and batch.get("schema") == "context-capture-batch/v1":
-        candidates = batch.get("candidates")
-        if batch.get("audit_count", 1) != 1:
+    if isinstance(batch, dict):
+        expected = {"schema", "audit_count", "candidates"}
+        if (
+            set(batch) != expected
+            or batch.get("schema") != "context-capture-batch/v1"
+            or type(batch.get("audit_count")) is not int
+            or not isinstance(batch.get("candidates"), list)
+        ):
+            raise ContextError(
+                "candidate_invalid",
+                "candidate batch envelope is invalid",
+                {"missing": sorted(expected - set(batch)), "extra": sorted(set(batch) - expected)},
+                EXIT_CONFLICT,
+            )
+        candidates = batch["candidates"]
+        if batch["audit_count"] != 1:
             raise ContextError("audit_repeated", "a semantic milestone may be audited at most once", exit_code=EXIT_CONFLICT)
-    else:
+    elif isinstance(batch, list):
         candidates = batch
-    if not isinstance(candidates, list):
-        raise ContextError("candidate_invalid", "candidate batch must be an array")
+    else:
+        raise ContextError("candidate_invalid", "candidate batch must be an array or v1 envelope", exit_code=EXIT_CONFLICT)
     if len(candidates) > 8:
         raise ContextError("candidate_batch_too_large", "candidate batch exceeds the v1 count budget", {"maximum": 8}, EXIT_CONFLICT)
-    if len(canonical_json(candidates).encode("utf-8")) > MAX_CANDIDATE_BYTES:
+    if _candidate_batch_bytes(batch, candidates) > MAX_CANDIDATE_BYTES:
         raise ContextError("candidate_batch_too_large", "candidate batch exceeds 16 KiB", exit_code=EXIT_CONFLICT)
     capability_by_kind = {item["kind"]: item for item in _capability_list(capabilities)}
     required = {
@@ -1893,6 +1915,7 @@ def _claim_result_map(results: Any) -> dict[tuple[str, str], dict[str, Any]]:
 
 def route_candidates(batch: Any, capabilities: Any, claim_results: Any) -> dict[str, Any]:
     candidates = validate_candidate_batch(batch, capabilities)
+    batch_bytes = _candidate_batch_bytes(batch, candidates)
     capability_by_kind = {item["kind"]: item for item in _capability_list(capabilities)}
     results = _claim_result_map(claim_results)
     routes: list[dict[str, Any]] = []
@@ -1967,6 +1990,7 @@ def route_candidates(batch: Any, capabilities: Any, claim_results: Any) -> dict[
         "schema": "context-route-result/v1", "routes": routes,
         "conflicts": [item for item in routes if item["status"] == "owner_conflict"],
         "skipped": [item for item in routes if item["status"] == "skipped"],
+        "canonical_bytes": batch_bytes,
         "router_owner_process_invocations": 0, "cache_probe_count": 0, "alternate_runtime_count": 0,
     }
 

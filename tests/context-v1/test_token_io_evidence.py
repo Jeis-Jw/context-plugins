@@ -320,12 +320,13 @@ class TokenIOEvidenceTests(unittest.TestCase):
             result = context_cli.validate_candidate_batch(batch, context_cli.capabilities_result())
             routed = context_cli.route_candidates(batch, context_cli.capabilities_result(), [])
             self.assertEqual(count, len(result))
-            self.assertLessEqual(encoded(values), 16 * 1024)
+            self.assertLessEqual(encoded(batch), 16 * 1024)
+            self.assertEqual(encoded(batch), routed["canonical_bytes"])
             self.assertEqual(0, routed["router_owner_process_invocations"])
             measured.append(
                 {
                     "candidates": count,
-                    "batch_bytes": encoded(values),
+                    "batch_bytes": encoded(batch),
                     "audit_count": batch["audit_count"],
                     "router_owner_process_invocations": routed["router_owner_process_invocations"],
                 }

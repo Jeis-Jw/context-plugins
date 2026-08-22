@@ -36,4 +36,4 @@ core는 target bytes를 descriptor로 다시 검증하고 preview/apply/lock 후
 
 `schema`와 `capabilities`만 core 없이 호출할 수 있다. 나머지 명령은 exact host inventory와 core doctor receipt를 요구한다. 일반 operation은 ready만 허용하고, partial은 init repair에만 허용하며 invalid는 항상 거부한다. init adapter는 inventory의 active entrypoint realpath와 supplied core CLI를 결박하고, public `schema --json`에 `context-owner-descriptor/v2`가 없으면 repository byte-noop으로 거부한다. bootstrap 뒤 public doctor와 registry/descriptor/index bytes를 사후 검증한다.
 
-canonical byte budget은 owner input 2 KiB, candidate 및 candidate batch 16 KiB, 실제 public output 32 KiB다.
+canonical byte budget은 owner input 2 KiB, candidate 16 KiB, 실제 public output 32 KiB다. candidate batch는 최대 8개이며 `context-capture-batch/v1`의 schema·audit_count·candidates 전체 canonical UTF-8 envelope가 16 KiB 이하여야 한다.

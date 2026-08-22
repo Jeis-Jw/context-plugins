@@ -30,7 +30,7 @@ ASM CLI는 artifact draft, lifecycle owner-result와 `context-owner-validation-r
 
 명시적 `$context-assumption:init`은 host inventory가 선언한 active core entrypoint와 제공된 `--core-cli` realpath가 같을 때만 실행한다. installed core의 `schema --json`에서 `context-owner-descriptor/v2` feature를 확인한 뒤 descriptor/seed를 core `bootstrap`에 전달하고, 실제 doctor ready와 root registry·area descriptor·index bytes를 다시 확인한다. 자동 설치, update, downgrade, migration은 하지 않는다.
 
-candidate와 candidate batch는 canonical UTF-8 16 KiB, owner input은 2 KiB, public output은 실제 canonical UTF-8 32 KiB로 제한한다. 일반 operation은 exact `repository_state=ready`에서만 동작한다. `partial`은 명시적 init repair에만 허용하고 `invalid`는 init을 포함해 항상 거부한다.
+candidate와 candidate batch는 canonical UTF-8 16 KiB로 제한하며, batch budget은 `context-capture-batch/v1`의 schema·audit_count·candidates 전체 envelope에 적용한다. count 상한은 최대 8개다. owner input은 2 KiB, public output은 실제 canonical UTF-8 32 KiB로 제한한다. 일반 operation은 exact `repository_state=ready`에서만 동작한다. `partial`은 명시적 init repair에만 허용하고 `invalid`는 init을 포함해 항상 거부한다.
 
 ## public CLI
 

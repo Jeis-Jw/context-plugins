@@ -461,7 +461,8 @@ def validate_candidate_batch(batch: Any) -> dict[str, Any]:
     candidates = batch["candidates"]
     if len(candidates) > 8:
         raise AssumptionError("candidate_batch_too_large", "candidate batch exceeds eight items", exit_code=EXIT_CONFLICT)
-    if len(canonical_json(candidates).encode("utf-8")) > MAX_CANDIDATE_BYTES:
+    batch_bytes = len(canonical_json(batch).encode("utf-8"))
+    if batch_bytes > MAX_CANDIDATE_BYTES:
         raise AssumptionError("candidate_batch_too_large", "candidate batch exceeds the 16 KiB protocol budget", exit_code=EXIT_CONFLICT)
     for candidate in candidates:
         validate_transport_candidate(candidate)
@@ -472,7 +473,7 @@ def validate_candidate_batch(batch: Any) -> dict[str, Any]:
         "schema": "context-assumption-candidate-batch-validation/v1",
         "status": "valid",
         "count": len(candidates),
-        "canonical_bytes": len(canonical_json(candidates).encode("utf-8")),
+        "canonical_bytes": batch_bytes,
         "physical_write": False,
     }
 

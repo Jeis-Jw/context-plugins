@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import json
+import os
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -93,7 +97,143 @@ def decision_capability() -> dict:
     }
 
 
+def exact_candidate_batch(target_bytes: int) -> dict:
+    template = []
+    for index in range(3):
+        value = candidate("cand_" + f"{index + 1:032x}")
+        value["source_refs"] = []
+        template.append(value)
+    for fixed_count in range(36):
+        values = copy.deepcopy(template)
+        for slot in range(fixed_count):
+            values[slot // 12]["source_refs"].append(f"{slot:02d}-" + "x" * 497)
+        tail = values[fixed_count // 12]["source_refs"]
+        tail.append("가")
+        batch = {"schema": "context-capture-batch/v1", "audit_count": 1, "candidates": values}
+        delta = target_bytes - len(context_cli.canonical_json(batch).encode("utf-8"))
+        if 0 <= delta <= 498:
+            tail[-1] += "x" * delta
+            if len(context_cli.canonical_json(batch).encode("utf-8")) == target_bytes:
+                return batch
+    raise AssertionError(f"could not construct exact {target_bytes}-byte batch")
+
+
+def write_json(path: Path, value: object) -> Path:
+    path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def public_route(repo: Path, root: Path, batch: object) -> subprocess.CompletedProcess[str]:
+    batch_path = write_json(root / "batch.json", batch)
+    capabilities_path = write_json(root / "capabilities.json", context_cli.capabilities_result())
+    results_path = write_json(root / "claim-results.json", {"schema": "context-owner-results/v1", "results": []})
+    return subprocess.run(
+        [
+            sys.executable,
+            str(CLI_PATH),
+            "candidate",
+            "route",
+            "--batch",
+            f"@{batch_path}",
+            "--capabilities",
+            f"@{capabilities_path}",
+            "--claim-results",
+            f"@{results_path}",
+            "--json",
+        ],
+        cwd=repo,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+    )
+
+
+def repository_bytes(repo: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(repo).as_posix(): path.read_bytes()
+        for path in sorted(repo.rglob("*"))
+        if path.is_file() and ".git" not in path.parts
+    }
+
+
 class RoutingRecallTests(unittest.TestCase):
+    def test_public_candidate_batch_uses_full_utf8_envelope_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            before = repository_bytes(repo)
+
+            exact = exact_candidate_batch(context_cli.MAX_CANDIDATE_BYTES)
+            self.assertIn("가", context_cli.canonical_json(exact))
+            self.assertLess(
+                len(context_cli.canonical_json(exact["candidates"]).encode("utf-8")),
+                context_cli.MAX_CANDIDATE_BYTES,
+            )
+            accepted = public_route(repo, root, exact)
+            self.assertEqual(0, accepted.returncode, accepted.stdout + accepted.stderr)
+            accepted_payload = json.loads(accepted.stdout)
+            self.assertEqual(16384, accepted_payload["result"]["canonical_bytes"])
+
+            over = copy.deepcopy(exact)
+            over["candidates"][-1]["source_refs"][-1] += "x"
+            self.assertEqual(16385, len(context_cli.canonical_json(over).encode("utf-8")))
+            self.assertLessEqual(
+                len(context_cli.canonical_json(over["candidates"]).encode("utf-8")),
+                context_cli.MAX_CANDIDATE_BYTES,
+            )
+            rejected = public_route(repo, root, over)
+            self.assertEqual(5, rejected.returncode, rejected.stdout + rejected.stderr)
+            self.assertEqual("candidate_batch_too_large", json.loads(rejected.stdout)["error"]["code"])
+
+            eight = {"schema": "context-capture-batch/v1", "audit_count": 1, "candidates": [candidate("cand_" + f"{index + 1:032x}") for index in range(8)]}
+            self.assertEqual(0, public_route(repo, root, eight).returncode)
+            nine = {"schema": "context-capture-batch/v1", "audit_count": 1, "candidates": [candidate("cand_" + f"{index + 1:032x}") for index in range(9)]}
+            count_rejected = public_route(repo, root, nine)
+            self.assertEqual(5, count_rejected.returncode, count_rejected.stdout + count_rejected.stderr)
+            self.assertEqual("candidate_batch_too_large", json.loads(count_rejected.stdout)["error"]["code"])
+            self.assertEqual(before, repository_bytes(repo))
+
+    def test_public_candidate_batch_dict_envelope_is_exact_and_legacy_list_remains_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            before = repository_bytes(repo)
+            valid = {
+                "schema": "context-capture-batch/v1",
+                "audit_count": 1,
+                "candidates": [candidate("cand_550e8400e29b41d4a716446655440000")],
+            }
+            legacy = public_route(repo, root, valid["candidates"])
+            self.assertEqual(0, legacy.returncode, legacy.stdout + legacy.stderr)
+            self.assertEqual(
+                len(context_cli.canonical_json(valid).encode("utf-8")),
+                json.loads(legacy.stdout)["result"]["canonical_bytes"],
+            )
+
+            cases = {
+                "extra-admin": ({**valid, "admin": True}, "candidate_invalid"),
+                "missing-audit-count": ({key: value for key, value in valid.items() if key != "audit_count"}, "candidate_invalid"),
+                "schema-type": ({**valid, "schema": 7}, "candidate_invalid"),
+                "schema-value": ({**valid, "schema": "context-capture-batch/v2"}, "candidate_invalid"),
+                "audit-bool": ({**valid, "audit_count": True}, "candidate_invalid"),
+                "audit-string": ({**valid, "audit_count": "1"}, "candidate_invalid"),
+                "audit-value": ({**valid, "audit_count": 2}, "audit_repeated"),
+                "candidates-type": ({**valid, "candidates": {}}, "candidate_invalid"),
+            }
+            for name, (malformed, expected_code) in cases.items():
+                with self.subTest(name=name):
+                    rejected = public_route(repo, root, malformed)
+                    self.assertEqual(5, rejected.returncode, rejected.stdout + rejected.stderr)
+                    payload = json.loads(rejected.stdout)
+                    self.assertFalse(payload["ok"])
+                    self.assertEqual(expected_code, payload["error"]["code"])
+                    self.assertNotIn("Traceback", rejected.stdout + rejected.stderr)
+                    self.assertEqual(before, repository_bytes(repo))
+
     def test_acceptance_19_unavailable(self) -> None:
         value = candidate("cand_550e8400e29b41d4a716446655440000", requested="decision")
         routed = context_cli.route_candidates([value], context_cli.capabilities_result(), [])
