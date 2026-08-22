@@ -400,9 +400,33 @@ def apply(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="decision_workflow.py")
+    parser = argparse.ArgumentParser(
+        prog="decision_workflow.py",
+        description="Create and apply a frozen, approval-gated DEC capture.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sub = parser.add_subparsers(dest="command", required=True)
-    preview_parser = sub.add_parser("preview")
+    preview_parser = sub.add_parser(
+        "preview",
+        description="Build one exact DEC preview and write its transient frozen receipt.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""semantic input:
+  --candidate and --attestation require named @file JSON inputs.
+  Inline --sec-* values are literals by default; @file reads a named regular UTF-8
+  file and @@literal preserves one leading @. Path-like plain text stays literal.
+
+limits:
+  DEC decision: 1,200 codepoints; common primary claim: 2,000 codepoints;
+  canonical owner input: 8 KiB; full candidate envelope: 16 KiB.
+
+receipt and approval:
+  --receipt-file must be a new absolute path outside the repository and Git metadata.
+  It is created mode 0600 and contains sensitive decision material; delete it manually
+  after the workflow. The stdout approval_digest is the user-facing exact approval for
+  repository identity, pinned core path/SHA, candidate/result digests, and the nested
+  core bundle/digest. receipt_digest is integrity metadata, not user approval.
+""",
+    )
     preview_parser.add_argument("--host", choices=("codex", "claude-code"), required=True)
     preview_parser.add_argument("--core-cli", required=True)
     source = preview_parser.add_mutually_exclusive_group(required=True)
@@ -433,7 +457,17 @@ def build_parser() -> argparse.ArgumentParser:
     preview_parser.add_argument("--ack-conflicts", action="append", default=[])
     preview_parser.add_argument("--receipt-file", required=True)
     preview_parser.add_argument("--json", action="store_true")
-    apply_parser = sub.add_parser("apply")
+    apply_parser = sub.add_parser(
+        "apply",
+        description="Apply the unchanged frozen receipt after exact user approval.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""--receipt-file must remain outside the repository and Git metadata.
+The mode-0600 receipt contains sensitive decision material and must be deleted manually
+after use. --approved-digest must equal the user-facing approval_digest from preview;
+that digest binds repository identity, pinned core path/SHA, candidate/result digests,
+and the nested core bundle/digest. receipt_digest cannot substitute for approval.
+""",
+    )
     apply_parser.add_argument("--core-cli", required=True)
     apply_parser.add_argument("--receipt-file", required=True)
     apply_parser.add_argument("--approved-digest", required=True)

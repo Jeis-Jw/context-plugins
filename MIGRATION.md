@@ -35,3 +35,15 @@ The source repository's `wiki/` and `context/` corpus are not imported. This rep
 Users install only the owners they need and explicitly run each installed addon's init. No plugin automatically installs, enables, updates or initializes another plugin. Existing notes, assumptions, glossary files or older context artifacts are not inferred or migrated into ASM/TERM automatically; each durable artifact still requires its own semantic review and exact approval digest.
 
 Rollback is distribution-level: stop using or uninstall the optional addon while leaving its repository artifacts untouched. Automatic downgrade, descriptor mutation, area deletion and corpus cleanup are not provided.
+
+## W1-W3 hardening in the next patch
+
+The next patch keeps `context-common/v2` and existing artifact bytes while tightening the executable and approval boundaries.
+
+- W1 reduces the Codex prompt character surface, adds a one-command inline DEC preview and a frozen out-of-repository receipt, and makes healthy index misses open zero indexed bodies while capping recovery body opens at 20.
+- W2 binds both core and workflow approval material to exact worktree/Git-common-dir identity, pins the distributed `context_cli.py` path suffix and SHA-256 before execution, and performs the core schema/protocol/command/feature/doctor handshake directly. This executable check is not marketplace provenance, catalog source or enabled-state attestation; caller inventory remains a low-level compatibility input.
+- W3 applies actual semantic input limits (DEC 1,200 codepoints, common primary claim 2,000 codepoints, owner input 8 KiB, full candidate envelope 16 KiB) and gives semantic `--sec-*` values the core-compatible literal, `@file` and `@@literal` behavior.
+
+Frozen workflow receipts contain decision material. They must be created at a new absolute path outside the repository and Git metadata, remain mode `0600`, and be deleted manually after the workflow. Reusing a receipt across a clone, linked worktree or same-path repository recreation fails before repository writes.
+
+No storage migration is required. Existing callers of `--core-inventory` and `--core-doctor` may keep using the low-level compatibility surface, but canonical addon init and DEC workflow should provide the release-pinned `--core-cli` instead.

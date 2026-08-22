@@ -66,7 +66,25 @@ def _result(completed: subprocess.CompletedProcess[str], code: str, message: str
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="decision_init.py")
+    parser = argparse.ArgumentParser(
+        prog="decision_init.py",
+        description="Initialize context-core storage and the DEC owner with the release-pinned core CLI.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""core trust:
+  Before subprocess execution, --core-cli must match the release-pinned
+  skills/context/scripts/context_cli.py path suffix and SHA-256. The adapter then
+  handshakes schema, context-common/v2, required commands, owner-descriptor feature,
+  and doctor state. This does not attest marketplace provenance, source, or enabled
+  state. Caller-created inventory/doctor files are low-level compatibility inputs only.
+
+capture contract (not consumed by init):
+  Semantic body values support literal text, @file, and @@literal. DEC decision is
+  limited to 1,200 codepoints, common primary claims to 2,000 codepoints, canonical
+  owner input to 8 KiB, and the full candidate envelope to 16 KiB. The DEC workflow
+  writes its sensitive mode-0600 receipt outside the repository; its user-facing exact
+  approval_digest binds the full approval material and the receipt must be deleted manually.
+""",
+    )
     parser.add_argument("--host", choices=("codex", "claude-code"), required=True)
     parser.add_argument("--core-cli", required=True)
     parser.add_argument("--json", action="store_true")

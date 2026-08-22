@@ -439,6 +439,101 @@ class DistributionProofTests(unittest.TestCase):
         self.assertIn("decision_cli.required_core_surface", workflow_source)
         self.assertNotIn(expected_digest, workflow_source)
 
+    def test_development_and_public_trust_contract_match_the_release_surface(self) -> None:
+        version = read_json(ROOT / "plugins/context-core/.claude-plugin/plugin.json")["version"]
+        development = (ROOT / "DEVELOPMENT.md").read_text(encoding="utf-8")
+        self.assertIn(f"Current repository version: `{version}`", development)
+        for name in PLUGIN_NAMES:
+            self.assertIn(f"  {name}/", development)
+            self.assertIn(f"plugins/{name}/tests", development)
+        for token in (
+            "shasum -a 256 plugins/context-core/skills/context/scripts/context_cli.py",
+            "REQUIRED_PLUGIN.entrypoint_sha256",
+            "test_semantic_plugins_pin_the_distributed_core_entrypoint",
+            "marketplace provenance",
+            "low-level compatibility mode",
+        ):
+            self.assertIn(token, development)
+
+        for name in PLUGIN_NAMES[1:]:
+            readme = (ROOT / "plugins" / name / "README.md").read_text(encoding="utf-8")
+            for token in ("path suffix", "SHA-256", "marketplace provenance", "저수준 compatibility", "@file", "@@literal", "8 KiB", "16 KiB"):
+                self.assertIn(token, readme)
+            prompts = read_json(ROOT / "plugins" / name / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"]
+            prompt_text = " ".join(prompts)
+            for token in ("pinned context_cli.py", "SHA-256", "marketplace provenance/source/enabled", "low-level compatibility"):
+                self.assertIn(token, prompt_text)
+
+        root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        for token in ("mode `0600`", "직접 삭제", "indexed body", "20개", "end-to-end host/model token", "O(1)"):
+            self.assertIn(token, root_readme)
+        decision_readme = (ROOT / "plugins/context-decision/README.md").read_text(encoding="utf-8")
+        for token in ("user-facing exact `approval_digest`", "직접 삭제", "indexed body open 0", "20개", "end-to-end model token", "O(1)"):
+            self.assertIn(token, decision_readme)
+
+        release_notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
+        migration = (ROOT / "MIGRATION.md").read_text(encoding="utf-8")
+        for token in ("W1", "W2", "W3", "3,147", "1,339", "57.5%", "not a token-savings measurement"):
+            self.assertIn(token, release_notes)
+        for token in ("W1-W3", "context-common/v2", "linked worktree", "@file", "@@literal"):
+            self.assertIn(token, migration)
+
+    def test_public_help_exposes_capture_limits_and_core_trust(self) -> None:
+        environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+        workflow = ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
+        for command in ("preview", "apply"):
+            completed = subprocess.run(
+                [sys.executable, str(workflow), command, "--help"],
+                cwd=ROOT,
+                env=environment,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+            for token in ("outside the repository", "0600", "approval_digest", "receipt_digest"):
+                self.assertIn(token, completed.stdout)
+        preview_help = subprocess.run(
+            [sys.executable, str(workflow), "preview", "--help"],
+            cwd=ROOT,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        for token in ("@file", "@@literal", "1,200", "2,000", "8 KiB", "16 KiB"):
+            self.assertIn(token, preview_help)
+
+        for name in PLUGIN_NAMES[1:]:
+            entrypoint = ROOT / "plugins" / name / INIT_ENTRYPOINTS[name]
+            completed = subprocess.run(
+                [sys.executable, str(entrypoint), "--help"],
+                cwd=ROOT,
+                env=environment,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+            for token in (
+                "path suffix",
+                "SHA-256",
+                "context-common/v2",
+                "required commands",
+                "owner-descriptor feature",
+                "doctor state",
+                "does not attest marketplace provenance",
+                "low-level compatibility",
+                "@file",
+                "@@literal",
+                "1,200",
+                "2,000",
+                "8 KiB",
+                "16 KiB",
+                "0600",
+                "outside the repository",
+                "approval_digest",
+            ):
+                self.assertIn(token, completed.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

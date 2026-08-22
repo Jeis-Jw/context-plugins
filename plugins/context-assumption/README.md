@@ -28,9 +28,9 @@ ASM CLI는 artifact draft, lifecycle owner-result와 `context-owner-validation-r
 
 `batch validate`는 embedded result를 신뢰하지 않는다. live Current source와 index를 다시 읽고 candidate·attestation·mutation request에서 transition 결과를 재생성한 뒤 exact owner-result가 일치할 때만 receipt를 발급한다. source path는 canonical `context/assumption` containment와 symlink-free component를 요구한다.
 
-명시적 `$context-assumption:init`은 release contract가 고정한 active core entrypoint suffix와 SHA-256이 제공된 absolute `--core-cli`와 같을 때만 실행한다. 일치한 core의 schema·protocol·필수 command·`context-owner-descriptor/v2` feature와 doctor state를 직접 확인한 뒤 descriptor/seed를 core `bootstrap`에 전달하고, 실제 doctor ready와 root registry·area descriptor·index bytes를 다시 확인한다. 자동 설치, update, downgrade, migration은 하지 않는다.
+명시적 `$context-assumption:init`은 release contract가 고정한 core entrypoint path suffix와 SHA-256이 제공된 absolute `--core-cli`와 같을 때만 실행한다. 일치한 core의 schema·protocol·필수 command·`context-owner-descriptor/v2` feature와 doctor state를 직접 확인한 뒤 descriptor/seed를 core `bootstrap`에 전달하고, 실제 doctor ready와 root registry·area descriptor·index bytes를 다시 확인한다. 이 executable handshake는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않는다. Caller-created inventory/doctor는 저수준 compatibility mode 입력일 뿐 canonical init의 신뢰 근거가 아니다. 자동 설치, update, downgrade, migration은 하지 않는다.
 
-common primary claim은 2,000 codepoint, ASM `assumption`은 1,200 codepoint다. candidate와 candidate batch는 canonical UTF-8 16 KiB로 제한하며, batch budget은 `context-capture-batch/v1`의 schema·audit_count·candidates 전체 envelope에 적용한다. count 상한은 최대 8개다. owner input은 8 KiB, public output은 실제 canonical UTF-8 32 KiB로 제한한다. 일반 operation은 exact `repository_state=ready`에서만 동작한다. `partial`은 명시적 init repair에만 허용하고 `invalid`는 init을 포함해 항상 거부한다.
+common primary claim은 2,000 codepoint, ASM `assumption`은 1,200 codepoint다. `--sec-*` body 값은 plain literal이 기본이며 `@file`은 named regular UTF-8 file, `@@literal`은 leading `@` literal로 해석한다. 일반 path-like text는 file로 추측하지 않고 missing·symlink·oversized file은 write 전에 실패한다. candidate와 candidate batch는 canonical UTF-8 16 KiB로 제한하며, batch budget은 `context-capture-batch/v1`의 schema·audit_count·candidates 전체 envelope에 적용한다. count 상한은 최대 8개다. owner input은 8 KiB, public output은 실제 canonical UTF-8 32 KiB로 제한한다. 일반 operation은 exact `repository_state=ready`에서만 동작한다. `partial`은 명시적 init repair에만 허용하고 `invalid`는 init을 포함해 항상 거부한다.
 
 ## public CLI
 
@@ -41,6 +41,6 @@ python3 skills/assumption/scripts/assumption_cli.py search --signal assumption-r
   --host codex --core-inventory @inventory.json --core-doctor @doctor.json --json
 ```
 
-모든 non-static 명령에는 exact core host inventory와 doctor receipt가 필요하다.
+모든 저수준 non-static compatibility 명령에는 caller-provided core host inventory와 doctor receipt가 필요하다. Canonical init은 `--core-cli`에서 직접 handshake한다.
 
 0.5.0은 `context-assumption/v1` provisional semantic owner의 첫 distribution release다. ASM은 optional addon이며 설치·활성화·init·기존 맥락 변환을 자동 수행하지 않고, exact core handshake와 승인형 transaction 경계를 그대로 따른다.

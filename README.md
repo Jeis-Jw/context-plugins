@@ -136,8 +136,10 @@ context/
 ## 안전 경계
 
 - 일반 context 기록은 complete preview의 정확한 `approval_digest`를 사용자가 승인하기 전까지 쓰지 않습니다.
+- DEC golden path의 user-facing `approval_digest`는 repository identity, release-pinned core path/SHA, candidate/result digest와 nested core bundle/digest 전체를 결박합니다. Preview receipt는 민감한 decision 내용을 포함하므로 repository와 Git metadata 밖의 새 절대경로에 mode `0600`으로 만들고 workflow가 끝나면 사용자가 직접 삭제합니다. `receipt_digest`를 다시 계산하는 것은 승인을 대신하지 않습니다.
 - hash, ID나 index metadata만으로 의미가 같다고 판단하지 않고 실제 body, scope와 rationale를 비교합니다.
-- metadata와 index로 후보를 먼저 좁힌 뒤 관련 있는 실제 문서만 읽습니다.
+- metadata와 index로 후보를 먼저 좁힌 뒤 관련 있는 실제 문서만 읽습니다. Healthy index의 zero-match는 indexed body를 열지 않고, stale/missing index recovery의 body open은 호출당 합계 20개 이하입니다.
+- Hard bound는 artifact body materialization/open, selected output, candidate/envelope와 owner input에 적용됩니다. Index row scoring·directory enumeration과 end-to-end host/model token 사용량은 corpus 크기와 무관한 O(1)을 보장하지 않습니다.
 - background daemon처럼 대화를 수집하거나 transcript 전체를 자동 보관하지 않습니다.
 - 명시적 `init` 외에는 plugin 설치·활성화와 host configuration을 자동으로 변경하지 않습니다.
 - source, version 또는 protocol이 맞지 않으면 대상 파일을 쓰지 않고 필요한 exact 좌표를 안내합니다.

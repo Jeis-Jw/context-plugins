@@ -11,7 +11,7 @@
 3. `$context-decision:init`을 한 번 호출합니다.
 4. installed core public bootstrap이 필요한 core seed와 decision area를 적용하고, 현재 host의 `AGENTS.md` 또는 `CLAUDE.md`에 context 운영지침 managed block을 설치합니다. ready 재호출은 모두 noop입니다.
 
-`context-decision`은 marketplace add, install, enable, update 또는 host configuration 변경을 자동 실행하지 않습니다. Manifest에도 dependency나 implicit/default install metadata가 없고 core 구현을 내장하지 않습니다. `schema`와 `capabilities`만 core 없이 확인할 수 있으며, 그 밖의 repository operation은 identity → source → enabled → protocol → read-only core doctor 순서의 preflight를 먼저 통과해야 합니다. `repository_state=absent`만 bootstrap-required로 분류하고, partial/invalid 진단은 전역 거부하지 않고 실제 decision target과 겹칠 때 해당 command가 중단합니다.
+`context-decision`은 marketplace add, install, enable, update 또는 host configuration 변경을 자동 실행하지 않습니다. Manifest에도 dependency나 implicit/default install metadata가 없고 core 구현을 내장하지 않습니다. Canonical init과 workflow는 subprocess 전에 release-pinned `skills/context/scripts/context_cli.py` path suffix와 SHA-256을 확인하고, 일치한 executable에서 `context-core-schema/v1`, `context-common/v2`, required doctor/transaction/bootstrap command, `context-owner-descriptor/v2` feature와 doctor state를 직접 handshake합니다. 이 검사는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 저수준 compatibility mode의 입력일 뿐 canonical 경로의 신뢰 근거가 아닙니다.
 
 ## Exact failure UX
 
@@ -20,15 +20,17 @@
 - `core_disabled`: source `Jeis-Jw/context-plugins`의 exact core를 사용자가 선택한 올바른 scope에서 직접 활성화하고 reload 또는 새 session 뒤 `context-decision:init`을 재시도합니다.
 - `core_incompatible`: source `Jeis-Jw/context-plugins`의 exact core를 사용자가 선택한 scope에서 `context-common/v2` 호환 버전으로 직접 업데이트하고 reload 또는 새 session 뒤 `context-decision:init`을 재시도합니다.
 - `core_uninitialized`: plugin 설치 문제가 아닙니다. installed `context-core` public `bootstrap` surface가 같은 호출에서 core seed와 decision area를 순서대로 적용합니다. 별도 core init 호출은 필요하지 않습니다.
-missing/source mismatch/disabled/incompatible 실패는 exact source와 manual action을 표시하며 repository와 host configuration bytes를 바꾸지 않습니다. Storage-level `context_root_missing`은 core read surface의 별도 오류이며 addon preflight에서는 installed core의 bootstrap-required `core_uninitialized`로 분류합니다. doctor의 partial/invalid `issues|warnings`는 성공 preflight의 diagnostics로 전달합니다.
+이 failure UX는 host inventory와 doctor receipt를 caller가 제공하는 저수준 compatibility mode에 적용됩니다. missing/source mismatch/disabled/incompatible 실패는 exact source와 manual action을 표시하며 repository와 host configuration bytes를 바꾸지 않습니다. Storage-level `context_root_missing`은 core read surface의 별도 오류이며 addon preflight에서는 installed core의 bootstrap-required `core_uninitialized`로 분류합니다. doctor의 partial/invalid `issues|warnings`는 성공 preflight의 diagnostics로 전달합니다.
 
 Host는 `schema`/`capabilities`를 제외한 모든 저수준 compatibility CLI 호출에 `--host`, `--core-inventory @file`, `--core-doctor @file`을 전달합니다. canonical init과 일반 `decision_workflow.py preview --inline`은 caller-created inventory/doctor 대신 release-pinned core CLI의 schema와 doctor를 직접 handshake합니다. workflow는 caller가 명시한 semantic field와 세 attestation을 exact input에 결박해 approval preview를 만들며 evidence나 판단을 발명하지 않습니다. 고급 lifecycle·decline에는 `candidate prepare`와 `capture`를 사용하며 fact/idea는 draft 없이 종료합니다.
 
-inline `--sec-*`는 plain text가 기본이며 explicit `@file`과 leading `@` literal용 `@@text`를 지원합니다. 일반 path-like text는 file로 추측하지 않습니다. common primary claim은 2,000 codepoint, DEC decision은 1,200 codepoint, owner input은 canonical UTF-8 8 KiB, candidate envelope는 16 KiB입니다. missing·symlink·oversized body file과 limit 초과는 receipt/repository write 전에 실제 크기 진단과 함께 실패합니다.
+inline `--sec-*`는 plain text가 기본이며 explicit `@file`과 leading `@` literal용 `@@literal`을 지원합니다. 일반 path-like text는 file로 추측하지 않습니다. common primary claim은 2,000 codepoint, DEC decision은 1,200 codepoint, owner input은 canonical UTF-8 8 KiB, candidate envelope는 16 KiB입니다. missing·symlink·oversized body file과 limit 초과는 receipt/repository write 전에 실제 크기 진단과 함께 실패합니다.
+
+`preview`는 repository와 Git metadata 밖의 새 절대경로에 mode `0600` frozen receipt를 만들며 민감한 decision material을 포함합니다. Stdout의 user-facing exact `approval_digest`는 repository identity, core absolute path와 pinned SHA, candidate/result digest, nested core bundle과 core digest 전체를 결박합니다. `receipt_digest`는 손상 탐지용일 뿐 승인을 대신하지 않으며 workflow 종료 뒤 receipt는 사용자가 직접 삭제합니다.
 
 ## Product flow
 
-context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하고, 선택의 형성·변경 신호가 있을 때만 context-decision을 부릅니다. 같은 scope·anchor와 `{id,sha256}`의 본문이 session context에 남아 있을 때만 재사용하며, 본문이 없거나 관련 anchor가 바뀌면 `check`가 metadata로 후보를 줄이고 Current DEC의 실제 `결정`, `취지`, `반려대안`을 제공합니다.
+context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하고, 선택의 형성·변경 신호가 있을 때만 context-decision을 부릅니다. 같은 scope·anchor와 `{id,sha256}`의 본문이 session context에 남아 있을 때만 재사용하며, 본문이 없거나 관련 anchor가 바뀌면 `check`가 metadata로 후보를 줄이고 Current DEC의 실제 `결정`, `취지`, `반려대안`을 제공합니다. Healthy index zero-match는 indexed body open 0이고 stale/missing recovery body open은 호출당 합계 20개 이하입니다. Hard bound는 body materialization/open, selected output, candidate/envelope와 owner input에 한정되며 index scoring·directory enumeration 및 end-to-end model token 사용량의 O(1)을 보장하지 않습니다.
 
 - `same`: 기존 결정을 재사용하고 중복 기록하지 않음
 - `supporting`: 기존 결정을 유지하고 재사용 가치가 있는 새 근거만 OBS 후보로 제안

@@ -22,7 +22,7 @@
 - Audit, route, claim, draft, preview와 denied apply는 repository와 host configuration을 변경하지 않습니다.
 - 명시적 `init`과 addon init용 `bootstrap`만 fixed `core_init|area_register|policy_install`을 coordinator 검증으로 직접 적용합니다. 일반 artifact mutation의 exact digest approval은 유지되며 `refresh --fix index`만 derived index를 승인 없이 즉시 rebuild합니다.
 - v1과 v2 area는 같은 root에 공존합니다. v1 bytes에는 profile registry를 추가하지 않고, v2 descriptor는 등록 뒤 immutable하며 digest가 달라진 재등록은 write 0으로 거절합니다.
-- 등록된 v2 root registry와 area descriptor의 digest가 다르면 `doctor`와 `refresh`는 blocking issue로 보고하고 `refresh --fix index`도 해당 trust bytes를 자동 복구하지 않습니다. 일반 artifact/index drift의 read fallback은 body open을 호출당 20개로 제한하고 초과를 warning으로 보고합니다. healthy index의 metadata miss는 indexed body를 다시 열지 않습니다.
+- 등록된 v2 root registry와 area descriptor의 digest가 다르면 `doctor`와 `refresh`는 blocking issue로 보고하고 `refresh --fix index`도 해당 trust bytes를 자동 복구하지 않습니다. 일반 artifact/index drift의 read fallback은 body open을 호출당 20개로 제한하고 초과를 warning으로 보고합니다. healthy index의 metadata miss는 indexed body를 다시 열지 않습니다. 이 hard bound는 body materialization/open, selected output, candidate/envelope와 owner input에 한정되며 index scoring·directory enumeration 및 end-to-end host/model token 사용량의 O(1)을 뜻하지 않습니다.
 - 관리형 운영지침은 conflict·취지 변경을 먼저 알리고, 그 외에는 원 답 뒤 성숙한 후보만 milestone당 한 번 제안합니다. dismissed·deferred 후보는 새 근거 전까지 반복하지 않으며 의미 판정에 hash·ID·metadata를 사용하지 않습니다.
 
 기존 `wiki/`를 자동 migration하지 않습니다. Obsidian은 repository root를 vault로 열 때의 선택적 view일 뿐 runtime dependency가 아닙니다. PCMS는 조직 권한·승인 queue·cross-project search·정책·감사 같은 control-plane 범위를 담당하며, 이 local plugin은 그 기능을 제한해 판매하는 제품이 아닙니다.

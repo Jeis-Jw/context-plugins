@@ -15,8 +15,8 @@
     "category": "Productivity",
     "capabilities": ["Read", "Validation"],
     "defaultPrompt": [
-      "Require exact enabled context-core@context-plugins and a compatible doctor receipt before non-init operations.",
-      "Use $context-decision:init only when explicitly asked; it may repair core and register decision through context-core.",
+      "Before core execution, verify pinned context_cli.py suffix + SHA-256; handshake schema, protocol, commands, features, doctor.",
+      "This does not attest marketplace provenance/source/enabled; caller inventory is only a low-level compatibility input.",
       "On a forming choice, compare Current bodies; report conflicts first; write only through exact-digest core approval."
     ]
   }

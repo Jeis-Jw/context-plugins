@@ -15,9 +15,9 @@
     "category": "Productivity",
     "capabilities": ["Read", "Validation"],
     "defaultPrompt": [
-      "Require exact enabled context-core@context-plugins with context-owner-descriptor/v2 before non-static operations.",
-      "Accept only project-specific terms and definitions; decline generic meanings and non-TERM candidates.",
-      "Compare actual terms on encounter signals; return owner receipts only; write only through exact-digest core approval."
+      "Before core execution, verify pinned context_cli.py suffix + SHA-256; handshake schema, protocol, commands, features, doctor.",
+      "This does not attest marketplace provenance/source/enabled; caller inventory is only a low-level compatibility input.",
+      "Accept only project-specific terms and definitions; decline generic meanings and non-TERM candidates."
     ]
   }
 }
