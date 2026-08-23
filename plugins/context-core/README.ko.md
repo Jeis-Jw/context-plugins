@@ -4,6 +4,10 @@
 
 ## 시작하기
 
+지원 profile은 immutable `v0.6.0` checkout의 root installer를 한 번 실행해 `context-core@context-plugins`와 `context-decision@context-plugins`을 같은 version·scope의 독립 package로 설치합니다. Bundle/meta-plugin이 아니며 decision code를 core에 내장하지 않습니다.
+
+Core-only 구성이 필요하면 다음 경로를 그대로 사용할 수 있습니다.
+
 1. provider marketplace `context-plugins`(source `Jeis-Jw/context-plugins`)에서 `context-core@context-plugins`를 원하는 scope에 직접 설치·활성화합니다.
 2. host를 reload하거나 새 session을 엽니다.
 3. `$context-core:init`을 한 번 호출하면 canonical storage seed와 활성 host의 관리형 운영지침을 core coordinator가 적용합니다.
@@ -39,4 +43,6 @@
 
 0.5.0은 read-only DEC spec view, generic `context-owner-descriptor/v2` structural validation, optional ASM·TERM owner 등록, full-envelope candidate batch 상한을 하나의 호환 release unit으로 묶습니다. `context-common/v2`와 기존 SNAP·OBS·DEC bytes는 유지하며 addon 설치나 artifact migration을 자동 수행하지 않습니다.
 
-0.5.1은 repository identity에 결박된 approval, frozen DEC receipt, release-pinned core 실행 전 검증, healthy miss/recovery body-open 경계와 actual semantic input limit을 추가한 developer-preview patch입니다. `v0.5.1` tag는 아직 생성·push되지 않았습니다.
+0.5.1은 repository identity에 결박된 approval, frozen DEC receipt, release-pinned core 실행 전 검증, healthy miss/recovery body-open 경계와 actual semantic input limit을 추가한 developer-preview patch입니다.
+
+0.6.0은 자연어 승인 UX와 deterministic receipt lifecycle을 통합하고, core와 semantic owner package를 분리한 채 root profile installer로 설치 동작만 묶습니다. `v0.6.0` tag와 publication은 아직 완료되지 않았습니다.

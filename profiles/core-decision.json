@@ -1,0 +1,11 @@
+{
+  "schema": "context-plugin-profile/v1",
+  "name": "core-decision",
+  "version": "0.6.0",
+  "marketplace": "context-plugins",
+  "plugins": [
+    "context-core@context-plugins",
+    "context-decision@context-plugins"
+  ],
+  "init": "$context-decision:init"
+}

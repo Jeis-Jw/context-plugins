@@ -4,11 +4,11 @@
 
 ## Supported developer-preview path
 
-Install `context-core@context-plugins` and `context-decision@context-plugins` separately from the immutable `v0.5.1` checkout, reload the host, then run `$context-decision:init` once in the target repository. That single addon init bootstraps core storage, registers the DEC area, and installs the managed `AGENTS.md` or `CLAUDE.md` policy. There is no bundle or meta-plugin.
+From the immutable `v0.6.0` checkout, run the root `core-decision` profile installer once. It asks the host to install `context-core@context-plugins` and `context-decision@context-plugins` as separate packages at the same version and scope. Reload the host, then run `$context-decision:init` once in the target repository. That addon init bootstraps core storage, registers the DEC area, and installs the managed `AGENTS.md` or `CLAUDE.md` policy. There is no bundle or meta-plugin, and decision code is not embedded in core.
 
 For a core-only setup, `$context-core:init` remains available. It creates the canonical root, SNAP and OBS indexes and the active host policy. Re-running init after a ready result is a filesystem no-op.
 
-The `v0.5.1` tag is not published yet. See the repository root README for the owner-gated release and license status.
+The `v0.6.0` tag is not published yet. See the repository root README for the owner-gated tag, publication, and license status.
 
 ## Runtime contract
 
@@ -47,6 +47,6 @@ A denied apply, preview, recall, route, claim, or validation has zero repository
 | ASM | Optional unverified premise | provisional, experimental owner |
 | TERM | Optional project vocabulary | authoritative, experimental owner |
 
-Markdown artifacts are canonical; `context.index.md` and area indexes are deterministic projections. Existing `context-common/v2` artifacts are not rewritten by the 0.5.1 patch, and existing `wiki/` content is never migrated automatically.
+Markdown artifacts are canonical; `context.index.md` and area indexes are deterministic projections. Existing `context-common/v2` artifacts are not rewritten by the 0.6.0 release, and existing `wiki/` content is never migrated automatically.
 
 See the [storage protocol](./skills/context/references/context-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).

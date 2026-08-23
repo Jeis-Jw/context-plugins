@@ -1,12 +1,22 @@
 # Release notes
 
-## 0.6.0 (unreleased; approval wording PR)
+## 0.6.0 (release candidate; tag not published)
 
 - User-facing approval is one natural-language question over the complete rendered preview. Only a direct, explicit, unconditional affirmative answer applies; `알겠어` alone, conditions, edits, and topic changes do not.
 - Digests, receipt locations, internal IDs, and core paths are agent/CLI transport details and are never shown to or requested from users.
 - The managed policy is four concise lines; all 16 SKILL surfaces carry the same approval classification and no-signal behavior.
+- Decision lookup no longer requires write-oriented preflight. Scope-less checks are explicitly discovery-only, while exact-slot conflict validation is repeated before preview.
+- DEC preview/apply/reject owns a deterministic private receipt lifecycle, including TTL cleanup, one-time apply deletion, supersede and withdraw recovery paths. OBS and SNAP expose the same two-command receipt surface.
+- `context-core` remains the storage/index/transaction coordinator and each semantic owner remains a separate plugin package. Decision code is not copied into core.
+- `profiles/core-decision.json` and `scripts/install_profile.py` provide one explicit distribution action that installs the separate core and decision packages at one version and scope. Installed plugins never install or replace each other; legacy providers and mismatched checkouts fail before host mutation.
 - Frozen receipt, approval binding, repository identity, pinned core SHA, CAS, lock, atomic write, and no-regeneration-after-approval boundaries remain intact.
-- This PR must ship with the companion workflow PR; neither is a standalone 0.6 release candidate.
+- W1 wording and W2 workflow changes ship together; neither surface is a standalone 0.6 release.
+
+### Reproducible verification
+
+- Python 3.11: `python3.11 -m pytest -q` → 292 passed, 220 subtests.
+- Python 3.13: `python3.13 -m pytest -q` → 292 passed, 220 subtests.
+- Phase 0 remains 15 passed on each interpreter.
 
 ## 0.5.1 (prepared; tag not published)
 
@@ -40,4 +50,4 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ## Release boundary
 
-This repository is preparing a developer preview. No tag, push or marketplace publication is implied by these notes. The owner must explicitly approve creation and push of `v0.5.1`. A public license has not been selected; an owner must choose one before public reuse or redistribution is invited.
+This repository is preparing a developer preview. Source integration does not imply a tag or marketplace publication. Creation and push of `v0.6.0` remain owner-gated. A public license has not been selected; an owner must choose one before public reuse or redistribution is invited.

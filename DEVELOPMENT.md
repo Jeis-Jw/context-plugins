@@ -29,11 +29,18 @@ python3 -m pytest -q plugins/context-decision/tests
 python3 -m pytest -q plugins/context-assumption/tests
 python3 -m pytest -q plugins/context-term/tests
 python3 -m pytest -q tests/context-v1/test_distribution_proof.py tests/context-v1/test_cross_plugin_flow.py
+python3 -m pytest -q tests/context-v1/test_profile_installer.py
 python3 -m pytest -q tests/context-v1/test_semantic_input_limits.py tests/context-v1/test_token_io_evidence.py
 PYTHONPATH=tests/context-v1/phase0 python3 -m pytest -q tests/context-v1/phase0
 ```
 
 배포 전에는 두 host marketplace의 네 plugin version/source parity, old coordinate 잔존 여부, actual CLI schema/capabilities/help와 temporary consumer init을 별도로 검증해야 합니다.
+
+### Core+decision profile installer
+
+`profiles/core-decision.json`은 core와 decision을 같은 release로 설치하는 배포 profile이며 두 plugin package나 semantic ownership을 합치지 않습니다. `scripts/install_profile.py`는 사용자가 immutable release checkout에서 명시적으로 실행할 때만 host marketplace와 두 plugin 설치 명령을 순서대로 호출합니다. Plugin runtime에서는 host inventory 탐색이나 install/enable/update를 수행하지 않습니다.
+
+Release tag 전 local 검증에만 `--allow-unreleased-checkout --dry-run`을 사용할 수 있습니다. 실제 설치는 clean checkout의 exact `v<version>` tag를 요구하며, old provider·다른 checkout·mixed version은 자동 정리하지 않고 중단합니다.
 
 ### Exact core pin 갱신
 
@@ -52,8 +59,8 @@ semantic plugin은 임의의 `--core-cli`를 실행하지 않습니다. `context
 - Core selector: `context-core@context-plugins`
 - Source: `Jeis-Jw/context-plugins`
 - Protocol: `context-common/v2`
-- Current repository version: `0.5.1`
-- Immutable install ref: `v0.5.1` (not created or pushed; owner approval required)
+- Current repository version: `0.6.0`
+- Immutable install ref: `v0.6.0` (not created or pushed; owner approval required)
 
 ## Provenance
 
@@ -63,4 +70,4 @@ semantic plugin은 임의의 `--core-cli`를 실행하지 않습니다. `context
 
 공개 라이선스는 아직 선택하지 않았습니다. 저장소가 public이더라도 `LICENSE`가 추가되기 전에는 사용·복제·재배포 권한이 자동으로 부여되지 않습니다.
 
-`v0.5.1` tag 생성, release commit/tag push, marketplace publication과 license 선택은 각각 owner gate입니다. 검증만으로 이 단계가 완료됐다고 간주하지 않습니다.
+`v0.6.0` tag 생성·push, marketplace publication과 license 선택은 각각 owner gate입니다. 검증이나 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.

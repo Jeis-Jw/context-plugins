@@ -4,7 +4,7 @@ Coding agent가 세션이 바뀌어도 프로젝트의 **결정, 근거, 미검�
 
 관련 맥락만 골라 실제 본문을 읽고, 기존 결정과 충돌하거나 취지가 달라졌다면 먼저 알려줍니다. 새 맥락은 사용자에게 기록 후보를 보여준 뒤 명시적으로 승인받은 경우에만 repository의 `context/`에 저장합니다.
 
-> `0.5.1` developer preview는 local release 후보 commit으로 준비됐습니다. local `0.5.1` release 후보 commit도 아직 push되지 않았고, `v0.5.1` tag는 아직 생성·push되지 않았으며 marketplace publication도 미완료입니다. 공개 라이선스도 선택되지 않았으므로 실제 사용·복제·재배포 전에는 [현재 배포 상태](#현재-배포-상태)를 확인하세요.
+> `0.6.0` developer preview release candidate가 준비됐습니다. `v0.6.0` tag는 아직 생성·push되지 않았고 marketplace publication도 미완료입니다. 공개 라이선스도 선택되지 않았으므로 실제 사용·복제·재배포 전에는 [현재 배포 상태](#현재-배포-상태)를 확인하세요.
 
 ## 이런 문제를 해결합니다
 
@@ -25,7 +25,7 @@ Context Plugins는 모든 대화를 보관하지 않습니다. 현재 판단에 
 | `context-assumption` | 미검증 전제 `ASM`, 확인·반증 조건, confirm/refute/supersede lifecycle | `context-core@context-plugins` 필요, 선택 설치 |
 | `context-term` | 프로젝트 전용 용어 `TERM`, canonical definition과 alias/deprecation lifecycle | `context-core@context-plugins` 필요, 선택 설치 |
 
-지원하는 developer-preview profile은 `context-core`와 `context-decision`을 별도로 설치한 뒤 `$context-decision:init`을 한 번 실행하는 구성입니다. bundle/meta-plugin은 없습니다. ASM과 TERM은 optional experimental surface이며 서로를 자동 설치하거나 대신 초기화하지 않습니다.
+지원하는 developer-preview profile은 release checkout의 root installer를 한 번 실행해 `context-core`와 `context-decision`을 같은 version·scope의 독립 package로 설치한 뒤 `$context-decision:init`을 한 번 실행하는 구성입니다. bundle/meta-plugin은 없고 decision code를 core에 내장하지 않습니다. Profile manifest와 installer는 배포 도구일 뿐이며, 설치된 plugin이 다른 plugin을 자동 설치·활성화·update하지 않습니다. ASM과 TERM은 optional experimental surface입니다.
 
 core와 semantic addon은 반드시 같은 immutable release checkout에서 함께 설치·update해야 합니다. 각 addon이 exact core entrypoint bytes를 고정하므로 혼합 설치나 일부만 update한 상태는 `core_surface_mismatch`로 중단됩니다. 이때 core와 해당 addon을 같은 release로 함께 다시 설치·update하고 host reload 뒤 재시도합니다.
 
@@ -51,26 +51,26 @@ context/*.md와 index를 하나의 transaction으로 갱신
 
 ## 설치
 
-아래 명령은 owner가 `v0.5.1` tag와 release commit push를 승인·완료한 뒤에만 사용할 수 있습니다. mutable branch가 아니라 exact tag를 사용합니다.
+아래 명령은 owner가 `v0.6.0` tag push를 승인·완료한 뒤에만 사용할 수 있습니다. 먼저 mutable branch가 아닌 exact tag checkout을 만듭니다.
+
+```bash
+git clone --branch v0.6.0 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.6.0
+cd context-plugins-v0.6.0
+```
 
 ### Codex
 
 ```bash
-codex plugin marketplace add Jeis-Jw/context-plugins --ref v0.5.1
-codex plugin add context-core@context-plugins
-codex plugin add context-decision@context-plugins
+python3 scripts/install_profile.py --host codex
 ```
 
 ### Claude Code
 
 ```bash
-git clone --branch v0.5.1 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.5.1
-claude plugin marketplace add /absolute/path/to/context-plugins-v0.5.1
-claude plugin install context-core@context-plugins
-claude plugin install context-decision@context-plugins
+python3 scripts/install_profile.py --host claude-code --scope user
 ```
 
-Claude Code 2.1.89에는 marketplace `--ref` option이 없어 exact tag local checkout을 먼저 만듭니다. ASM/TERM이 필요하면 같은 checkout에서 각각 설치하되 experimental surface로 취급합니다. 설치 scope와 활성화 범위는 host가 제공하는 수단 안에서 사용자가 직접 정해야 하며, 플러그인이 다른 플러그인을 자동 설치·활성화·update하거나 host 설정을 임의로 바꾸지 않습니다.
+Installer는 release surface 정합성을 확인하고, 구형 provider가 enabled 상태이거나 같은 marketplace가 다른 checkout을 가리키면 host를 바꾸기 전에 중단합니다. 기존 설치 제거·migration·rollback은 자동 수행하지 않습니다. ASM/TERM이 필요하면 같은 checkout에서 각각 설치하되 experimental surface로 취급합니다. 설치된 plugin은 다른 plugin을 자동 설치·활성화·update하거나 host 설정을 임의로 바꾸지 않습니다.
 
 설치 후 host를 reload하거나 새 session을 여세요.
 
@@ -136,7 +136,7 @@ context/
 - Hard bound는 artifact body materialization/open, selected output, candidate/envelope와 owner input에 적용됩니다. Index row scoring·directory enumeration과 end-to-end host/model token 사용량은 corpus 크기와 무관한 O(1)을 보장하지 않습니다.
 - common primary-claim protocol 상한은 2,000 codepoint입니다. Built-in SNAP `current_context`, OBS `observation`, DEC `decision`은 각각 owner-specific 1,200 codepoint 상한을 적용합니다.
 - background daemon처럼 대화를 수집하거나 transcript 전체를 자동 보관하지 않습니다.
-- 명시적 `init` 외에는 plugin 설치·활성화와 host configuration을 자동으로 변경하지 않습니다.
+- 사용자가 명시적으로 실행한 root profile installer 외에는 plugin 설치·활성화와 host configuration을 변경하지 않습니다. `init`은 repository-local scaffold와 managed policy만 다룹니다.
 - release-pinned core runtime, schema·protocol·required features/commands 또는 operation별 doctor state가 요구 조건과 다르면 target write는 0입니다. 이 검증은 marketplace provenance, catalog source 또는 host enabled state를 attest하지 않습니다.
 - 기존 `wiki/`나 과거 distribution의 context를 자동 migration하지 않습니다.
 
@@ -144,8 +144,8 @@ context/
 
 | 근거 | 결과 | 경계 |
 |---|---|---|
-| Python 3.11 전체 suite, 2026-08-23 | 257 passed, 191 subtests | `python3.11 -m pytest -q` |
-| Python 3.13 전체 suite, 2026-08-23 | 257 passed, 191 subtests | `python3.13 -m pytest -q` |
+| Python 3.11 전체 suite, 2026-08-24 | 292 passed, 220 subtests | `python3.11 -m pytest -q` |
+| Python 3.13 전체 suite, 2026-08-24 | 292 passed, 220 subtests | `python3.13 -m pytest -q` |
 | 두 interpreter의 Phase 0 | 각각 15 passed | `PYTHONPATH=tests/context-v1/phase0 pythonX -m pytest -q tests/context-v1/phase0` |
 | Codex `0.149.0-alpha.4.1` | core+decision fresh install/cache lifecycle 통과 | actual model behavior 근거 아님 |
 | Claude Code `2.1.89` | core+decision fresh install/cache lifecycle 통과 | runtime UX는 experimental |
@@ -158,9 +158,9 @@ Codex prompt material은 3,147자에서 1,331자로 57.7% 감소했습니다. �
 
 | 항목 | 상태 |
 |---|---|
-| GitHub repository | [`Jeis-Jw/context-plugins`](https://github.com/Jeis-Jw/context-plugins) repository는 public이지만 local `0.5.1` release commit은 아직 push하지 않음 |
-| 준비 중인 version | `0.5.1` — 네 plugin manifest·두 local catalog·runtime/tests/docs parity |
-| immutable ref | `v0.5.1` 계획 — tag 미생성·미push, owner 승인 필요 |
+| GitHub repository | [`Jeis-Jw/context-plugins`](https://github.com/Jeis-Jw/context-plugins) — release candidate source와 tag/publication 상태는 구분 |
+| 준비 중인 version | `0.6.0` — 네 plugin manifest·두 local catalog·runtime/tests/profile/docs parity |
+| immutable ref | `v0.6.0` 계획 — tag 미생성·미push, owner 승인 필요 |
 | Marketplace identity | `context-plugins` |
 | Storage protocol | `context-common/v2` |
 | Codex·Claude Code manifests | local release unit에 포함, publication evidence 아님 |

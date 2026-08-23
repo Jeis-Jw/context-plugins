@@ -4,17 +4,17 @@ Durable project context for coding agents, centered on decisions.
 
 `context-decision` restores what the project chose, why it chose it, and which alternatives it rejected. `context-core` supplies Git/Markdown storage, bounded recall, approval previews, and the only physical write coordinator. Context is proposed only when worth keeping and written only after the user sees the complete preview and answers the capture question directly.
 
-> Developer preview: `0.5.1` is prepared locally, but the `v0.5.1` tag has not been created or pushed. Marketplace publication is also pending. The repository has no `LICENSE`; an owner must choose one before inviting public use, copying, or redistribution.
+> Developer preview: the `0.6.0` release candidate is prepared, but the `v0.6.0` tag has not been created or pushed. Marketplace publication is also pending. The repository has no `LICENSE`; an owner must choose one before inviting public use, copying, or redistribution.
 
 ## Supported profile
 
 The supported developer-preview profile is deliberately small:
 
-1. Install `context-core@context-plugins` and `context-decision@context-plugins` separately.
+1. Run the release checkout's profile installer once. It installs `context-core@context-plugins` and `context-decision@context-plugins` as two separate packages at the same version and scope.
 2. Reload the host or start a new session.
 3. Run `$context-decision:init` once in the target Git repository.
 
-There is no bundle or meta-plugin. `context-decision:init` uses the separately installed core to initialize core storage, register the DEC area, and install the managed host policy in one idempotent operation. A separate `$context-core:init` is not required for this profile.
+There is no bundle or meta-plugin, and decision code is not embedded in core. The root profile manifest and installer are distribution tooling only; installed plugins never install, enable, update, or replace another plugin. `context-decision:init` uses the separately installed core to initialize core storage, register the DEC area, and install the managed host policy in one idempotent operation. A separate `$context-core:init` is not required for this profile.
 
 Install core and every semantic addon from the same immutable release checkout. Each addon pins the exact core entrypoint bytes; a mixed or partially updated install fails with `core_surface_mismatch`. Update or reinstall core and the affected addon together, reload the host, and retry.
 
@@ -39,30 +39,30 @@ conversation delta
   -> context-core applies one transaction
 ```
 
-## Install after the owner publishes `v0.5.1`
+## Install after the owner publishes `v0.6.0`
 
-These commands intentionally use the immutable `v0.5.1` ref. They will not work until the owner approves the release, creates the tag, and pushes the tag and release commit.
+These commands intentionally use the immutable `v0.6.0` ref. They will not work until the owner approves and pushes that tag. First create one exact local checkout:
+
+```bash
+git clone --branch v0.6.0 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.6.0
+cd context-plugins-v0.6.0
+```
 
 ### Codex
 
 ```bash
-codex plugin marketplace add Jeis-Jw/context-plugins --ref v0.5.1
-codex plugin add context-core@context-plugins
-codex plugin add context-decision@context-plugins
+python3 scripts/install_profile.py --host codex
 ```
 
 ### Claude Code
 
-Claude Code 2.1.89 does not expose a marketplace `--ref` option. Check out the exact tag first, then add that immutable local checkout:
+Choose the explicit Claude Code installation scope for the same checkout:
 
 ```bash
-git clone --branch v0.5.1 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.5.1
-claude plugin marketplace add /absolute/path/to/context-plugins-v0.5.1
-claude plugin install context-core@context-plugins
-claude plugin install context-decision@context-plugins
+python3 scripts/install_profile.py --host claude-code --scope user
 ```
 
-After installation, reload the host or open a new session and run `$context-decision:init` once. Choose the host installation scope explicitly; plugins do not add marketplaces, install, enable, update, or change host scope on their own.
+The installer validates the exact release surface, rejects an enabled legacy provider or a marketplace pointing at another checkout, then asks the host to install core before decision. It never removes, migrates, or rolls back host state automatically. After installation, reload the host or open a new session and run `$context-decision:init` once. The installed plugins themselves do not add marketplaces, install, enable, update, or change host scope.
 
 Optional experimental owners, after the same exact checkout is installed:
 
@@ -90,8 +90,8 @@ Run each optional owner's init once. One addon never initializes another addon.
 
 | Evidence | Result | Boundary |
 |---|---|---|
-| Python 3.11 full suite, 2026-08-23 | 257 passed, 191 subtests | `python3.11 -m pytest -q` |
-| Python 3.13 full suite, 2026-08-23 | 257 passed, 191 subtests | `python3.13 -m pytest -q` |
+| Python 3.11 full suite, 2026-08-24 | 292 passed, 220 subtests | `python3.11 -m pytest -q` |
+| Python 3.13 full suite, 2026-08-24 | 292 passed, 220 subtests | `python3.13 -m pytest -q` |
 | Phase 0 on both interpreters | 15 passed each | `PYTHONPATH=tests/context-v1/phase0 pythonX -m pytest -q tests/context-v1/phase0` |
 | Codex `0.149.0-alpha.4.1` | Fresh install and cache lifecycle passed for core+decision | Host lifecycle evidence, not model-behavior evidence |
 | Claude Code `2.1.89` | Fresh install and cache lifecycle passed for core+decision | Runtime UX remains experimental |
@@ -104,9 +104,9 @@ Codex prompt material was reduced from 3,147 to 1,331 characters, a 57.7% charac
 
 | Item | Status |
 |---|---|
-| Prepared version | `0.5.1` across four manifests, two catalogs, runtime/test constants, and docs |
-| Immutable ref | `v0.5.1` planned; tag not created or pushed |
-| Repository push | Pending owner approval |
+| Prepared version | `0.6.0` across four manifests, two catalogs, runtime/test constants, profile, and docs |
+| Immutable ref | `v0.6.0` planned; tag not created or pushed |
+| Repository source | Release candidate prepared on `main`; tag and publication remain separate |
 | Marketplace publication | Pending owner approval |
 | Public license | Not selected; `LICENSE` intentionally absent until the owner chooses one |
 | Supported runtime path | Developer-preview core+decision profile |

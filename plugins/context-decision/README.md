@@ -4,11 +4,11 @@
 
 ## Supported developer-preview path
 
-1. Install `context-core@context-plugins` and `context-decision@context-plugins` separately from the immutable `v0.5.1` checkout.
+1. From the immutable `v0.6.0` checkout, run the root `core-decision` profile installer once. It installs `context-core@context-plugins` and `context-decision@context-plugins` as separate packages.
 2. Reload the host or open a new session.
 3. Run `$context-decision:init` once in the target Git repository.
 
-There is no bundle or meta-plugin. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.5.1` tag is not published yet; installation and publication remain owner-gated.
+There is no bundle or meta-plugin, and decision code is not embedded in core. The root installer is explicit distribution tooling; this plugin never changes host installation state. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.6.0` tag is not published yet; tag creation and publication remain owner-gated.
 
 Core and decision must come from the same immutable release checkout. Decision pins the exact core entrypoint bytes, so a mixed or partially updated install fails with `core_surface_mismatch`; update or reinstall both together, reload the host, and retry.
 

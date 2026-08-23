@@ -10,7 +10,7 @@
         "source": "local",
         "path": "./plugins/context-core"
       },
-      "version": "0.5.1",
+      "version": "0.6.0",
       "description": "Proactive scoped recall and approval-gated context capture with coordinated writes.",
       "policy": {
         "installation": "AVAILABLE",
@@ -24,7 +24,7 @@
         "source": "local",
         "path": "./plugins/context-decision"
       },
-      "version": "0.5.1",
+      "version": "0.6.0",
       "description": "Decision continuity with actual-body comparison, proactive conflict notices, and approval-gated capture.",
       "policy": {
         "installation": "AVAILABLE",
@@ -38,7 +38,7 @@
         "source": "local",
         "path": "./plugins/context-assumption"
       },
-      "version": "0.5.1",
+      "version": "0.6.0",
       "description": "Provisional project assumptions with explicit verification conditions and evidence-bound lifecycle transitions.",
       "policy": {
         "installation": "AVAILABLE",
@@ -52,7 +52,7 @@
         "source": "local",
         "path": "./plugins/context-term"
       },
-      "version": "0.5.1",
+      "version": "0.6.0",
       "description": "Authoritative project terminology with scoped canonical slots and bounded lifecycle transitions.",
       "policy": {
         "installation": "AVAILABLE",

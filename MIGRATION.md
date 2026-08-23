@@ -52,4 +52,12 @@ No storage migration is required. Existing callers of `--core-inventory` and `--
 
 The 0.6.0 user contract shows one complete rendered preview and asks one natural-language capture question. Only a direct, explicit, unconditional affirmative answer authorizes apply; `알겠어` alone, conditions, edit requests, and topic changes do not. Digests, receipt locations, internal IDs, and core paths remain agent/CLI transport details.
 
-This wording change is not releasable alone: it must integrate with the companion workflow PR before either enters main. Frozen receipt, approval binding, repository identity, pinned core SHA, CAS, lock, atomic writes, and no-regeneration-after-approval remain unchanged. No storage migration is required.
+The wording and workflow changes ship as one release unit. Frozen receipt, approval binding, repository identity, pinned core SHA, CAS, lock, atomic writes, and no-regeneration-after-approval remain unchanged. No storage migration is required.
+
+### Core-based extension packaging
+
+`context-core`, `context-decision`, `context-assumption`, and `context-term` remain separate plugin packages. Core owns storage, indexes, transaction validation and physical writes; semantic owners keep their schemas, actual-body comparison and lifecycle meaning. The rejected topology spike copied decision into core, but none of those bytes are part of the 0.6.0 release candidate.
+
+For fresh core+decision installs, the immutable release checkout contains `profiles/core-decision.json` and `scripts/install_profile.py`. One explicit installer invocation asks the host to register that checkout and install core followed by decision at the same version and selected scope. This is distribution tooling, not a plugin dependency or runtime auto-install path. It does not initialize repositories, migrate corpus, remove old coordinates, replace an existing marketplace, or roll back partial host changes automatically.
+
+An enabled `context-core@jeis-ai-plugins` or `context-decision@jeis-ai-plugins`, an existing `context-plugins` marketplace pointing at another checkout, a disabled target plugin, or a mixed target version fails before the installer mutates host state. The user must explicitly disable, uninstall or update those coordinates and then rerun the installer from the exact `v0.6.0` checkout. Repository artifacts remain untouched throughout distribution migration.

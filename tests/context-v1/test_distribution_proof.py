@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PHASE0 = ROOT / "tests/context-v1/phase0/phase0_contract.py"
 PLUGIN_NAMES = ("context-core", "context-decision", "context-assumption", "context-term")
-RELEASE_VERSION = "0.5.1"
+RELEASE_VERSION = "0.6.0"
 OWNER_SKILLS = {
     "context-core": "context",
     "context-decision": "decision",
@@ -55,10 +55,10 @@ FORBIDDEN_KEYS = {
 }
 BASELINE_SKILL_BYTES = 40_715
 UNCHANGED_EXPERIMENTAL_MANIFESTS = {
-    "plugins/context-assumption/.claude-plugin/plugin.json": "860fb98c5d941c161b1e07f5f09e0d88e6b958a7690cc401b4d3b5af2b239ada",
-    "plugins/context-assumption/.codex-plugin/plugin.json": "870de161652f0855e4f54725aa1354c3a0c3e70bcbc1c95fc2d6212d08b88724",
-    "plugins/context-term/.claude-plugin/plugin.json": "478103eda176fa857cb11427e0f31700b329638aec4d6a34332bfc9fbc11ffeb",
-    "plugins/context-term/.codex-plugin/plugin.json": "17e34d98b3d2089a0a6e086733cfeb1f675636f6c36e26747287c4fda1da7d91",
+    "plugins/context-assumption/.claude-plugin/plugin.json": "618fa51cb2d27fde7ff4e1922a94fd2ccb341ba9aca09263af30f272b60fb25a",
+    "plugins/context-assumption/.codex-plugin/plugin.json": "b5c3b01bbbffd87f065dd0bcfe6a92adce35c73fd74cd29553d030037173f4b4",
+    "plugins/context-term/.claude-plugin/plugin.json": "2ba85238da40290000746e4a16f6ef27a5d4752174bd67b6f3b3256c879b9cdc",
+    "plugins/context-term/.codex-plugin/plugin.json": "55170848ee4501a8ab75411d513960d3e334f8ffa5f1292b16804cd8039ae246",
 }
 
 
@@ -356,10 +356,20 @@ class DistributionProofTests(unittest.TestCase):
             "Not selected",
         ):
             self.assertIn(token, readme)
-        self.assertIn("v0.5.1", readme)
-        self.assertIn("--ref v0.5.1", readme)
-        self.assertIn("--branch v0.5.1", readme)
+        self.assertIn("v0.6.0", readme)
+        self.assertIn("--branch v0.6.0", readme)
+        self.assertIn("scripts/install_profile.py --host codex", readme)
+        self.assertIn("scripts/install_profile.py --host claude-code --scope user", readme)
         self.assertNotIn("--ref main", readme)
+        profile = read_json(ROOT / "profiles/core-decision.json")
+        self.assertEqual("context-plugin-profile/v1", profile["schema"])
+        self.assertEqual(RELEASE_VERSION, profile["version"])
+        self.assertEqual(
+            ["context-core@context-plugins", "context-decision@context-plugins"],
+            profile["plugins"],
+        )
+        self.assertTrue((ROOT / "scripts/install_profile.py").is_file())
+        self.assertFalse((ROOT / "plugins/context-core/skills/decision").exists())
         self.assertTrue((ROOT / "README.ko.md").is_file())
         self.assertFalse((ROOT / "LICENSE").exists())
         self.assertFalse((ROOT / "wiki").exists())
@@ -587,8 +597,8 @@ class DistributionProofTests(unittest.TestCase):
         for token in ("W1-W3", "context-common/v2", "linked worktree", "@file", "@@literal"):
             self.assertIn(token, migration)
         for token in (
-            "2026-08-23",
-            "257 passed, 191 subtests",
+            "2026-08-24",
+            "292 passed, 220 subtests",
             "Phase 0",
             "15 passed each",
             "0.149.0-alpha.4.1",
@@ -624,9 +634,10 @@ class DistributionProofTests(unittest.TestCase):
         )
         for token in ("complete preview", "직접적·명시적·무조건적", "`알겠어`", "context-common/v2"):
             self.assertIn(token, korean_readme)
-        self.assertIn("`0.5.1` developer preview는 local release 후보 commit으로 준비됐습니다", korean_readme)
-        self.assertIn("local `0.5.1` release 후보 commit도 아직 push되지 않았고", korean_readme)
-        self.assertIn("`v0.5.1` tag는 아직 생성·push되지 않았으며", korean_readme)
+        self.assertIn("`0.6.0` developer preview release candidate가 준비됐습니다", korean_readme)
+        self.assertIn("`v0.6.0` tag는 아직 생성·push되지 않았고", korean_readme)
+        self.assertIn("독립 package", korean_readme)
+        self.assertIn("scripts/install_profile.py --host codex", korean_readme)
         self.assertNotIn("tag와 release commit은 아직 생성·push되지 않았", korean_readme)
 
     def test_public_help_exposes_capture_limits_and_core_trust(self) -> None:
