@@ -317,6 +317,9 @@ class TermSecurityRegressionTests(unittest.TestCase):
                 "root": "context/",
                 "issues": [],
                 "warnings": [],
+                "plugin_version": "0.5.1",
+                "entrypoint": str(helpers.CORE_CLI_PATH.resolve()),
+                "protocol": "context-common/v2",
             }
             cases = []
             wrong_schema = dict(base, schema="context-core-doctor/v0")
@@ -326,6 +329,8 @@ class TermSecurityRegressionTests(unittest.TestCase):
             missing = dict(base)
             missing.pop("warnings")
             cases.append(("missing-field", missing, ("batch", "validate", "--owner-result", f"@{result_path}")))
+            wrong_self_report = dict(base, plugin_version="0.5.0")
+            cases.append(("wrong-self-report", wrong_self_report, ("read", "--signal", term_cli.SIGNAL, "--id", "ctx_550e8400e29b41d4a716446655440000")))
             ready_issues = dict(base, issues=[{"code": "owner_profile_mismatch", "path": "context/context.index.md"}])
             cases.append(("ready-issues", ready_issues, ("batch", "validate", "--owner-result", f"@{result_path}")))
             before = helpers.tree_digest(repo)

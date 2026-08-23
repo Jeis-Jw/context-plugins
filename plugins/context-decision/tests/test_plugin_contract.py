@@ -31,6 +31,7 @@ CLI_PATH = ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli
 WORKFLOW_PATH = ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
 INIT_PATH = ROOT / "plugins/context-decision/skills/init/scripts/decision_init.py"
 CORE_CLI_PATH = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
+decision_cli = load("context_decision_plugin_contract", CLI_PATH)
 
 
 def digest_tree(root: Path) -> str:
@@ -76,6 +77,36 @@ def run_cli(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 class PluginContractTests(unittest.TestCase):
+    def test_core_doctor_handshake_requires_the_exact_ten_field_self_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            completed = subprocess.run(
+                [sys.executable, str(CORE_CLI_PATH), "doctor", "--json"],
+                cwd=repo,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            doctor = json.loads(completed.stdout)["result"]
+            self.assertEqual(
+                {
+                    "schema", "owner", "supported_protocols", "repository_state", "root", "issues", "warnings",
+                    "plugin_version", "entrypoint", "protocol",
+                },
+                set(doctor),
+            )
+            self.assertEqual(
+                doctor,
+                decision_cli.validate_core_doctor_handshake(doctor, allowed_states={"absent"}),
+            )
+            for field, value in (("protocol", "context-common/v1"), ("plugin_version", "0.5.0"), ("entrypoint", "/tmp/context_cli.py")):
+                with self.subTest(field=field):
+                    forged = dict(doctor, **{field: value})
+                    with self.assertRaises(decision_cli.DecisionError):
+                        decision_cli.validate_core_doctor_handshake(forged, allowed_states={"absent"})
+
     def test_acceptance_02_core_missing(self) -> None:
         fixtures = ROOT / "tests/context-v1/fixtures/host-inventory"
         required = json.loads((fixtures / "required-plugin.json").read_text(encoding="utf-8"))

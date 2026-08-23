@@ -605,6 +605,45 @@ class TransactionCoordinatorTests(unittest.TestCase):
             index = context_cli.parse_area_index((repo / "context/observation/observation.index.md").read_text(encoding="utf-8"))
             self.assertEqual("context/observation/새 이름.md", index.current[0]["path"])
 
+    def test_generic_rename_and_discard_support_explicit_receipt_without_default_locator(self) -> None:
+        with git_repo() as temp, tempfile.TemporaryDirectory() as outer:
+            repo = Path(temp)
+            receipt_root = Path(outer) / "receipts"
+            receipt_root.mkdir(mode=0o700)
+            initialize(repo)
+            capture = context_cli.finalize_owner_result(repo, observation_owner_result())
+            context_cli.apply_bundle(repo, capture["bundle"], capture["approval_digest"])
+
+            for command, receipt_name in (
+                (("rename", "--id", "ctx_550e8400e29b41d4a716446655440000", "--filename", "새 이름.md"), "rename.json"),
+                (("discard", "--id", "ctx_550e8400e29b41d4a716446655440000"), "discard.json"),
+            ):
+                receipt_path = receipt_root / receipt_name
+                preview = subprocess.run(
+                    [sys.executable, str(CLI_PATH), *command, "--receipt-file", str(receipt_path), "--json"],
+                    cwd=repo,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
+                result = json.loads(preview.stdout)["result"]
+                self.assertEqual({"approval_preview", "approval_digest", "receipt_file"}, set(result))
+                applied = subprocess.run(
+                    [
+                        sys.executable, str(CLI_PATH), "transaction", "apply",
+                        "--receipt-file", str(receipt_path),
+                        "--approved-digest", result["approval_digest"],
+                        "--json",
+                    ],
+                    cwd=repo,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+                self.assertFalse(receipt_path.exists())
+
+            self.assertFalse((repo / "context/observation/새 이름.md").exists())
+
     def test_owner_result_becomes_final_bundle_and_only_core_applies(self) -> None:
         with git_repo() as temp:
             repo = Path(temp)

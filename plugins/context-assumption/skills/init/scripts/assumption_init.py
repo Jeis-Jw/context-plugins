@@ -11,7 +11,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 
 ASSUMPTION_CLI = pathlib.Path(__file__).resolve().parents[2] / "assumption/scripts/assumption_cli.py"
@@ -97,36 +97,13 @@ def _repository_root() -> pathlib.Path:
     return pathlib.Path(completed.stdout.strip()).resolve()
 
 
-def _validate_doctor(doctor: Any) -> dict[str, Any]:
-    required = {"schema", "owner", "supported_protocols", "repository_state", "root", "issues", "warnings"}
-    if not isinstance(doctor, dict) or set(doctor) != required:
-        raise ValueError("core doctor fields differ from context-core-doctor/v1")
-    protocols = doctor.get("supported_protocols")
-    issues = doctor.get("issues")
-    warnings = doctor.get("warnings")
-    if (
-        doctor.get("schema") != "context-core-doctor/v1"
-        or doctor.get("owner") != "context-core"
-        or doctor.get("root") != "context/"
-        or doctor.get("repository_state") not in {"absent", "partial", "invalid", "ready"}
-        or not isinstance(protocols, list)
-        or not protocols
-        or len(protocols) != len(set(protocols))
-        or any(not isinstance(item, str) or not item for item in protocols)
-        or not isinstance(issues, list)
-        or not isinstance(warnings, list)
-    ):
-        raise ValueError("core doctor identity or field shape is invalid")
-    for diagnostics in (issues, warnings):
-        if any(not isinstance(item, dict) or not isinstance(item.get("code"), str) or not item["code"] for item in diagnostics):
-            raise ValueError("core doctor diagnostics are invalid")
-    if doctor["repository_state"] == "ready" and issues:
-        raise ValueError("ready core doctor has issues")
-    return doctor
-
-
-def _postcondition(repo: pathlib.Path, plan: dict[str, Any], doctor: dict[str, Any]) -> dict[str, Any]:
-    doctor = _validate_doctor(doctor)
+def _postcondition(
+    repo: pathlib.Path,
+    plan: dict[str, Any],
+    doctor: dict[str, Any],
+    validate_doctor: Callable[[Any], dict[str, Any]],
+) -> dict[str, Any]:
+    doctor = validate_doctor(doctor)
     if (
         doctor.get("repository_state") != "ready"
         or doctor.get("issues") != []
@@ -249,8 +226,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _forward(post_doctor)
     try:
         doctor = json.loads(post_doctor.stdout)["result"]
-        postcondition = _postcondition(_repository_root(), plan, doctor)
-    except (KeyError, TypeError, json.JSONDecodeError, OSError, UnicodeError, ValueError) as error:
+        postcondition = _postcondition(_repository_root(), plan, doctor, assumption_cli.validate_core_doctor)
+    except (assumption_cli.AssumptionError, KeyError, TypeError, json.JSONDecodeError, OSError, UnicodeError, ValueError) as error:
         return _error(
             "core_bootstrap_postcondition_invalid",
             "context-core reported bootstrap success without exact ASM registration",

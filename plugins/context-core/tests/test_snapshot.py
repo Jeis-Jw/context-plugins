@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
+import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -36,6 +39,23 @@ def tree_digest(root: Path) -> str:
 def initialize(repo: Path) -> None:
     preview = context_cli.build_init_bundle(repo)
     context_cli.apply_bundle(repo, preview["bundle"], preview["approval_digest"])
+
+
+def run_cli(
+    repo: Path,
+    *arguments: str,
+    environment: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    command_environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    if environment:
+        command_environment.update(environment)
+    return subprocess.run(
+        [sys.executable, str(CLI_PATH), *arguments],
+        cwd=repo,
+        env=command_environment,
+        text=True,
+        capture_output=True,
+    )
 
 
 def claim_attestation(candidate: dict, kind: str) -> dict:
@@ -84,6 +104,146 @@ def snapshot_preview(repo: Path, title: str, filename: str | None = None) -> dic
 
 
 class SnapshotTests(unittest.TestCase):
+    def test_flag_only_save_freezes_private_receipt_and_applies_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            private_temp = root / "private-temp"
+            repo.mkdir()
+            private_temp.mkdir(mode=0o700)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            before = tree_digest(repo)
+
+            preview = run_cli(
+                repo,
+                "snapshot", "save",
+                "--title", "인증 handoff",
+                "--summary", "unfinished 인증 작업을 재개한다.",
+                "--captured-from", "conversation",
+                "--attest-handoff-requested",
+                "--attest-unfinished-context-present",
+                "--sec-context", "인증 callback 구현이 진행 중이다.",
+                "--sec-open-items", "public route 회귀를 추가한다.",
+                "--sec-next-steps", "focused suite를 실행한다.",
+                "--json",
+                environment={"TMPDIR": str(private_temp)},
+            )
+
+            self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
+            result = json.loads(preview.stdout)["result"]
+            self.assertEqual({"approval_preview", "approval_digest", "receipt_file"}, set(result))
+            self.assertEqual(before, tree_digest(repo))
+            receipt_path = Path(result["receipt_file"])
+            self.assertEqual(0o700, stat.S_IMODE(receipt_path.parent.stat().st_mode))
+            self.assertEqual(0o600, stat.S_IMODE(receipt_path.stat().st_mode))
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                context_cli.canonical_digest({"core": receipt["core"], "plan_bundle": receipt["plan_bundle"]}),
+                result["approval_digest"],
+            )
+            self.assertNotEqual(receipt["receipt_digest"], result["approval_digest"])
+            self.assertEqual(
+                receipt["plan_id"],
+                receipt["plan_bundle"]["approval_material"]["plan"]["plan_id"],
+            )
+            owner_material_id = receipt["plan_bundle"]["approval_material"]["plan"]["owner_result_material"]
+            owner_material = next(
+                item for item in receipt["plan_bundle"]["materials"]
+                if item["material_id"] == owner_material_id
+            )
+            owner_result = json.loads(owner_material["content"])
+            attestation = next(
+                item for item in owner_result["semantic_attestations"]
+                if item["operation"] == "claim"
+            )
+            assertions = {item["name"]: item["evidence_pointers"] for item in attestation["assertions"]}
+            self.assertEqual(["/owner_inputs/snapshot/current_context"], assertions["handoff_requested"])
+            self.assertEqual(["/owner_inputs/snapshot/open_items/0"], assertions["unfinished_context_present"])
+
+            applied = run_cli(
+                repo,
+                "transaction", "apply",
+                "--receipt-file", str(receipt_path),
+                "--approved-digest", result["approval_digest"],
+                "--json",
+                environment={"TMPDIR": str(private_temp)},
+            )
+            self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+            self.assertTrue(json.loads(applied.stdout)["result"]["applied"])
+            self.assertFalse(receipt_path.exists())
+            artifacts = [
+                path for path in (repo / "context/snapshot").glob("*.md")
+                if path.name != "snapshot.index.md"
+            ]
+            self.assertEqual(1, len(artifacts))
+
+    def test_attestation_file_and_snapshot_flags_are_mutually_exclusive(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            private_temp = root / "private-temp"
+            repo.mkdir()
+            private_temp.mkdir(mode=0o700)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            proof = root / "attestation.json"
+            proof.write_text("{}", encoding="utf-8")
+            before = tree_digest(repo)
+
+            completed = run_cli(
+                repo,
+                "snapshot", "save",
+                "--title", "혼용 차단",
+                "--summary", "attestation transport는 하나만 선택한다.",
+                "--captured-from", "conversation",
+                "--attestation", f"@{proof}",
+                "--attest-handoff-requested",
+                "--attest-unfinished-context-present",
+                "--sec-context", "handoff가 요청됐다.",
+                "--sec-open-items", "unfinished task가 남았다.",
+                "--sec-next-steps", "회귀를 실행한다.",
+                "--json",
+                environment={"TMPDIR": str(private_temp)},
+            )
+
+            self.assertNotEqual(0, completed.returncode)
+            self.assertEqual(before, tree_digest(repo))
+            self.assertFalse((private_temp / "context-core").exists())
+
+    def test_snapshot_attestation_flags_require_the_complete_pair_before_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            private_temp = root / "private-temp"
+            repo.mkdir()
+            private_temp.mkdir(mode=0o700)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            common = [
+                "snapshot", "save",
+                "--title", "불완전 flags",
+                "--summary", "두 semantic assertion이 모두 필요하다.",
+                "--captured-from", "conversation",
+                "--sec-context", "handoff가 요청됐다.",
+                "--sec-open-items", "unfinished task가 남았다.",
+                "--sec-next-steps", "회귀를 실행한다.",
+            ]
+            before = tree_digest(repo)
+
+            for flags in ((), ("--attest-handoff-requested",), ("--attest-unfinished-context-present",)):
+                with self.subTest(flags=flags):
+                    completed = run_cli(
+                        repo,
+                        *common,
+                        *flags,
+                        "--json",
+                        environment={"TMPDIR": str(private_temp)},
+                    )
+                    self.assertNotEqual(0, completed.returncode)
+                    self.assertEqual(before, tree_digest(repo))
+                    self.assertFalse((private_temp / "context-core").exists())
+
     def test_acceptance_11_named_snapshots(self) -> None:
         with git_repo() as temp:
             repo = Path(temp)

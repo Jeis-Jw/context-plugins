@@ -20,6 +20,7 @@ EXIT_NOT_FOUND = 3
 EXIT_CONFLICT = 5
 EXIT_INTEGRITY = 6
 PROTOCOL = "context-common/v2"
+CORE_PLUGIN_VERSION = "0.5.1"
 REQUIRED_FEATURE = "context-owner-descriptor/v2"
 TERM_INDEX = "context/term/term.index.md"
 SIGNAL = "term-encountered"
@@ -47,7 +48,7 @@ REQUIRED_PLUGIN = {
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
     "entrypoint": "skills/context/scripts/context_cli.py",
-    "entrypoint_sha256": "sha256:67e122da6face9cedce408e8b024b5a97768d517dc97f5f48c85f3a8128942a5",
+    "entrypoint_sha256": "sha256:9a776e7e964c10495cc7b14f5f3b44d4c8faf13b34d30343af9520dd0360a900",
 }
 
 
@@ -1001,16 +1002,33 @@ def validate_core_doctor(doctor: Any) -> dict[str, Any]:
         if set(doctor) != {"ok", "result"} or doctor.get("ok") is not True or not isinstance(doctor.get("result"), dict):
             raise TermError("core_preflight_invalid", "core doctor public envelope is invalid", exit_code=EXIT_CONFLICT)
         doctor = doctor["result"]
-    required = {"schema", "owner", "supported_protocols", "repository_state", "root", "issues", "warnings"}
+    required = {
+        "schema", "owner", "supported_protocols", "repository_state", "root", "issues", "warnings",
+        "plugin_version", "entrypoint", "protocol",
+    }
     if not isinstance(doctor, dict) or set(doctor) != required:
         raise TermError("core_preflight_invalid", "core doctor fields differ from context-core-doctor/v1", exit_code=EXIT_CONFLICT)
     protocols = doctor.get("supported_protocols")
     issues = doctor.get("issues")
     warnings = doctor.get("warnings")
+    entrypoint = doctor.get("entrypoint")
+    try:
+        resolved_entrypoint = pathlib.Path(entrypoint).resolve(strict=True) if isinstance(entrypoint, str) else None
+        observed_sha256 = bytes_digest(resolved_entrypoint.read_bytes()) if resolved_entrypoint is not None else None
+    except (OSError, RuntimeError):
+        resolved_entrypoint = None
+        observed_sha256 = None
+    required_suffix = pathlib.PurePosixPath(REQUIRED_PLUGIN["entrypoint"]).parts
     if (
         doctor.get("schema") != "context-core-doctor/v1"
         or doctor.get("owner") != "context-core"
         or doctor.get("root") != "context/"
+        or doctor.get("plugin_version") != CORE_PLUGIN_VERSION
+        or doctor.get("protocol") != PROTOCOL
+        or resolved_entrypoint is None
+        or str(resolved_entrypoint) != entrypoint
+        or tuple(resolved_entrypoint.parts[-len(required_suffix):]) != required_suffix
+        or observed_sha256 != REQUIRED_PLUGIN["entrypoint_sha256"]
         or doctor.get("repository_state") not in {"absent", "partial", "invalid", "ready"}
         or not isinstance(protocols, list)
         or not protocols

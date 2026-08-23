@@ -5,6 +5,8 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -38,6 +40,23 @@ def tree_digest(root: Path) -> str:
 def initialize(repo: Path) -> None:
     preview = context_cli.build_init_bundle(repo)
     context_cli.apply_bundle(repo, preview["bundle"], preview["approval_digest"])
+
+
+def run_cli(
+    repo: Path,
+    *arguments: str,
+    environment: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    command_environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    if environment:
+        command_environment.update(environment)
+    return subprocess.run(
+        [sys.executable, str(CLI_PATH), *arguments],
+        cwd=repo,
+        env=command_environment,
+        text=True,
+        capture_output=True,
+    )
 
 
 def claim_attestation(candidate: dict) -> dict:
@@ -94,6 +113,114 @@ def same_claim_attestation(lifecycle_input: dict) -> dict:
 
 
 class ObservationTests(unittest.TestCase):
+    def test_flag_only_capture_freezes_private_receipt_and_applies_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            private_temp = root / "private-temp"
+            repo.mkdir()
+            private_temp.mkdir(mode=0o700)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            before = tree_digest(repo)
+
+            preview = run_cli(
+                repo,
+                "observation", "capture",
+                "--title", "Safari cookie 관찰",
+                "--summary", "브라우저 통합 fixture에서 재현했다.",
+                "--captured-from", "workspace",
+                "--attest-reusable-observation",
+                "--attest-evidence-present",
+                "--sec-observation", "Safari에서 third-party cookie 전달이 차단된다.",
+                "--sec-evidence", "integration fixture에서 재현",
+                "--json",
+                environment={"TMPDIR": str(private_temp)},
+            )
+
+            self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
+            result = json.loads(preview.stdout)["result"]
+            self.assertEqual({"approval_preview", "approval_digest", "receipt_file"}, set(result))
+            self.assertEqual(before, tree_digest(repo), "preview must be repository byte-noop")
+            receipt_path = Path(result["receipt_file"])
+            self.assertEqual((private_temp / "context-core").resolve(), receipt_path.parent)
+            self.assertEqual(0o700, stat.S_IMODE(receipt_path.parent.stat().st_mode))
+            self.assertEqual(0o600, stat.S_IMODE(receipt_path.stat().st_mode))
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                {"schema", "status", "created_at", "plan_id", "core", "plan_bundle", "receipt_digest"},
+                set(receipt),
+            )
+            self.assertEqual("context-core-workflow-receipt/v1", receipt["schema"])
+            self.assertEqual("pending", receipt["status"])
+            self.assertEqual(
+                receipt["plan_bundle"]["approval_material"]["plan"]["plan_id"],
+                receipt["plan_id"],
+            )
+            self.assertEqual(f"{receipt['plan_id']}.json", receipt_path.name)
+            self.assertEqual(
+                {"path": str(CLI_PATH.resolve()), "sha256": context_cli.sha256_bytes(CLI_PATH.read_bytes())},
+                receipt["core"],
+            )
+            receipt_body = dict(receipt)
+            receipt_body.pop("receipt_digest")
+            self.assertEqual(context_cli.canonical_digest(receipt_body), receipt["receipt_digest"])
+            self.assertEqual(
+                context_cli.canonical_digest({"core": receipt["core"], "plan_bundle": receipt["plan_bundle"]}),
+                result["approval_digest"],
+            )
+            self.assertNotEqual(receipt["receipt_digest"], result["approval_digest"])
+
+            applied = run_cli(
+                repo,
+                "transaction", "apply",
+                "--receipt-file", str(receipt_path),
+                "--approved-digest", result["approval_digest"],
+                "--json",
+                environment={"TMPDIR": str(private_temp)},
+            )
+            self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+            applied_result = json.loads(applied.stdout)["result"]
+            self.assertTrue(applied_result["applied"])
+            self.assertFalse(receipt_path.exists())
+            artifacts = [
+                path for path in (repo / "context/observation").glob("*.md")
+                if path.name != "observation.index.md"
+            ]
+            self.assertEqual(1, len(artifacts))
+
+    def test_attestation_file_and_observation_flags_are_mutually_exclusive(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            private_temp = root / "private-temp"
+            repo.mkdir()
+            private_temp.mkdir(mode=0o700)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            proof = root / "attestation.json"
+            proof.write_text("{}", encoding="utf-8")
+            before = tree_digest(repo)
+
+            completed = run_cli(
+                repo,
+                "observation", "capture",
+                "--title", "혼용 차단",
+                "--summary", "attestation transport는 하나만 선택한다.",
+                "--captured-from", "workspace",
+                "--attestation", f"@{proof}",
+                "--attest-reusable-observation",
+                "--attest-evidence-present",
+                "--sec-observation", "하나의 transport만 허용한다.",
+                "--sec-evidence", "executable contract",
+                "--json",
+                environment={"TMPDIR": str(private_temp)},
+            )
+
+            self.assertNotEqual(0, completed.returncode)
+            self.assertEqual(before, tree_digest(repo))
+            self.assertFalse((private_temp / "context-core").exists())
+
     def test_observation_requires_substantive_claim_and_evidence(self) -> None:
         for inputs in (
             {"observation": "TODO", "evidence": ["evidence"]},

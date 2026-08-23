@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -22,11 +23,18 @@ sys.modules[SPEC.name] = context_cli
 SPEC.loader.exec_module(context_cli)
 
 
-def run_cli(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+def run_cli(
+    repo: Path,
+    *arguments: str,
+    environment: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    command_environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    if environment:
+        command_environment.update(environment)
     return subprocess.run(
         [sys.executable, str(CLI_PATH), *arguments],
         cwd=repo,
-        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        env=command_environment,
         text=True,
         capture_output=True,
     )
@@ -135,7 +143,292 @@ def error_code(completed: subprocess.CompletedProcess[str]) -> str:
     return json.loads(completed.stdout)["error"]["code"]
 
 
+def preview_observation_receipt(
+    repo: Path,
+    private_temp: Path,
+    *,
+    receipt_file: Path | None = None,
+) -> tuple[dict, Path]:
+    arguments = [
+        "observation", "capture",
+        "--title", "receipt transport",
+        "--summary", "core와 exact plan bundle을 함께 결박한다.",
+        "--captured-from", "workspace",
+        "--attest-reusable-observation",
+        "--attest-evidence-present",
+        "--sec-observation", "receipt는 저장소 밖에서 동결된다.",
+        "--sec-evidence", "workflow regression fixture",
+    ]
+    if receipt_file is not None:
+        arguments.extend(("--receipt-file", str(receipt_file)))
+    completed = run_cli(
+        repo,
+        *arguments,
+        "--json",
+        environment={"TMPDIR": str(private_temp)},
+    )
+    if completed.returncode:
+        raise AssertionError(completed.stdout + completed.stderr)
+    result = json.loads(completed.stdout)["result"]
+    return result, Path(result["receipt_file"])
+
+
 class SemanticTransportIntegrityTests(unittest.TestCase):
+    def test_receipt_external_digest_blocks_fully_rehashed_core_and_bundle_swaps(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            private_temp = root / "private-temp"
+            repo.mkdir()
+            private_temp.mkdir(mode=0o700)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            result, receipt_path = preview_observation_receipt(repo, private_temp)
+            original = json.loads(receipt_path.read_text(encoding="utf-8"))
+            before = tree_digest(repo)
+
+            fake_core = root / "fake-core.py"
+            fake_core.write_text("# forged core\n", encoding="utf-8")
+            forged_core = copy.deepcopy(original)
+            forged_core["core"] = {
+                "path": str(fake_core.resolve()),
+                "sha256": context_cli.sha256_bytes(fake_core.read_bytes()),
+            }
+            forged_core_body = dict(forged_core)
+            forged_core_body.pop("receipt_digest")
+            forged_core["receipt_digest"] = context_cli.canonical_digest(forged_core_body)
+
+            forged_bundle = copy.deepcopy(original)
+            forged_bundle["plan_bundle"]["approval_material"]["preview"]["effects"][0]["action"] = "forged"
+            forged_bundle["plan_bundle"]["approval_digest"] = context_cli.canonical_digest(
+                forged_bundle["plan_bundle"]["approval_material"]
+            )
+            forged_bundle_body = dict(forged_bundle)
+            forged_bundle_body.pop("receipt_digest")
+            forged_bundle["receipt_digest"] = context_cli.canonical_digest(forged_bundle_body)
+
+            for label, forged in (("core", forged_core), ("bundle", forged_bundle)):
+                with self.subTest(label=label):
+                    receipt_path.write_text(context_cli.canonical_json(forged), encoding="utf-8")
+                    receipt_path.chmod(0o600)
+                    applied = run_cli(
+                        repo,
+                        "transaction", "apply",
+                        "--receipt-file", str(receipt_path),
+                        "--approved-digest", result["approval_digest"],
+                        "--json",
+                    )
+                    self.assertEqual("workflow_approval_digest_mismatch", error_code(applied))
+                    self.assertEqual(before, tree_digest(repo))
+
+            receipt_path.write_text(context_cli.canonical_json(original), encoding="utf-8")
+            receipt_path.chmod(0o600)
+
+    def test_receipt_rejects_shape_and_plan_id_tamper_before_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            private_temp = root / "private-temp"
+            repo.mkdir()
+            private_temp.mkdir(mode=0o700)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            result, receipt_path = preview_observation_receipt(repo, private_temp)
+            original = json.loads(receipt_path.read_text(encoding="utf-8"))
+            before = tree_digest(repo)
+            cases: list[tuple[str, dict]] = []
+            extra = copy.deepcopy(original)
+            extra["unexpected"] = True
+            cases.append(("extra", extra))
+            missing = copy.deepcopy(original)
+            missing.pop("created_at")
+            cases.append(("missing", missing))
+            plan_id = copy.deepcopy(original)
+            plan_id["plan_id"] = "plan_00000000000040008000000000000000"
+            plan_id_body = dict(plan_id)
+            plan_id_body.pop("receipt_digest")
+            plan_id["receipt_digest"] = context_cli.canonical_digest(plan_id_body)
+            cases.append(("plan-id", plan_id))
+
+            for label, forged in cases:
+                with self.subTest(label=label):
+                    receipt_path.write_text(context_cli.canonical_json(forged), encoding="utf-8")
+                    receipt_path.chmod(0o600)
+                    completed = run_cli(
+                        repo,
+                        "transaction", "apply",
+                        "--receipt-file", str(receipt_path),
+                        "--approved-digest", result["approval_digest"],
+                        "--json",
+                    )
+                    self.assertNotEqual(0, completed.returncode)
+                    self.assertEqual(before, tree_digest(repo))
+
+    def test_receipt_path_tristate_validates_default_before_mkdir_and_explicit_does_not_touch_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            unsafe_temp = repo / "private-temp"
+            unsafe_temp.mkdir(mode=0o700)
+            explicit_root = root / "explicit"
+            explicit_root.mkdir(mode=0o700)
+            explicit_receipt = explicit_root / "receipt.json"
+            before = tree_digest(repo)
+
+            explicit_result, actual_path = preview_observation_receipt(
+                repo,
+                unsafe_temp,
+                receipt_file=explicit_receipt,
+            )
+            self.assertEqual(explicit_receipt.resolve(), actual_path)
+            self.assertEqual(before, tree_digest(repo))
+            self.assertFalse((unsafe_temp / "context-core").exists())
+            self.assertTrue(explicit_result["approval_digest"].startswith("sha256:"))
+
+            automatic = run_cli(
+                repo,
+                "observation", "capture",
+                "--title", "unsafe default",
+                "--summary", "default receipt path를 먼저 검증한다.",
+                "--captured-from", "workspace",
+                "--attest-reusable-observation",
+                "--attest-evidence-present",
+                "--sec-observation", "repository 내부 TMPDIR은 거부한다.",
+                "--sec-evidence", "no-touch regression",
+                "--json",
+                environment={"TMPDIR": str(unsafe_temp)},
+            )
+            self.assertNotEqual(0, automatic.returncode)
+            self.assertEqual(before, tree_digest(repo))
+            self.assertFalse((unsafe_temp / "context-core").exists())
+
+            proof = root / "attestation.json"
+            proof.write_text(json.dumps({
+                "assertions": [
+                    {"name": "reusable_observation", "value": True, "evidence_pointers": ["/owner_inputs/observation/observation"]},
+                    {"name": "evidence_present", "value": True, "evidence_pointers": ["/owner_inputs/observation/evidence/0"]},
+                ],
+            }), encoding="utf-8")
+            low_level = run_cli(
+                repo,
+                "observation", "capture",
+                "--title", "legacy bundle",
+                "--summary", "receipt option이 없으면 기존 bundle을 반환한다.",
+                "--captured-from", "workspace",
+                "--attestation", f"@{proof}",
+                "--sec-observation", "legacy low-level bundle은 유지된다.",
+                "--sec-evidence", "tri-state contract",
+                "--json",
+                environment={"TMPDIR": str(unsafe_temp)},
+            )
+            self.assertEqual(0, low_level.returncode, low_level.stdout + low_level.stderr)
+            self.assertIn("bundle", json.loads(low_level.stdout)["result"])
+            self.assertFalse((unsafe_temp / "context-core").exists())
+
+    def test_cleanup_failure_warns_once_and_retry_is_rejected_without_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            private_temp = root / "private-temp"
+            repo.mkdir()
+            private_temp.mkdir(mode=0o700)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            result, receipt_path = preview_observation_receipt(repo, private_temp)
+
+            with mock.patch.object(context_cli, "_unlink_receipt", side_effect=OSError("fixture")):
+                applied = context_cli.apply_receipt(repo, receipt_path, result["approval_digest"])
+            self.assertTrue(applied["applied"])
+            self.assertEqual(["receipt_cleanup_failed"], applied["warnings"])
+            self.assertTrue(receipt_path.exists())
+            after = tree_digest(repo)
+
+            with self.assertRaises(context_cli.ContextError) as caught:
+                context_cli.apply_receipt(repo, receipt_path, result["approval_digest"])
+            self.assertEqual("receipt_already_applied", caught.exception.code)
+            self.assertEqual(after, tree_digest(repo))
+
+    def test_receipt_symlink_traversal_and_mode_checks_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            private_temp = root / "private-temp"
+            repo.mkdir()
+            private_temp.mkdir(mode=0o700)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            initialize(repo)
+            before = tree_digest(repo)
+
+            traversal = root / "explicit" / ".." / "traversal.json"
+            (root / "explicit").mkdir(mode=0o700)
+            traversal_attempt = run_cli(
+                repo,
+                "observation", "capture",
+                "--title", "traversal",
+                "--summary", "non-canonical receipt path를 거부한다.",
+                "--captured-from", "workspace",
+                "--attest-reusable-observation",
+                "--attest-evidence-present",
+                "--sec-observation", "path traversal은 허용하지 않는다.",
+                "--sec-evidence", "path fixture",
+                "--receipt-file", str(traversal),
+                "--json",
+            )
+            self.assertNotEqual(0, traversal_attempt.returncode)
+            self.assertFalse((root / "traversal.json").exists())
+            self.assertEqual(before, tree_digest(repo))
+
+            default_directory = private_temp / "context-core"
+            symlink_target = root / "symlink-target"
+            symlink_target.mkdir(mode=0o700)
+            default_directory.symlink_to(symlink_target, target_is_directory=True)
+            default_attempt = run_cli(
+                repo,
+                "observation", "capture",
+                "--title", "default symlink",
+                "--summary", "symlink default directory를 거부한다.",
+                "--captured-from", "workspace",
+                "--attest-reusable-observation",
+                "--attest-evidence-present",
+                "--sec-observation", "default directory는 실제 private directory여야 한다.",
+                "--sec-evidence", "symlink fixture",
+                "--json",
+                environment={"TMPDIR": str(private_temp)},
+            )
+            self.assertNotEqual(0, default_attempt.returncode)
+            self.assertEqual([], list(symlink_target.iterdir()))
+            default_directory.unlink()
+
+            result, receipt_path = preview_observation_receipt(repo, private_temp)
+            receipt_path.chmod(0o644)
+            mode_attempt = run_cli(
+                repo,
+                "transaction", "apply",
+                "--receipt-file", str(receipt_path),
+                "--approved-digest", result["approval_digest"],
+                "--json",
+            )
+            self.assertNotEqual(0, mode_attempt.returncode)
+            self.assertEqual(before, tree_digest(repo))
+            receipt_path.chmod(0o600)
+            receipt_path.unlink()
+            target = root / "replacement.json"
+            target.write_text("{}", encoding="utf-8")
+            receipt_path.symlink_to(target)
+            symlink_attempt = run_cli(
+                repo,
+                "transaction", "apply",
+                "--receipt-file", str(receipt_path),
+                "--approved-digest", result["approval_digest"],
+                "--json",
+            )
+            self.assertNotEqual(0, symlink_attempt.returncode)
+            self.assertEqual("{}", target.read_text(encoding="utf-8"))
+            self.assertEqual(before, tree_digest(repo))
+
     def test_public_draft_and_batch_route_reject_each_builtin_primary_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

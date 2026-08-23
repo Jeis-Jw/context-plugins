@@ -30,6 +30,46 @@ def tree_digest(root: Path) -> str:
 
 
 class PluginContractTests(unittest.TestCase):
+    def test_doctor_self_report_is_additive_across_all_repository_states(self) -> None:
+        expected_fields = {
+            "schema", "owner", "supported_protocols", "repository_state", "root", "issues", "warnings",
+            "plugin_version", "entrypoint", "protocol",
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repositories: dict[str, Path] = {}
+            for state in ("absent", "partial", "ready", "invalid"):
+                repo = root / state
+                repo.mkdir()
+                subprocess.run(["git", "init", "-q", str(repo)], check=True)
+                repositories[state] = repo
+            (repositories["partial"] / "context").mkdir()
+            for state in ("ready", "invalid"):
+                preview = context_cli.build_init_bundle(repositories[state])
+                context_cli.apply_bundle(repositories[state], preview["bundle"], preview["approval_digest"])
+            (repositories["invalid"] / "context/context.index.md").write_text("not a context index\n", encoding="utf-8")
+
+            for expected_state, repo in repositories.items():
+                with self.subTest(state=expected_state):
+                    doctor = context_cli.doctor_repository(repo)
+                    self.assertEqual(expected_fields, set(doctor))
+                    self.assertEqual(expected_state, doctor["repository_state"])
+                    self.assertEqual("0.5.1", doctor["plugin_version"])
+                    self.assertEqual(str(CLI_PATH.resolve()), doctor["entrypoint"])
+                    self.assertEqual(context_cli.PROTOCOL, doctor["protocol"])
+                    self.assertEqual([context_cli.PROTOCOL], doctor["supported_protocols"])
+
+    def test_schema_reports_the_exact_core_receipt_contract(self) -> None:
+        receipt = context_cli.schema_result()["receipt"]
+        self.assertEqual("context-core-workflow-receipt/v1", receipt["schema"])
+        self.assertEqual(
+            ["schema", "status", "created_at", "plan_id", "core", "plan_bundle", "receipt_digest"],
+            receipt["fields"],
+        )
+        self.assertEqual(["core", "plan_bundle"], receipt["workflow_approval_material"])
+        self.assertEqual("damage_detection_only", receipt["receipt_digest_role"])
+        self.assertEqual("agent_retained_explicit_path", receipt["selection"])
+
     def test_managed_policy_keeps_the_incremental_loop_call_free_and_ephemeral(self) -> None:
         policy = context_cli.POLICY_BODY
         for contract in (

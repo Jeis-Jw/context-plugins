@@ -26,6 +26,10 @@ EXIT_NOT_FOUND = 3
 EXIT_CONFLICT = 5
 EXIT_INTEGRITY = 6
 PROTOCOL = "context-common/v2"
+CORE_RECEIPT_SCHEMA = "context-core-workflow-receipt/v1"
+CORE_RECEIPT_FIELDS = (
+    "schema", "status", "created_at", "plan_id", "core", "plan_bundle", "receipt_digest",
+)
 MAX_STAGE1_BYTES = 4 * 1024
 MAX_SECTION_ITEM_BYTES = 2 * 1024
 MAX_RECALL_BATCH_BYTES = 8 * 1024
@@ -2673,6 +2677,242 @@ def _bundle_result(repo: pathlib.Path, preview: dict[str, Any], plan: dict[str, 
     digest = canonical_digest(approval_material)
     bundle = {"schema": "context-mutation-bundle/v1", "approval_material": approval_material, "approval_digest": digest, "materials": materials}
     return {"bundle": bundle, "approval_preview": preview, "approval_digest": digest, "applied": False, "noop": False}
+
+
+def _core_identity() -> dict[str, str]:
+    entrypoint = pathlib.Path(__file__).resolve(strict=True)
+    if not entrypoint.is_file():
+        raise ContextError("core_surface_unavailable", "context-core entrypoint is unavailable", exit_code=EXIT_CONFLICT)
+    return {"path": str(entrypoint), "sha256": sha256_bytes(entrypoint.read_bytes())}
+
+
+def _workflow_approval_digest(core: dict[str, str], plan_bundle: dict[str, Any]) -> str:
+    return canonical_digest({"core": core, "plan_bundle": plan_bundle})
+
+
+def _path_within(path: pathlib.Path, root: pathlib.Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _validate_receipt_location(repo: pathlib.Path, path: pathlib.Path) -> pathlib.Path:
+    if not path.is_absolute() or ".." in path.parts:
+        raise ContextError(
+            "receipt_path_invalid",
+            "receipt path must be absolute and traversal-free",
+            {"path": str(path)},
+            EXIT_CONFLICT,
+        )
+    try:
+        resolved = path.resolve(strict=False)
+        identity = repository_identity(repo)
+        repository_root = pathlib.Path(identity["worktree"]["path"]).resolve(strict=True)
+        git_common = pathlib.Path(identity["git_common_dir"]["path"]).resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ContextError("receipt_path_invalid", "receipt path could not be resolved", exit_code=EXIT_CONFLICT) from error
+    if _path_within(resolved, repository_root) or _path_within(resolved, git_common):
+        raise ContextError(
+            "receipt_path_unsafe",
+            "receipt path must remain outside the repository and Git metadata",
+            {"path": str(path)},
+            EXIT_CONFLICT,
+        )
+    return resolved
+
+
+def _require_private_receipt_parent(repo: pathlib.Path, path: pathlib.Path) -> pathlib.Path:
+    resolved = _validate_receipt_location(repo, path)
+    parent = path.parent
+    try:
+        parent_lstat = parent.lstat()
+        parent_stat = parent.stat()
+    except OSError as error:
+        raise ContextError(
+            "receipt_path_invalid",
+            "receipt parent directory is unavailable",
+            {"path": str(parent)},
+            EXIT_CONFLICT,
+        ) from error
+    owner_mismatch = hasattr(os, "getuid") and parent_stat.st_uid != os.getuid()
+    if (
+        stat.S_ISLNK(parent_lstat.st_mode)
+        or not stat.S_ISDIR(parent_stat.st_mode)
+        or stat.S_IMODE(parent_stat.st_mode) != 0o700
+        or owner_mismatch
+    ):
+        raise ContextError(
+            "receipt_path_unsafe",
+            "receipt parent directory must be a private non-symlink directory",
+            {"path": str(parent)},
+            EXIT_CONFLICT,
+        )
+    try:
+        target_lstat = path.lstat()
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise ContextError(
+            "receipt_path_invalid",
+            "receipt target could not be inspected",
+            {"path": str(path)},
+            EXIT_CONFLICT,
+        ) from error
+    else:
+        if stat.S_ISLNK(target_lstat.st_mode):
+            raise ContextError(
+                "receipt_path_unsafe",
+                "receipt target must not be a symlink",
+                {"path": str(path)},
+                EXIT_CONFLICT,
+            )
+    return resolved
+
+
+def _open_receipt_parent_fd(path: pathlib.Path) -> int:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path.parent, flags)
+    metadata = os.fstat(fd)
+    owner_mismatch = hasattr(os, "getuid") and metadata.st_uid != os.getuid()
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) != 0o700
+        or owner_mismatch
+    ):
+        os.close(fd)
+        raise OSError("receipt parent is not a private directory")
+    return fd
+
+
+def _default_receipt_path(repo: pathlib.Path, plan_id: str) -> pathlib.Path:
+    try:
+        temp_root = pathlib.Path(tempfile.gettempdir()).resolve(strict=True)
+    except OSError as error:
+        raise ContextError("receipt_path_invalid", "default receipt root is unavailable", exit_code=EXIT_CONFLICT) from error
+    directory = temp_root / "context-core"
+    path = directory / f"{plan_id}.json"
+    _validate_receipt_location(repo, path)
+    if directory.exists() or directory.is_symlink():
+        return _require_private_receipt_parent(repo, path)
+    try:
+        directory.mkdir(mode=0o700)
+        os.chmod(directory, 0o700)
+    except OSError as error:
+        raise ContextError(
+            "receipt_path_invalid",
+            "private receipt directory could not be created",
+            {"path": str(directory)},
+            EXIT_CONFLICT,
+        ) from error
+    return _require_private_receipt_parent(repo, path)
+
+
+def _explicit_receipt_path(repo: pathlib.Path, value: str | pathlib.Path) -> pathlib.Path:
+    path = pathlib.Path(value)
+    return _require_private_receipt_parent(repo, path)
+
+
+def _write_frozen_receipt(path: pathlib.Path, receipt: dict[str, Any]) -> None:
+    if path.exists() or path.is_symlink():
+        raise ContextError(
+            "receipt_exists",
+            "receipt path already exists",
+            {"path": str(path)},
+            EXIT_CONFLICT,
+        )
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    parent_fd: int | None = None
+    try:
+        parent_fd = _open_receipt_parent_fd(path)
+        fd = os.open(path.name, flags, 0o600, dir_fd=parent_fd)
+        try:
+            os.fchmod(fd, 0o600)
+            content = canonical_json(receipt).encode("utf-8")
+            with os.fdopen(fd, "wb", closefd=False) as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+        finally:
+            os.close(fd)
+        os.fsync(parent_fd)
+    except FileExistsError as error:
+        raise ContextError(
+            "receipt_exists",
+            "receipt path already exists",
+            {"path": str(path)},
+            EXIT_CONFLICT,
+        ) from error
+    except OSError as error:
+        if parent_fd is not None:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(path.name, dir_fd=parent_fd)
+        raise ContextError(
+            "receipt_write_failed",
+            "frozen receipt could not be written",
+            {"path": str(path)},
+            EXIT_CONFLICT,
+        ) from error
+    finally:
+        if parent_fd is not None:
+            os.close(parent_fd)
+
+
+def freeze_bundle_receipt(
+    repo: pathlib.Path,
+    preview_result: dict[str, Any],
+    receipt_file: str | pathlib.Path | None = None,
+) -> dict[str, Any]:
+    bundle = preview_result.get("bundle")
+    if not isinstance(bundle, dict):
+        raise ContextError("bundle_invalid", "preview result does not contain a mutation bundle", exit_code=EXIT_CONFLICT)
+    nested_digest = bundle.get("approval_digest")
+    if not isinstance(nested_digest, str):
+        raise ContextError("bundle_invalid", "mutation bundle approval digest is missing", exit_code=EXIT_CONFLICT)
+    plan, _ = _validate_bundle(repo, bundle, nested_digest)
+    plan_id = plan.get("plan_id")
+    if not _valid_plan_id(plan_id):
+        raise ContextError("bundle_invalid", "mutation bundle plan id is invalid", exit_code=EXIT_CONFLICT)
+    core = _core_identity()
+    receipt_body: dict[str, Any] = {
+        "schema": CORE_RECEIPT_SCHEMA,
+        "status": "pending",
+        "created_at": _timestamp(),
+        "plan_id": plan_id,
+        "core": core,
+        "plan_bundle": bundle,
+    }
+    receipt = {**receipt_body, "receipt_digest": canonical_digest(receipt_body)}
+    path = (
+        _default_receipt_path(repo, plan_id)
+        if receipt_file is None
+        else _explicit_receipt_path(repo, receipt_file)
+    )
+    _write_frozen_receipt(path, receipt)
+    return {
+        "approval_preview": preview_result["approval_preview"],
+        "approval_digest": _workflow_approval_digest(core, bundle),
+        "receipt_file": str(path),
+    }
+
+
+def _maybe_freeze_bundle_receipt(
+    repo: pathlib.Path,
+    preview_result: dict[str, Any],
+    receipt_file: str | pathlib.Path | None,
+    *,
+    use_default: bool = False,
+) -> dict[str, Any]:
+    if receipt_file is None and not use_default:
+        return preview_result
+    return freeze_bundle_receipt(repo, preview_result, receipt_file)
 
 
 def _capture_bundle(repo: pathlib.Path, owner_result: dict[str, Any]) -> dict[str, Any]:
@@ -5676,6 +5916,170 @@ def apply_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest: st
     return {"applied": True, "plan_id": plan["plan_id"], "approval_digest": approved_digest, "changed_paths": sorted(set(changed)), "index_paths": index_paths, "warnings": []}
 
 
+def _read_frozen_receipt(
+    repo: pathlib.Path,
+    receipt_file: str | pathlib.Path,
+) -> tuple[pathlib.Path, dict[str, Any], tuple[int, int]]:
+    path = _explicit_receipt_path(repo, receipt_file)
+    parent_fd: int | None = None
+    try:
+        parent_fd = _open_receipt_parent_fd(path)
+        metadata = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or metadata.st_nlink != 1
+        ):
+            raise ContextError(
+                "receipt_unsafe",
+                "receipt must be a private regular file without aliases",
+                {"path": str(path)},
+                EXIT_CONFLICT,
+            )
+        flags = os.O_RDONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        fd = os.open(path.name, flags, dir_fd=parent_fd)
+        try:
+            opened = os.fstat(fd)
+            if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
+                raise ContextError("receipt_changed", "receipt changed while opening", exit_code=EXIT_CONFLICT)
+            chunks: list[bytes] = []
+            while True:
+                chunk = os.read(fd, 64 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        finally:
+            os.close(fd)
+        text = b"".join(chunks).decode("utf-8")
+    except ContextError:
+        raise
+    except (OSError, UnicodeError) as error:
+        raise ContextError(
+            "receipt_unavailable",
+            "frozen receipt could not be read",
+            {"path": str(path)},
+            EXIT_NOT_FOUND,
+        ) from error
+    finally:
+        if parent_fd is not None:
+            os.close(parent_fd)
+    receipt = _strict_json_loads(text, code="receipt_invalid")
+    if not isinstance(receipt, dict) or tuple(sorted(receipt)) != tuple(sorted(CORE_RECEIPT_FIELDS)):
+        raise ContextError("receipt_invalid", "receipt fields differ from the exact core workflow contract", exit_code=EXIT_CONFLICT)
+    if receipt.get("schema") != CORE_RECEIPT_SCHEMA or receipt.get("status") != "pending":
+        raise ContextError("receipt_invalid", "receipt schema or status is invalid", exit_code=EXIT_CONFLICT)
+    _validate_timestamp(receipt.get("created_at"), "created_at")
+    plan_id = receipt.get("plan_id")
+    if not _valid_plan_id(plan_id):
+        raise ContextError("receipt_invalid", "receipt plan id is invalid", exit_code=EXIT_CONFLICT)
+    core = receipt.get("core")
+    if (
+        not isinstance(core, dict)
+        or set(core) != {"path", "sha256"}
+        or not isinstance(core.get("path"), str)
+        or not pathlib.Path(core["path"]).is_absolute()
+        or not isinstance(core.get("sha256"), str)
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", core["sha256"])
+    ):
+        raise ContextError("receipt_invalid", "receipt core identity is invalid", exit_code=EXIT_CONFLICT)
+    bundle = receipt.get("plan_bundle")
+    nested_plan_id = (
+        bundle.get("approval_material", {}).get("plan", {}).get("plan_id")
+        if isinstance(bundle, dict)
+        else None
+    )
+    if nested_plan_id != plan_id:
+        raise ContextError("receipt_invalid", "receipt plan id differs from its exact plan bundle", exit_code=EXIT_CONFLICT)
+    receipt_digest = receipt.get("receipt_digest")
+    receipt_body = dict(receipt)
+    receipt_body.pop("receipt_digest")
+    if (
+        not isinstance(receipt_digest, str)
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", receipt_digest)
+        or receipt_digest != canonical_digest(receipt_body)
+    ):
+        raise ContextError("receipt_digest_mismatch", "receipt damage digest does not match", exit_code=EXIT_CONFLICT)
+    return path, receipt, (metadata.st_dev, metadata.st_ino)
+
+
+def _receipt_plan_is_fully_applied(repo: pathlib.Path, plan: dict[str, Any]) -> bool:
+    operations = plan.get("operations", [])
+    if not isinstance(operations, list) or not operations:
+        return False
+    for operation in operations:
+        op = operation.get("op")
+        if op == "index_rebuild":
+            after = operation.get("after_sha256")
+            if not isinstance(after, dict) or any(
+                _digest_or_none(_ensure_contained(repo, path)) != digest
+                for path, digest in after.items()
+            ):
+                return False
+        elif op in {"file_create", "file_replace"}:
+            if _digest_or_none(_ensure_contained(repo, operation.get("path", ""))) != operation.get("after_sha256"):
+                return False
+        elif op == "file_move":
+            source = _ensure_contained(repo, operation.get("from_path", ""))
+            destination = _ensure_contained(repo, operation.get("to_path", ""))
+            if source.exists() or _digest_or_none(destination) != operation.get("after_sha256"):
+                return False
+        elif op == "file_delete":
+            if _ensure_contained(repo, operation.get("path", "")).exists():
+                return False
+        else:
+            return False
+    return True
+
+
+def _unlink_receipt(path: pathlib.Path, identity: tuple[int, int]) -> None:
+    parent_fd = _open_receipt_parent_fd(path)
+    try:
+        metadata = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or (metadata.st_dev, metadata.st_ino) != identity
+        ):
+            raise OSError("receipt path identity changed")
+        os.unlink(path.name, dir_fd=parent_fd)
+        os.fsync(parent_fd)
+    finally:
+        os.close(parent_fd)
+
+
+def apply_receipt(
+    repo: pathlib.Path,
+    receipt_file: str | pathlib.Path,
+    approved_digest: str,
+) -> dict[str, Any]:
+    path, receipt, receipt_identity = _read_frozen_receipt(repo, receipt_file)
+    core = receipt["core"]
+    bundle = receipt["plan_bundle"]
+    workflow_digest = _workflow_approval_digest(core, bundle)
+    if approved_digest != workflow_digest:
+        raise ContextError(
+            "workflow_approval_digest_mismatch",
+            "approved workflow digest does not match the frozen core and plan bundle",
+            exit_code=EXIT_CONFLICT,
+        )
+    if core != _core_identity():
+        raise ContextError("core_surface_mismatch", "frozen receipt belongs to a different core entrypoint", exit_code=EXIT_CONFLICT)
+    nested_digest = bundle.get("approval_digest") if isinstance(bundle, dict) else None
+    if not isinstance(nested_digest, str):
+        raise ContextError("bundle_invalid", "receipt mutation bundle is invalid", exit_code=EXIT_CONFLICT)
+    plan, _ = _validate_bundle(repo, bundle, nested_digest)
+    if _receipt_plan_is_fully_applied(repo, plan):
+        raise ContextError("receipt_already_applied", "receipt plan is already fully applied", exit_code=EXIT_CONFLICT)
+    result = apply_bundle(repo, bundle, nested_digest)
+    result["approval_digest"] = approved_digest
+    try:
+        _unlink_receipt(path, receipt_identity)
+    except OSError:
+        result["warnings"] = [*result.get("warnings", []), "receipt_cleanup_failed"]
+    return result
+
+
 def refresh_repository(repo: pathlib.Path) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     warnings: list[dict[str, Any]] = []
@@ -5901,34 +6305,58 @@ def refresh_repository(repo: pathlib.Path) -> dict[str, Any]:
     }
 
 
-def doctor_repository(repo: pathlib.Path) -> dict[str, Any]:
-    root = repo / "context"
-    root_index = repo / ROOT_INDEX
-    if not root.exists():
-        return {"schema": "context-core-doctor/v1", "owner": "context-core", "supported_protocols": [PROTOCOL], "repository_state": "absent", "root": "context/", "issues": [], "warnings": []}
-    if not root_index.exists():
-        return {
-            "schema": "context-core-doctor/v1",
-            "owner": "context-core",
-            "supported_protocols": [PROTOCOL],
-            "repository_state": "partial",
-            "root": "context/",
-            "issues": [],
-            "warnings": [{"code": "index_missing", "path": ROOT_INDEX}],
-        }
+def _doctor_self_report() -> dict[str, str]:
+    entrypoint = pathlib.Path(__file__).resolve(strict=True)
+    manifest_path = entrypoint.parents[3] / ".claude-plugin/plugin.json"
     try:
-        result = refresh_repository(repo)
-    except ContextError as error:
-        return {"schema": "context-core-doctor/v1", "owner": "context-core", "supported_protocols": [PROTOCOL], "repository_state": "partial", "root": "context/", "issues": [{"code": error.code, "path": error.details.get("path")}], "warnings": []}
+        manifest = _strict_json_loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError) as error:
+        raise ContextError("plugin_manifest_invalid", "context-core plugin manifest is unavailable", exit_code=EXIT_CONFLICT) from error
+    version = manifest.get("version") if isinstance(manifest, dict) else None
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("name") != "context-core"
+        or not isinstance(version, str)
+        or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+    ):
+        raise ContextError("plugin_manifest_invalid", "context-core plugin identity is invalid", exit_code=EXIT_CONFLICT)
+    return {"plugin_version": version, "entrypoint": str(entrypoint), "protocol": PROTOCOL}
+
+
+def _doctor_result(
+    repository_state: str,
+    *,
+    issues: list[dict[str, Any]] | None = None,
+    warnings: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return {
         "schema": "context-core-doctor/v1",
         "owner": "context-core",
         "supported_protocols": [PROTOCOL],
-        "repository_state": "ready" if result["ok"] else "invalid",
+        "repository_state": repository_state,
         "root": "context/",
-        "issues": result["issues"],
-        "warnings": result["warnings"],
+        "issues": issues or [],
+        "warnings": warnings or [],
+        **_doctor_self_report(),
     }
+
+
+def doctor_repository(repo: pathlib.Path) -> dict[str, Any]:
+    root = repo / "context"
+    root_index = repo / ROOT_INDEX
+    if not root.exists():
+        return _doctor_result("absent")
+    if not root_index.exists():
+        return _doctor_result("partial", warnings=[{"code": "index_missing", "path": ROOT_INDEX}])
+    try:
+        result = refresh_repository(repo)
+    except ContextError as error:
+        return _doctor_result("partial", issues=[{"code": error.code, "path": error.details.get("path")}])
+    return _doctor_result(
+        "ready" if result["ok"] else "invalid",
+        issues=result["issues"],
+        warnings=result["warnings"],
+    )
 
 
 def schema_result() -> dict[str, Any]:
@@ -5943,6 +6371,13 @@ def schema_result() -> dict[str, Any]:
             "transaction preview", "transaction apply", "recall", "snapshot save/update/list/search/load/discard",
             "observation capture/read/search/annotate/reverify/invalidate/supersede/discard", "rename", "discard", "refresh",
         ],
+        "receipt": {
+            "schema": CORE_RECEIPT_SCHEMA,
+            "fields": list(CORE_RECEIPT_FIELDS),
+            "workflow_approval_material": ["core", "plan_bundle"],
+            "receipt_digest_role": "damage_detection_only",
+            "selection": "agent_retained_explicit_path",
+        },
     }
 
 
@@ -6096,6 +6531,37 @@ def _direct_attestation(value: dict[str, Any], candidate: dict[str, Any], kind: 
     return normalized
 
 
+def _capture_attestation(args: argparse.Namespace, candidate: dict[str, Any], kind: str) -> tuple[dict[str, Any], bool]:
+    flag_contract = {
+        "observation": (
+            ("attest_reusable_observation", "reusable_observation", "/owner_inputs/observation/observation"),
+            ("attest_evidence_present", "evidence_present", "/owner_inputs/observation/evidence/0"),
+        ),
+        "snapshot": (
+            ("attest_handoff_requested", "handoff_requested", "/owner_inputs/snapshot/current_context"),
+            ("attest_unfinished_context_present", "unfinished_context_present", "/owner_inputs/snapshot/open_items/0"),
+        ),
+    }[kind]
+    selected = [bool(getattr(args, argument)) for argument, _, _ in flag_contract]
+    if args.attestation is not None and any(selected):
+        raise ContextError("usage_invalid", "attestation file and semantic flags are mutually exclusive")
+    if args.attestation is not None:
+        return _direct_attestation(_load_json_argument(args.attestation), candidate, kind), False
+    if not all(selected):
+        raise ContextError("usage_invalid", "complete semantic attestation flags are required")
+    value = {
+        "schema": "context-semantic-attestation/v1",
+        "operation": "claim",
+        "input_schema": candidate["schema"],
+        "input_digest": canonical_digest(candidate),
+        "assertions": [
+            {"name": name, "value": True, "evidence_pointers": [pointer]}
+            for _, name, pointer in flag_contract
+        ],
+    }
+    return _direct_attestation(value, candidate, kind), True
+
+
 def _section_arguments(args: argparse.Namespace, mapping: Sequence[tuple[str, str]]) -> dict[str, str]:
     output: dict[str, str] = {}
     for argument, section in mapping:
@@ -6155,7 +6621,9 @@ def build_parser() -> argparse.ArgumentParser:
     preview.add_argument("--prior-bundle", action="append", default=[])
     preview.add_argument("--json", action="store_true")
     apply = transaction_sub.add_parser("apply")
-    apply.add_argument("--plan-bundle", required=True)
+    apply_source = apply.add_mutually_exclusive_group(required=True)
+    apply_source.add_argument("--plan-bundle")
+    apply_source.add_argument("--receipt-file")
     apply.add_argument("--approved-digest", required=True)
     apply.add_argument("--json", action="store_true")
     candidate_parser = sub.add_parser("candidate")
@@ -6185,9 +6653,11 @@ def build_parser() -> argparse.ArgumentParser:
     rename = sub.add_parser("rename")
     rename.add_argument("--id", required=True)
     rename.add_argument("--filename", required=True)
+    rename.add_argument("--receipt-file")
     rename.add_argument("--json", action="store_true")
     discard = sub.add_parser("discard")
     discard.add_argument("--id", required=True)
+    discard.add_argument("--receipt-file")
     discard.add_argument("--json", action="store_true")
     snapshot = sub.add_parser("snapshot")
     snapshot_sub = snapshot.add_subparsers(dest="snapshot_command", required=True)
@@ -6196,7 +6666,10 @@ def build_parser() -> argparse.ArgumentParser:
     snapshot_save.add_argument("--summary", required=True)
     snapshot_save.add_argument("--filename")
     snapshot_save.add_argument("--captured-from", choices=("conversation", "workspace", "manual", "import"), required=True)
-    snapshot_save.add_argument("--attestation", required=True)
+    snapshot_save.add_argument("--attestation")
+    snapshot_save.add_argument("--attest-handoff-requested", action="store_true")
+    snapshot_save.add_argument("--attest-unfinished-context-present", action="store_true")
+    snapshot_save.add_argument("--receipt-file")
     snapshot_save.add_argument("--sec-context", required=True)
     snapshot_save.add_argument("--sec-open-items", required=True)
     snapshot_save.add_argument("--sec-next-steps", required=True)
@@ -6224,11 +6697,14 @@ def build_parser() -> argparse.ArgumentParser:
     snapshot_update.add_argument("--tag", action="append")
     snapshot_update.add_argument("--search-term", action="append")
     snapshot_update.add_argument("--clear", action="append", default=[])
+    snapshot_update.add_argument("--receipt-file")
     snapshot_update.add_argument("--json", action="store_true")
     for name in ("list", "search", "load", "discard"):
         command = snapshot_sub.add_parser(name)
         if name in {"load", "discard"}:
             command.add_argument("--id", required=True)
+        if name == "discard":
+            command.add_argument("--receipt-file")
         if name == "search":
             command.add_argument("--query", required=True)
         if name in {"list", "search"}:
@@ -6244,7 +6720,10 @@ def build_parser() -> argparse.ArgumentParser:
     observation_capture.add_argument("--summary", required=True)
     observation_capture.add_argument("--filename")
     observation_capture.add_argument("--captured-from", choices=("conversation", "workspace", "manual", "import"), required=True)
-    observation_capture.add_argument("--attestation", required=True)
+    observation_capture.add_argument("--attestation")
+    observation_capture.add_argument("--attest-reusable-observation", action="store_true")
+    observation_capture.add_argument("--attest-evidence-present", action="store_true")
+    observation_capture.add_argument("--receipt-file")
     observation_capture.add_argument("--sec-observation", required=True)
     observation_capture.add_argument("--sec-evidence", required=True)
     observation_capture.add_argument("--sec-impact")
@@ -6274,24 +6753,29 @@ def build_parser() -> argparse.ArgumentParser:
     annotate.add_argument("--source-ref", action="append")
     annotate.add_argument("--related", action="append")
     annotate.add_argument("--clear", action="append", default=[])
+    annotate.add_argument("--receipt-file")
     annotate.add_argument("--json", action="store_true")
     reverify = observation_sub.add_parser("reverify")
     reverify.add_argument("--id", required=True)
     reverify.add_argument("--verified-at", required=True)
     reverify.add_argument("--evidence-ref", required=True)
+    reverify.add_argument("--receipt-file")
     reverify.add_argument("--json", action="store_true")
     invalidate = observation_sub.add_parser("invalidate")
     invalidate.add_argument("--id", required=True)
     invalidate.add_argument("--reason", required=True)
+    invalidate.add_argument("--receipt-file")
     invalidate.add_argument("--json", action="store_true")
     supersede = observation_sub.add_parser("supersede")
     supersede.add_argument("--id", required=True)
     supersede.add_argument("--successor-result", required=True)
     supersede.add_argument("--lifecycle-input", required=True)
     supersede.add_argument("--lifecycle-attestation", required=True)
+    supersede.add_argument("--receipt-file")
     supersede.add_argument("--json", action="store_true")
     observation_discard = observation_sub.add_parser("discard")
     observation_discard.add_argument("--id", required=True)
+    observation_discard.add_argument("--receipt-file")
     observation_discard.add_argument("--json", action="store_true")
     refresh = sub.add_parser("refresh")
     refresh.add_argument("--fix", choices=("index",))
@@ -6335,6 +6819,8 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
         priors = [_load_json_argument(value) for value in args.prior_bundle]
         return finalize_owner_result(repo, owner_result, validation, priors)
     if args.command == "transaction" and args.transaction_command == "apply":
+        if args.receipt_file:
+            return apply_receipt(repo, args.receipt_file, args.approved_digest)
         return apply_bundle(repo, _load_json_argument(args.plan_bundle), args.approved_digest)
     if args.command == "candidate" and args.candidate_command == "route":
         return route_candidates(
@@ -6352,9 +6838,13 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
             facets.append(tuple(value.split("=", 1)))
         return recall_repository(repo, query=args.query, areas=args.area, include_history=args.include_history, facets=facets, limit=args.limit, pack=args.pack, sections=args.section, read_ids=args.read, strict_index=args.strict_index, max_bytes=args.max_bytes)
     if args.command == "rename":
-        return build_rename_bundle(repo, args.id, args.filename)
+        return _maybe_freeze_bundle_receipt(
+            repo,
+            build_rename_bundle(repo, args.id, args.filename),
+            args.receipt_file,
+        )
     if args.command == "discard":
-        return build_discard_bundle(repo, args.id)
+        return _maybe_freeze_bundle_receipt(repo, build_discard_bundle(repo, args.id), args.receipt_file)
     if args.command == "snapshot":
         if args.snapshot_command == "save":
             owner_inputs: dict[str, Any] = {
@@ -6378,25 +6868,34 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 tags=args.tag,
                 search_terms=args.search_term,
             )
-            attestation = _direct_attestation(_load_json_argument(args.attestation), candidate, "snapshot")
-            return build_snapshot_save_bundle(repo, candidate, attestation, filename=args.filename)
+            attestation, flag_based = _capture_attestation(args, candidate, "snapshot")
+            return _maybe_freeze_bundle_receipt(
+                repo,
+                build_snapshot_save_bundle(repo, candidate, attestation, filename=args.filename),
+                args.receipt_file,
+                use_default=flag_based,
+            )
         if args.snapshot_command == "update":
             sections = _section_arguments(args, (
                 ("sec_context", "현재 맥락"), ("sec_open_items", "열린 항목"), ("sec_next_steps", "다음 단계"),
                 ("sec_decided", "정해진 것"), ("sec_refs", "참조"), ("sec_candidates", "capture 후보"),
             ))
-            return build_snapshot_update_bundle(
+            return _maybe_freeze_bundle_receipt(
                 repo,
-                args.id,
-                merge=args.merge,
-                sections=sections,
-                title=args.title,
-                summary=args.summary,
-                tags=args.tag,
-                search_terms=args.search_term,
-                source_refs=args.source_ref,
-                anchors=args.anchor,
-                clear=args.clear,
+                build_snapshot_update_bundle(
+                    repo,
+                    args.id,
+                    merge=args.merge,
+                    sections=sections,
+                    title=args.title,
+                    summary=args.summary,
+                    tags=args.tag,
+                    search_terms=args.search_term,
+                    source_refs=args.source_ref,
+                    anchors=args.anchor,
+                    clear=args.clear,
+                ),
+                args.receipt_file,
             )
         if args.snapshot_command == "list":
             return snapshot_list(repo, args.limit)
@@ -6405,7 +6904,11 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
         if args.snapshot_command == "load":
             return snapshot_load(repo, args.id, args.section, args.max_bytes)
         if args.snapshot_command == "discard":
-            return build_snapshot_discard_bundle(repo, args.id)
+            return _maybe_freeze_bundle_receipt(
+                repo,
+                build_snapshot_discard_bundle(repo, args.id),
+                args.receipt_file,
+            )
     if args.command == "observation":
         if args.observation_command == "capture":
             owner_inputs = {
@@ -6429,38 +6932,63 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 search_terms=args.search_term,
                 kind_hint=args.kind_hint,
             )
-            attestation = _direct_attestation(_load_json_argument(args.attestation), candidate, "observation")
-            return build_observation_capture_bundle(repo, candidate, attestation, filename=args.filename)
+            attestation, flag_based = _capture_attestation(args, candidate, "observation")
+            return _maybe_freeze_bundle_receipt(
+                repo,
+                build_observation_capture_bundle(repo, candidate, attestation, filename=args.filename),
+                args.receipt_file,
+                use_default=flag_based,
+            )
         if args.observation_command == "read":
             return observation_read(repo, args.id, args.section, args.max_bytes)
         if args.observation_command == "search":
             return observation_search(repo, args.query, include_history=args.include_history, limit=args.limit)
         if args.observation_command == "annotate":
-            return build_observation_annotate_bundle(
+            return _maybe_freeze_bundle_receipt(
                 repo,
-                args.id,
-                title=args.title,
-                summary=args.summary,
-                tags=args.tag,
-                search_terms=args.search_term,
-                source_refs=args.source_ref,
-                related=args.related,
-                clear=args.clear,
+                build_observation_annotate_bundle(
+                    repo,
+                    args.id,
+                    title=args.title,
+                    summary=args.summary,
+                    tags=args.tag,
+                    search_terms=args.search_term,
+                    source_refs=args.source_ref,
+                    related=args.related,
+                    clear=args.clear,
+                ),
+                args.receipt_file,
             )
         if args.observation_command == "reverify":
-            return build_observation_reverify_bundle(repo, args.id, args.verified_at, args.evidence_ref)
-        if args.observation_command == "invalidate":
-            return build_observation_invalidate_bundle(repo, args.id, args.reason)
-        if args.observation_command == "supersede":
-            return build_observation_supersede_bundle(
+            return _maybe_freeze_bundle_receipt(
                 repo,
-                args.id,
-                _load_json_argument(args.successor_result, allow_stdin=True),
-                _load_json_argument(args.lifecycle_input),
-                _load_json_argument(args.lifecycle_attestation),
+                build_observation_reverify_bundle(repo, args.id, args.verified_at, args.evidence_ref),
+                args.receipt_file,
+            )
+        if args.observation_command == "invalidate":
+            return _maybe_freeze_bundle_receipt(
+                repo,
+                build_observation_invalidate_bundle(repo, args.id, args.reason),
+                args.receipt_file,
+            )
+        if args.observation_command == "supersede":
+            return _maybe_freeze_bundle_receipt(
+                repo,
+                build_observation_supersede_bundle(
+                    repo,
+                    args.id,
+                    _load_json_argument(args.successor_result, allow_stdin=True),
+                    _load_json_argument(args.lifecycle_input),
+                    _load_json_argument(args.lifecycle_attestation),
+                ),
+                args.receipt_file,
             )
         if args.observation_command == "discard":
-            return build_observation_discard_bundle(repo, args.id)
+            return _maybe_freeze_bundle_receipt(
+                repo,
+                build_observation_discard_bundle(repo, args.id),
+                args.receipt_file,
+            )
     if args.command == "refresh":
         if args.fix:
             return repair_derived_indexes(repo)
