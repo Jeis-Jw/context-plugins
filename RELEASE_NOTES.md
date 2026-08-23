@@ -1,12 +1,20 @@
 # Release notes
 
+## 0.6.0 (unreleased; approval wording PR)
+
+- User-facing approval is one natural-language question over the complete rendered preview. Only a direct, explicit, unconditional affirmative answer applies; `알겠어` alone, conditions, edits, and topic changes do not.
+- Digests, receipt locations, internal IDs, and core paths are agent/CLI transport details and are never shown to or requested from users.
+- The managed policy is four concise lines; all 16 SKILL surfaces carry the same approval classification and no-signal behavior.
+- Frozen receipt, approval binding, repository identity, pinned core SHA, CAS, lock, atomic write, and no-regeneration-after-approval boundaries remain intact.
+- This PR must ship with the companion workflow PR; neither is a standalone 0.6 release candidate.
+
 ## 0.5.1 (prepared; tag not published)
 
 This developer-preview patch preserves `context-common/v2` and existing SNAP, OBS and DEC bytes. It is distinct from the already published 0.5.0 bytes; `v0.5.1` has not been created or pushed.
 
 ### W1 — lower prompt and recall overhead
 
-- Codex default-prompt material was reduced from 3,147 to 1,339 characters, a 57.5% character reduction. This is not a token-savings measurement.
+- Codex default-prompt material was reduced from 3,147 to 1,331 characters, a 57.7% character reduction. This is not a token-savings measurement.
 - The DEC golden path now builds one inline preview and stores the frozen bundle in a transient, mode-`0600` receipt outside the repository.
 - Healthy metadata misses open zero indexed artifact bodies; stale or missing index recovery opens at most 20 bodies per recall.
 

@@ -7,12 +7,11 @@ description: Preserve reusable facts, evidence, or lessons as non-authoritative 
 
 OBS is an immutable semantic claim with `authority: evidence`; never phrase it as a decision that future work must follow.
 
-1. A capture needs a substantive Observation section and at least one substantive Evidence item.
-2. Use only the observation descriptor returned by `context_cli.py capabilities --json` to build a bounded candidate and claim attestation.
-3. Use `annotate` for title, summary, tags, and search metadata. If claim or evidence meaning changes, create a successor OBS and `supersede` the predecessor.
-4. Before supersession, use only the exact old/new `lifecycle prepare` input for `same_claim`; both actual primary claims need evidence pointers.
-5. Put successor creation and predecessor History movement in one owner result and one final bundle.
-6. Use `invalidate` with a substantive reason for disproof and `reverify` with an evidence reference for a fresh confirmation. Age alone does not retire evidence.
-7. Apply only a complete bundle after the user approves its exact digest. Do not bypass exact ID/path or backlink guards.
+1. Capture requires substantive Observation and Evidence content, using only the capability descriptor.
+2. `annotate` changes metadata only. Changed claim/evidence meaning requires a successor OBS and `supersede`; prepare both actual claims and keep reciprocal lifecycle edges in one final bundle.
+3. `invalidate` requires a substantive disproof reason; `reverify` requires fresh evidence. Age alone does not retire evidence.
+4. Keep ID/path, backlink, repository identity, CAS, lock, and atomic-write guards. Preview, prepare, and attestation write nothing.
 
-Use `../context/scripts/context_cli.py observation ...`. Preview, prepare, and attestation do not write the filesystem.
+Before suggesting capture, run preview and ask once with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply; never show or request a digest, receipt path, internal ID, or core path. Only a direct, explicit, unconditional affirmative answer to that capture question is approval. `알겠어` alone, a condition, edit request, or topic change is not approval. Never regenerate content or plan after approval.
+
+Use `../context/scripts/context_cli.py observation ...`; context-core remains the only writer.

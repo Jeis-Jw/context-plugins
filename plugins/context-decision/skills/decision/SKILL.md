@@ -5,17 +5,17 @@ description: When the incremental audit detects a forming or changing choice, co
 
 # Decision
 
-Use this semantic owner only with a separately installed context-core. It does not audit the whole conversation again and never writes repository bytes. Low-level non-static CLI calls accept caller `--host`, `--core-inventory @file`, and `--core-doctor @file` for compatibility. Canonical init and capture instead verify the release-pinned core executable and handshake its schema and doctor directly.
+Use this semantic owner only with the separately installed release-pinned context-core. It does not repeat the conversation audit or write repository bytes. Low-level calls keep `--host`, `--core-inventory @file`, and `--core-doctor @file`; canonical init and capture handshake the pinned core directly.
 
-1. Run only when core's incremental audit detects a choice forming or changing. Reuse a Current `{id,sha256}` only while the same scope/anchor and actual body remain in session context. Otherwise run `check --statement ... --scope ... --decision-key ...` before concluding or proposing capture.
-2. Compare the returned actual Decision, Rationale, and Rejected alternatives. Classify `new|same|supporting|rationale_changed|conflict`; sentence similarity, hashes, IDs, and metadata are not semantic evidence.
-3. Reuse `same` silently. Keep the DEC for `supporting` and consider durable new evidence as OBS. Report `rationale_changed|conflict` before the primary conclusion and ask whether to keep or supersede. `new` applies only to the returned set.
-4. Claim only an explicit choice that governs present or future action and has canonical scope plus commitment evidence. Finish the user's original request before one grouped mature proposal. Do not re-propose dismissed/deferred candidates without new evidence.
-5. For a normal single capture, use the loaded decision skill's sibling `scripts/decision_workflow.py preview --inline`. The caller supplies semantic fields and all three `--attest-*` judgments; the CLI serializes them but invents no evidence or judgment.
-6. Use the loaded core skill's sibling `scripts/context_cli.py` for `--core-cli` and a new absolute path outside the repository for `--receipt-file`. Preview writes the exact bundle once to a sensitive mode-0600 frozen receipt.
-7. The stdout user-facing `approval_digest` binds repository identity, core absolute path/SHA, candidate/result digests, and nested core bundle/digest. After the user approves that exact digest, call the same workflow's `apply`; do not regenerate capture, IDs, timestamps, plans, or content.
-8. Use low-level `batch validate` for lifecycle and ordered prior-bundle composition. Core alone owns the complete final bundle, index rebuild, exact-digest gate, and physical write.
-9. Use `spec-view --scope ...` for a read-only projection of actual Decision and Rationale sections from exact/ancestor/descendant Current DEC entries. Exclude History and `do_not_follow`.
+1. Run only for a forming or changing choice. Reuse a Current body only while its scope/anchor and bytes remain in session; otherwise run `check --statement ... --scope ... --decision-key ...` before concluding or proposing capture.
+2. Compare actual Decision, Rationale, and Rejected alternatives. Classify `new|same|supporting|rationale_changed|conflict`; hashes, IDs, and metadata are not semantic evidence. Reuse `same` silently, keep supporting evidence as OBS, and report changes/conflicts before the primary conclusion.
+3. Claim only a caller-provided explicit choice with canonical scope and commitment evidence. The owner never invents meaning or evidence. Finish the original request before one mature proposal; do not re-propose dismissed/deferred candidates without new evidence.
+4. Normal capture uses the loaded decision skill's `scripts/decision_workflow.py preview --inline`. The agent supplies the semantic fields and three `--attest-*` judgments. Resolve sibling decision/core entrypoints internally; preview writes the bundle once to an out-of-repository frozen receipt.
+5. Use low-level `batch validate` for lifecycle/ordered overlays and `spec-view --scope ...` for actual Current Decision/Rationale projection. Core alone owns final validation, repository identity, CAS, lock, index rebuild, and physical write.
+
+Before suggesting capture, run preview and ask once with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply; never show or request a digest, receipt path, internal ID, or core path. Only a direct, explicit, unconditional affirmative answer to that capture question is approval. `알겠어` alone, a condition, edit request, or topic change is not approval; confirm ambiguous praise once. Never regenerate capture, IDs, timestamps, plans, or content after approval.
+
+The following command shape is agent-internal compatibility input, never user input:
 
 ```bash
 python3 /loaded/context-decision/skills/decision/scripts/decision_workflow.py preview \
@@ -36,4 +36,4 @@ python3 /loaded/context-decision/skills/decision/scripts/decision_workflow.py ap
   --approved-digest sha256:<exact> --json
 ```
 
-Use `candidate prepare`/`capture` or workflow `--candidate @file --attestation @file` only for advanced lifecycle, explicit decline, or already-frozen inputs. Inline `--sec-*` is literal by default; `@file` reads a named regular UTF-8 file and `@@literal` preserves one leading `@`. Missing, symlinked, or oversized files fail before receipt or repository writes. Limits are DEC decision 1,200 codepoints, common primary claim 2,000 codepoints, canonical owner input 8 KiB, and full candidate envelope 16 KiB. Delete the transient receipt manually after the workflow.
+Use `candidate prepare`/`capture` or `--candidate @file --attestation @file` only for advanced lifecycle, decline, or frozen inputs. Inline values are literal; explicit `@file` and `@@literal` remain supported. Missing, symlinked, or oversized inputs fail before receipt or repository writes. Limits remain DEC 1,200 codepoints, common claim 2,000 codepoints, owner input 8 KiB, and candidate envelope 16 KiB.

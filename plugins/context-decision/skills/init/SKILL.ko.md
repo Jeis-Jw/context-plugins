@@ -5,7 +5,7 @@ description: 사용자가 현재 repository의 context-decision 초기화나 boo
 
 # Init (한국어)
 
-먼저 이 release가 고정한 context-core public entrypoint의 absolute path를 준비한다. `decision_init.py`는 subprocess 실행 전에 path suffix와 SHA-256을 semantic CLI의 `REQUIRED_PLUGIN` pin에 대조하고, 일치한 core에서만 `context-core-schema/v1`, `context-common/v2`, `context-owner-descriptor/v2`, 필수 doctor/bootstrap/transaction command와 current doctor state를 직접 handshake한다. host/skill catalog가 이 loaded `SKILL.md`의 actual absolute path를 제공하면, 그 파일의 sibling `scripts/decision_init.py`를 resolve해 orchestration entrypoint를 **한 번만** 호출한다. cwd, plugin cache 탐색 또는 `$CLAUDE_PLUGIN_ROOT`를 Codex 경로 fallback으로 사용하지 않는다.
+loaded `SKILL.md`에서 sibling `scripts/decision_init.py`와 별도 loaded core entrypoint를 resolve해 adapter를 한 번만 호출한다. cwd·plugin cache를 탐색하거나 대체 runtime을 쓰지 않는다.
 
 ```bash
 INIT_SKILL_FILE="/absolute/path/from-loaded-skill-catalog/plugins/context-decision/skills/init/SKILL.md"
@@ -16,10 +16,8 @@ python3 "$INIT_ENTRYPOINT" \
   --json
 ```
 
-Claude Code에서는 host가 제공한 plugin root를 알고 있을 때만 `INIT_SKILL_FILE="${CLAUDE_PLUGIN_ROOT}/skills/init/SKILL.md"`를 optional route로 사용할 수 있다. Codex에서는 반드시 loaded skill catalog의 absolute `SKILL.md` path를 사용한다.
+Claude Code는 host가 준 `${CLAUDE_PLUGIN_ROOT}`만 optional route로 쓰고 Codex는 loaded catalog path를 쓴다. Adapter는 release pin의 path suffix/SHA-256을 확인한 뒤 `context-core-schema/v1`, `context-common/v2`, `context-owner-descriptor/v2`, 필수 command와 doctor state를 handshake한다. mismatch/incompatible은 write 0이다. absent/partial/invalid/ready 진단과 fixed descriptor/index seed는 pinned core에 전달하며 core가 repair 가능성을 판정한다.
 
-- missing/path 또는 SHA mismatch/incompatible이면 subprocess, repository와 host configuration write 0으로 중단한다. 설치·활성화·update는 caller가 별도로 수행하고 reload·새 session 뒤 재시도한다.
-- absent/partial/invalid/ready는 위 exact doctor handshake 뒤 명시적 bootstrap에 전달한다. repair 가능 여부와 실패 진단은 pinned core가 소유하며 adapter가 doctor receipt를 만들거나 수정하지 않는다.
-- 이 entrypoint가 exact pin과 handshake를 먼저 실행하고 fixed descriptor/index seed와 `--host`를 명시적으로 제공된 active installed core의 public `context_cli.py bootstrap --descriptor @file --index-seed @file --host <host> --json` surface에 그대로 전달한다. cache path를 추측하거나 core를 내장·복제하지 않는다.
+Core만 `core_init|area_register|policy_install`을 적용하고 managed block 밖 byte를 보존하며 retry를 수렴시킨다.
 
-core public bootstrap은 absent core seed, decision area, 현재 host 운영지침을 순서대로 맞춘다. 운영지침은 Codex의 `AGENTS.md` 또는 Claude Code의 `CLAUDE.md`에 marker로 경계된 단일 managed block으로 설치·갱신되며 marker 밖의 bytes를 보존한다. 세 단계는 `phases`에 `applied|noop|failed`로 보고하고 재시도하면 완료된 단계는 noop, 남은 단계만 적용된다. 이 명시적 init이 허용하는 write는 fixed core seed·area registration·policy installation뿐이며 DEC/user-content mutation은 exact digest approval을 계속 요구한다.
+일반 durable capture는 별도다. 기록 제안 전에 preview를 실행하고 완성된 렌더링 본문과 함께 한 번만 묻는다. preview stdout의 `approval_digest`는 agent가 그대로 apply에 전달하되 digest·receipt 경로·내부 ID·core 경로를 사용자에게 보이거나 요구하지 않는다. capture 질문에 대한 직접적·명시적·무조건적 긍정만 승인이다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니며 승인 뒤 content·plan을 재생성하지 않는다.

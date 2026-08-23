@@ -2,7 +2,7 @@
 
 Durable project context for coding agents, centered on decisions.
 
-`context-decision` restores what the project chose, why it chose it, and which alternatives it rejected. `context-core` supplies Git/Markdown storage, bounded recall, approval previews, and the only physical write coordinator. Context is proposed only when it is worth keeping and is written only after the user approves the exact digest.
+`context-decision` restores what the project chose, why it chose it, and which alternatives it rejected. `context-core` supplies Git/Markdown storage, bounded recall, approval previews, and the only physical write coordinator. Context is proposed only when worth keeping and written only after the user sees the complete preview and answers the capture question directly.
 
 > Developer preview: `0.5.1` is prepared locally, but the `v0.5.1` tag has not been created or pushed. Marketplace publication is also pending. The repository has no `LICENSE`; an owner must choose one before inviting public use, copying, or redistribution.
 
@@ -34,8 +34,8 @@ conversation delta
   -> metadata-first recall when relevant
   -> selected body comparison
   -> conflict or rationale-change notice
-  -> mature capture preview
-  -> user approves the exact approval_digest
+  -> complete rendered capture preview
+  -> one natural-language confirmation
   -> context-core applies one transaction
 ```
 
@@ -77,11 +77,10 @@ Run each optional owner's init once. One addon never initializes another addon.
 
 ## Safety and cost boundaries
 
-- A durable mutation requires a complete preview and the user's exact `approval_digest` approval.
-- The DEC workflow creates a sensitive frozen receipt at a new absolute path outside the repository and Git metadata with mode `0600`. Delete it manually when the workflow is complete.
-- The user-facing workflow digest binds repository identity, the release-pinned core path/SHA, candidate/result digests, and the nested core bundle/digest. `receipt_digest` detects receipt damage; it is not approval.
-- Repository identity includes the resolved worktree and Git common-directory path/device/inode. Clone replay, linked-worktree replay, and same-path repository recreation fail before writes. HEAD and unrelated content are intentionally not bound, so an unrelated edit and an idempotent retry remain valid.
-- Semantic addons verify the release-pinned `skills/context/scripts/context_cli.py` path suffix and SHA-256 before execution, then handshake schema, `context-common/v2`, required commands, `context-owner-descriptor/v2`, and doctor state. This does not attest marketplace provenance, catalog source, or host enabled state. Caller inventory/doctor files are low-level compatibility inputs only.
+- A durable mutation requires the complete preview and a direct, explicit, unconditional affirmative answer to its capture question. `알겠어` alone, a condition, an edit request, or a topic change is not approval; ambiguous praise is confirmed once.
+- The agent keeps transport details internal. Users never see or enter digests, temporary-file locations, internal IDs, or runtime paths.
+- The workflow freezes the preview before asking and does not regenerate it after approval. Repository identity, pinned runtime, CAS, lock, and atomic-write bindings remain enforced; tampering, clone/linked-worktree replay, and same-path repository recreation fail before writes.
+- Semantic addons verify the release-pinned core runtime and handshake schema, `context-common/v2`, required commands, `context-owner-descriptor/v2`, and doctor state. This does not attest marketplace provenance, catalog source, or host enabled state. Low-level compatibility inputs remain available for external orchestration.
 - Healthy index misses open zero indexed artifact bodies. Stale or missing index recovery opens at most 20 bodies per recall.
 - Hard bounds cover body materialization/open, selected output, candidates/envelopes, and owner input. Index scoring/directory enumeration and end-to-end model tokens are not O(1).
 - The common primary-claim ceiling is 2,000 codepoints. Built-in SNAP `current_context`, OBS `observation`, and DEC `decision` each use an owner-specific 1,200-codepoint ceiling. Canonical owner input is at most 8 KiB; the full candidate envelope is at most 16 KiB.
@@ -99,7 +98,7 @@ Run each optional owner's init once. One addon never initializes another addon.
 | Codex + Claude Code | All four plugins installed and loaded | ASM/TERM remain optional experimental surfaces |
 | Actual model behavior | Unverified | No confirmed no-signal, capture-quality, or end-to-end token-usage measurement |
 
-Codex prompt material was reduced from 3,147 to 1,339 characters, a 57.5% character reduction. This is not a token-savings claim.
+Codex prompt material was reduced from 3,147 to 1,331 characters, a 57.7% character reduction. This is not a token-savings claim.
 
 ## Release status
 

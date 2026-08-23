@@ -27,7 +27,7 @@ A DEC is an explicit choice governing current or future action. The exact candid
 
 Ideas, questions, facts, preferences, and unaccepted proposals are `decline` or `needs_clarification`. `requested_kind:"decision"` selects an owner but never bypasses this gate. The CLI validates assertion names, exact input digest, and RFC 6901 pointers; it does not make semantic judgment for the agent.
 
-`candidate prepare` normalizes caller-provided fields, a caller-generated `cand_` plus 32 lowercase hex transport ID, commitment evidence, and bounded search terms. The owner then calls `capture --candidate @file --attestation @file`, or exits without an authoritative draft via a decline/clarification reason. Random candidate generation, constant evidence, and self-attestation are forbidden.
+`candidate prepare` normalizes caller-provided semantic fields, a `cand_` plus 32 lowercase hex transport ID, commitment evidence, and bounded search terms. The owner never invents candidate meaning without caller input. A transport ID may be generated mechanically but has no semantic weight. The owner then calls `capture --candidate @file --attestation @file`, or exits without an authoritative draft via a decline/clarification reason. Constant evidence and self-attestation are forbidden.
 
 ## DEC schema and slot
 

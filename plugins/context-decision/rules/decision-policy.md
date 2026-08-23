@@ -4,4 +4,6 @@ context-core의 증분 audit에서 선택의 형성·변경 신호가 있을 때
 
 관계는 `new|same|supporting|rationale_changed|conflict`로 판정한다. hash, ID와 metadata는 의미 판정 근거가 아니다. `same|supporting`은 조용히 재사용하고, 취지 변화나 충돌은 primary 결론 전에 알린다.
 
-명시적 선택·scope·따를 의사가 모두 있는 성숙한 후보만 원래 답 뒤 grouped proposal에 한 번 포함한다. dismissed·deferred 후보는 새 evidence 전까지 재제안하지 않는다. context-decision은 draft와 validation receipt만 반환하며 승인 또는 filesystem write를 수행하지 않는다.
+명시적 선택·scope·따를 의사가 모두 있는 성숙한 후보만 원래 답 뒤 grouped proposal에 한 번 포함한다. dismissed·deferred 후보는 새 evidence 전까지 재제안하지 않는다. context-decision은 draft와 validation receipt만 반환하며 filesystem write를 수행하지 않는다.
+
+기록 제안 전에 preview를 실행하고 완성된 렌더링 본문과 함께 한 번만 묻는다. preview stdout의 `approval_digest`는 agent가 변경 없이 apply에 전달하되 digest·receipt 경로·내부 ID·core 경로를 사용자에게 보이거나 요구하지 않는다. capture 질문에 대한 직접적·명시적·무조건적 긍정만 승인이다. `알겠어` 단독, 조건, 수정 요청, 화제 전환에는 적용하지 않으며 승인 뒤에는 본문이나 plan을 재생성하지 않는다.

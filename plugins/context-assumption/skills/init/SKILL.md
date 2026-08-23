@@ -7,11 +7,9 @@ description: 사용자가 context-assumption 초기화를 명시적으로 요청
 
 이 skill은 사용자가 `$context-assumption:init`을 명시했을 때만 실행한다. 자동 설치·활성화·update·downgrade·migration은 하지 않는다.
 
-1. semantic CLI의 `REQUIRED_PLUGIN`에 고정된 `context-core@context-plugins` public entrypoint suffix와 SHA-256을 supplied absolute `--core-cli`에 대조한다.
-2. loaded skill catalog에서 이 파일의 sibling entrypoint를 해석한다.
-3. 일치한 core만 실행해 `context-core-schema/v1`, `context-common/v2`, `context-owner-descriptor/v2`, 필수 doctor/bootstrap/transaction command와 current doctor state를 직접 handshake한다.
-4. 같은 호출에서 `assumption_init.py`가 descriptor v2와 fixed index seed를 core `bootstrap`에 전달한다.
-5. bootstrap 뒤 core doctor ready, root owner-profile registry, area profile/index exact bytes와 managed host policy 결과를 다시 확인한다.
+1. `REQUIRED_PLUGIN`의 core entrypoint suffix/SHA-256을 supplied `--core-cli`에 대조하고 loaded catalog에서 sibling entrypoint를 해석한다.
+2. 일치한 core에서만 `context-core-schema/v1`, `context-common/v2`, `context-owner-descriptor/v2`, 필수 command와 doctor를 handshake한다.
+3. `assumption_init.py`가 descriptor v2와 fixed index seed를 core `bootstrap`에 전달하고 ready/profile/index/managed policy 결과를 확인한다.
 
 ```bash
 INIT_SKILL_FILE="<loaded-skill-path>/SKILL.md"
@@ -21,6 +19,6 @@ python3 "${INIT_SKILL_FILE%/SKILL.md}/scripts/assumption_init.py" \
   --json
 ```
 
-ASM adapter는 temporary descriptor/seed 전달 외 repository write primitive를 갖지 않으며, durable bytes는 core만 쓴다.
+ASM adapter는 temporary descriptor/seed 전달 외 write primitive가 없다. `absent|partial|invalid|ready`는 pinned core에 전달하며 mismatch는 subprocess, receipt와 repository write 0이다.
 
-`repository_state=absent|partial|invalid|ready`는 exact doctor handshake 뒤 pinned core bootstrap에 전달하며 실제 복구 가능 여부는 core가 판정한다. path 또는 SHA-256이 pin과 다르면 동명 script라도 subprocess, receipt와 repository write 0으로 중단한다.
+일반 durable capture는 별도다. 기록 제안 전에 preview를 실행하고 완성된 렌더링 본문과 함께 한 번만 묻는다. preview stdout의 `approval_digest`는 agent가 그대로 apply에 전달하되 digest·receipt 경로·내부 ID·core 경로를 사용자에게 보이거나 요구하지 않는다. capture 질문에 대한 직접적·명시적·무조건적 긍정만 승인이다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니며 승인 뒤 content·plan을 재생성하지 않는다.

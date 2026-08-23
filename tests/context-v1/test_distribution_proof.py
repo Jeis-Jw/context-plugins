@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -51,6 +52,13 @@ FORBIDDEN_KEYS = {
     "defaultInstall",
     "installed_by_default",
     "installedByDefault",
+}
+BASELINE_SKILL_BYTES = 40_715
+UNCHANGED_EXPERIMENTAL_MANIFESTS = {
+    "plugins/context-assumption/.claude-plugin/plugin.json": "860fb98c5d941c161b1e07f5f09e0d88e6b958a7690cc401b4d3b5af2b239ada",
+    "plugins/context-assumption/.codex-plugin/plugin.json": "870de161652f0855e4f54725aa1354c3a0c3e70bcbc1c95fc2d6212d08b88724",
+    "plugins/context-term/.claude-plugin/plugin.json": "478103eda176fa857cb11427e0f31700b329638aec4d6a34332bfc9fbc11ffeb",
+    "plugins/context-term/.codex-plugin/plugin.json": "17e34d98b3d2089a0a6e086733cfeb1f675636f6c36e26747287c4fda1da7d91",
 }
 
 
@@ -304,8 +312,7 @@ class DistributionProofTests(unittest.TestCase):
         self.assertTrue((ROOT / "plugins/context-decision/skills/decision/SKILL.md").is_file())
         for manifest in sorted(ROOT.glob("plugins/*/.codex-plugin/plugin.json")):
             prompts = read_json(manifest)["interface"]["defaultPrompt"]
-            self.assertLessEqual(len(prompts), 3, manifest)
-            self.assertTrue(prompts, manifest)
+            self.assertEqual(3, len(prompts), manifest)
             for prompt in prompts:
                 self.assertTrue(prompt.strip(), manifest)
                 self.assertLessEqual(len(prompt), 128, f"{manifest}: {prompt}")
@@ -319,8 +326,7 @@ class DistributionProofTests(unittest.TestCase):
         self.assertIn("--core-cli", init_skill)
         for manifest in sorted(ROOT.glob("plugins/*/.codex-plugin/plugin.json")):
             prompts = read_json(manifest)["interface"]["defaultPrompt"]
-            self.assertLessEqual(len(prompts), 3, manifest)
-            self.assertTrue(prompts, manifest)
+            self.assertEqual(3, len(prompts), manifest)
             for prompt in prompts:
                 self.assertTrue(prompt.strip(), manifest)
                 self.assertLessEqual(len(prompt), 128, f"{manifest}: {prompt}")
@@ -328,7 +334,7 @@ class DistributionProofTests(unittest.TestCase):
         decision_skill = (decision_root / "skills/decision/SKILL.md").read_text(encoding="utf-8")
         for token in ("context-common/v2", "partial/invalid/ready", "scan caches", "managed block"):
             self.assertIn(token, init_skill)
-        for token in ("actual", "conflict", "exact digest", "Core alone owns"):
+        for token in ("actual", "conflict", "complete rendered", "Core alone owns", "`알겠어`"):
             self.assertIn(token, decision_skill)
         for name in PLUGIN_NAMES[1:]:
             semantic_root = ROOT / "plugins" / name
@@ -424,6 +430,90 @@ class DistributionProofTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden_command, all_python)
 
+    def test_natural_language_approval_contract_is_consistent_and_smaller(self) -> None:
+        skill_paths = sorted(ROOT.glob("plugins/*/skills/*/SKILL*.md"))
+        self.assertEqual(16, len(skill_paths))
+        self.assertLess(
+            sum(path.stat().st_size for path in skill_paths),
+            BASELINE_SKILL_BYTES,
+        )
+
+        for path in skill_paths:
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("`approval_digest`", text, path)
+            self.assertIn("`알겠어`", text, path)
+            self.assertTrue(
+                "direct, explicit, unconditional" in text
+                or "직접적·명시적·무조건적" in text,
+                path,
+            )
+            self.assertTrue("complete rendered body" in text or "완성된 렌더링 본문" in text, path)
+            self.assertTrue("receipt path" in text or "receipt 경로" in text, path)
+            self.assertTrue("topic change" in text or "화제 전환" in text, path)
+            self.assertTrue("regenerate" in text or "재생성" in text, path)
+
+        readmes = (
+            ROOT / "README.md",
+            ROOT / "README.ko.md",
+            ROOT / "plugins/context-core/README.md",
+            ROOT / "plugins/context-core/README.ko.md",
+            ROOT / "plugins/context-decision/README.md",
+            ROOT / "plugins/context-decision/README.ko.md",
+        )
+        hidden_user_tokens = (
+            "approval_digest",
+            "receipt_digest",
+            "candidate_id",
+            "cand_",
+            "plan_id",
+            "ctx_",
+            "--core-cli",
+            "--receipt-file",
+            "skills/context/scripts/context_cli.py",
+        )
+        for path in readmes:
+            text = path.read_text(encoding="utf-8")
+            for token in hidden_user_tokens:
+                self.assertNotIn(token, text, path)
+            self.assertNotIn("Delete it manually", text, path)
+            self.assertNotIn("Delete the receipt manually", text, path)
+            self.assertNotIn("사용자가 직접 삭제", text, path)
+            self.assertTrue(
+                "direct, explicit, unconditional" in text
+                or "직접적·명시적·무조건적" in text,
+                path,
+            )
+
+        policy_paths = sorted(ROOT.glob("plugins/*/rules/*.md"))
+        approval_surfaces = [*skill_paths, *readmes, *policy_paths, ROOT / "AGENTS.md"]
+        core_cli = load(
+            "context_cli_natural_language_policy",
+            ROOT / "plugins/context-core/skills/context/scripts/context_cli.py",
+        )
+        approval_text = "\n".join(path.read_text(encoding="utf-8") for path in approval_surfaces)
+        approval_text += "\n" + core_cli.POLICY_BODY
+        for name in ("context-core", "context-decision"):
+            approval_text += "\n" + " ".join(
+                read_json(ROOT / "plugins" / name / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"]
+            )
+        forbidden_approval_phrases = re.compile(
+            r"exact\s+`?approval_digest`?|exact[-\s]+digest|approval_digest`?\s+(?:approval|승인)",
+            re.IGNORECASE,
+        )
+        self.assertIsNone(forbidden_approval_phrases.search(approval_text))
+
+        english_protocol = (
+            ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.md"
+        ).read_text(encoding="utf-8")
+        korean_protocol = (
+            ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.ko.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("The owner never invents candidate meaning without caller input", english_protocol)
+        self.assertIn("owner는 caller 입력 없이 후보 의미를 지어내지 않는다", korean_protocol)
+
+        for relative, expected in UNCHANGED_EXPERIMENTAL_MANIFESTS.items():
+            self.assertEqual(expected, hashlib.sha256((ROOT / relative).read_bytes()).hexdigest(), relative)
+
     def test_semantic_plugins_pin_the_distributed_core_entrypoint(self) -> None:
         core_cli = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
         expected = read_json(ROOT / "tests/context-v1/fixtures/host-inventory/required-plugin.json")
@@ -461,27 +551,30 @@ class DistributionProofTests(unittest.TestCase):
         ):
             self.assertIn(token, development)
 
-        for name in PLUGIN_NAMES[1:]:
+        for name in ("context-assumption", "context-term"):
             readme = (ROOT / "plugins" / name / "README.md").read_text(encoding="utf-8")
             for token in ("path suffix", "SHA-256", "marketplace provenance", "compatibility", "@file", "8 KiB", "16 KiB"):
                 self.assertIn(token, readme)
-            if name == "context-decision":
-                self.assertIn("@@literal", readme)
-            else:
-                self.assertIn("`--candidate @file`", readme)
-                self.assertNotIn("--sec-*", readme)
-                self.assertNotIn("@@literal", readme)
+            self.assertIn("`--candidate @file`", readme)
+            self.assertNotIn("--sec-*", readme)
+            self.assertNotIn("@@literal", readme)
             prompts = read_json(ROOT / "plugins" / name / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"]
             prompt_text = " ".join(prompts)
             for token in ("pinned context_cli.py", "SHA-256", "marketplace provenance/source/enabled", "low-level compatibility"):
                 self.assertIn(token, prompt_text)
 
         root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        for token in ("mode `0600`", "Delete it manually", "indexed artifact bodies", "20 bodies", "end-to-end model tokens", "O(1)"):
+        for token in ("complete preview", "direct, explicit, unconditional", "indexed artifact bodies", "20 bodies", "end-to-end model tokens", "O(1)"):
             self.assertIn(token, root_readme)
         decision_readme = (ROOT / "plugins/context-decision/README.md").read_text(encoding="utf-8")
-        for token in ("user-facing exact approval", "Delete the receipt manually", "zero indexed bodies", "20 bodies", "end-to-end model tokens", "O(1)"):
+        for token in ("complete rendered preview", "direct, explicit, unconditional", "zero indexed bodies", "20 bodies", "end-to-end model tokens", "O(1)"):
             self.assertIn(token, decision_readme)
+
+        decision_protocol = (
+            ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.md"
+        ).read_text(encoding="utf-8")
+        for token in ("mode `0600`", "approval_digest", "receipt_digest", "core absolute path/pinned SHA-256"):
+            self.assertIn(token, decision_protocol)
 
         release_notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
         migration = (ROOT / "MIGRATION.md").read_text(encoding="utf-8")
@@ -525,30 +618,8 @@ class DistributionProofTests(unittest.TestCase):
             f"{baseline_prompt_chars:,}자에서 {actual_prompt_chars:,}자로 {reduction_percent:.1f}% 감소",
             korean_readme,
         )
-        for token in (
-            "skills/context/scripts/context_cli.py",
-            "SHA-256",
-            "schema",
-            "context-common/v2",
-            "required features·commands",
-            "doctor state",
-            "marketplace provenance",
-            "catalog source",
-            "host enabled state",
-            "low-level compatibility input",
-        ):
+        for token in ("complete preview", "직접적·명시적·무조건적", "`알겠어`", "context-common/v2"):
             self.assertIn(token, korean_readme)
-        self.assertIn(
-            "release-pinned core executable의 path suffix/SHA-256, schema·protocol·required "
-            "features/commands 또는 operation별 doctor state가 요구 조건과 다르면 target write는 0",
-            korean_readme,
-        )
-        self.assertIn(
-            "이 검증은 marketplace provenance, catalog source 또는 host enabled state를 attest하지 않습니다.",
-            korean_readme,
-        )
-        self.assertNotIn("source, version 또는 protocol이 맞지 않으면", korean_readme)
-        self.assertNotIn("marketplace provenance, catalog source 또는 host enabled state를 attest합니다", korean_readme)
         self.assertIn("`0.5.1` developer preview는 local release 후보 commit으로 준비됐습니다", korean_readme)
         self.assertIn("local `0.5.1` release 후보 commit도 아직 push되지 않았고", korean_readme)
         self.assertIn("`v0.5.1` tag는 아직 생성·push되지 않았으며", korean_readme)

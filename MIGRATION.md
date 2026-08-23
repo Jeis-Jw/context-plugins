@@ -26,13 +26,13 @@ The coordinate change is a breaking distribution migration even though the stora
 
 ## Knowledge boundary
 
-The source repository's `wiki/` and `context/` corpus are not imported. This repository initializes a fresh `context/` root and decision area; any non-init DEC or OBS requires its own actual-body review and exact approval digest.
+The source repository's `wiki/` and `context/` corpus are not imported. This repository initializes a fresh `context/` root and decision area; any non-init DEC or OBS requires its own actual-body review, complete rendered preview, and direct user confirmation.
 
 ## 0.5.0 additive semantic owners
 
 `0.5.0` adds optional `context-assumption` and `context-term` plugins plus the generic `context-owner-descriptor/v2` registration path. The storage protocol remains `context-common/v2`; existing SNAP, OBS and DEC artifacts are not rewritten.
 
-Users install only the owners they need and explicitly run each installed addon's init. No plugin automatically installs, enables, updates or initializes another plugin. Existing notes, assumptions, glossary files or older context artifacts are not inferred or migrated into ASM/TERM automatically; each durable artifact still requires its own semantic review and exact approval digest.
+Users install only the owners they need and explicitly run each installed addon's init. No plugin automatically installs, enables, updates or initializes another plugin. Existing notes, assumptions, glossary files or older context artifacts are not inferred or migrated into ASM/TERM automatically; each durable artifact still requires its own semantic review and complete preview confirmation.
 
 Rollback is distribution-level: stop using or uninstall the optional addon while leaving its repository artifacts untouched. Automatic downgrade, descriptor mutation, area deletion and corpus cleanup are not provided.
 
@@ -44,6 +44,12 @@ Rollback is distribution-level: stop using or uninstall the optional addon while
 - W2 binds both core and workflow approval material to exact worktree/Git-common-dir identity, pins the distributed `context_cli.py` path suffix and SHA-256 before execution, and performs the core schema/protocol/command/feature/doctor handshake directly. This executable check is not marketplace provenance, catalog source or enabled-state attestation; caller inventory remains a low-level compatibility input.
 - W3 applies actual semantic input limits (DEC 1,200 codepoints, common primary claim 2,000 codepoints, owner input 8 KiB, full candidate envelope 16 KiB). Core and DEC `--sec-*` values use literal, `@file` and `@@literal` behavior; ASM and TERM use structured `--candidate @file` input.
 
-Frozen workflow receipts contain decision material. They must be created at a new absolute path outside the repository and Git metadata, remain mode `0600`, and be deleted manually after the workflow. Reusing a receipt across a clone, linked worktree or same-path repository recreation fails before repository writes.
+Frozen workflow receipts contain decision material. They remain outside the repository and Git metadata with mode `0600`; reusing one across a clone, linked worktree or same-path repository recreation fails before repository writes. The agent owns this transport lifecycle rather than asking the user to manage it.
 
 No storage migration is required. Existing callers of `--core-inventory` and `--core-doctor` may keep using the low-level compatibility surface, but canonical addon init and DEC workflow should provide the release-pinned `--core-cli` instead.
+
+## 0.6.0 natural-language approval UX (unreleased)
+
+The 0.6.0 user contract shows one complete rendered preview and asks one natural-language capture question. Only a direct, explicit, unconditional affirmative answer authorizes apply; `알겠어` alone, conditions, edit requests, and topic changes do not. Digests, receipt locations, internal IDs, and core paths remain agent/CLI transport details.
+
+This wording change is not releasable alone: it must integrate with the companion workflow PR before either enters main. Frozen receipt, approval binding, repository identity, pinned core SHA, CAS, lock, atomic writes, and no-regeneration-after-approval remain unchanged. No storage migration is required.

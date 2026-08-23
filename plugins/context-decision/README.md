@@ -14,7 +14,7 @@ Core and decision must come from the same immutable release checkout. Decision p
 
 ## Executable trust boundary
 
-Before any core subprocess, canonical init and workflow verify that the supplied absolute `--core-cli` matches the release-pinned `skills/context/scripts/context_cli.py` path suffix and SHA-256. Only then do they handshake:
+Before any core subprocess, canonical init and workflow verify the release-pinned core runtime. Only then do they handshake:
 
 - `schema=context-core-schema/v1`
 - `protocol=context-common/v2`
@@ -22,7 +22,7 @@ Before any core subprocess, canonical init and workflow verify that the supplied
 - `context-owner-descriptor/v2`
 - the exact doctor field shape and current repository state
 
-This verifies the executable release contract. It does **not** attest marketplace provenance, catalog source, installation scope, or host enabled state. Caller-created `--core-inventory @file` and `--core-doctor @file` remain available only for low-level compatibility operations; canonical init and the DEC workflow do not use them.
+This verifies the executable release contract. It does **not** attest marketplace provenance, catalog source, installation scope, or host enabled state. Inventory and doctor files remain available only for low-level compatibility operations; canonical init and the DEC workflow do not ask users to provide them.
 
 The low-level inventory preflight may report `core_missing`, `core_source_mismatch`, `core_disabled`, `core_incompatible`, `core_uninitialized`, or `ready`. For the first four, install or correct `context-core@context-plugins` from `Jeis-Jw/context-plugins` in the intended scope, reload or open a new session, and retry `context-decision:init`. `core_uninitialized` is not an install failure: the same init call invokes core bootstrap for both core and DEC.
 
@@ -40,11 +40,11 @@ Only an explicit choice with canonical scope and commitment evidence may become 
 
 ## Golden capture workflow
 
-The normal single-decision path is `decision_workflow.py preview --inline`, followed by `apply` only after the user approves the exact digest. The caller supplies every semantic field and explicitly attests `explicit_choice`, `scope_identified`, and `commitment_present`; the CLI serializes those claims but does not invent evidence or judgment.
+The agent prepares one complete rendered preview before asking whether to record it. A write is allowed only after a direct, explicit, unconditional affirmative answer to that capture question. `알겠어` alone, a condition, an edit request, or a topic change is not approval; ambiguous praise is confirmed once. A requested edit produces a new preview and a new question.
 
-The preview writes one sensitive frozen receipt to a new absolute path outside the repository and Git metadata with mode `0600`. The stdout `approval_digest` is the user-facing exact approval and binds repository identity, pinned core absolute path/SHA, candidate/result digests, and the nested core bundle/digest. `receipt_digest` detects damage but cannot replace approval. Delete the receipt manually after the workflow.
+Users never see or enter digests, temporary-file locations, internal IDs, or core paths. The CLI still receives caller-provided semantic fields and attestations; it serializes them but never invents evidence or judgment.
 
-Clone replay, linked-worktree replay, same-path repository recreation, receipt tampering, core changes, and a wrong digest all fail before repository writes. Apply forwards the unchanged nested bundle to core and does not regenerate IDs, timestamps, content, or plans.
+The workflow freezes repository identity, pinned runtime, semantic result, nested core bundle, CAS, and lock bindings before asking and never regenerates them after approval. Clone replay, linked-worktree replay, same-path repository recreation, tampering, runtime changes, and wrong approval material fail before repository writes.
 
 Inline `--sec-*` values are literals by default. `@file` reads a named regular UTF-8 file and `@@literal` preserves one leading `@`; path-like plain text stays literal. Missing, symlinked, or oversized files fail before receipt or repository writes.
 

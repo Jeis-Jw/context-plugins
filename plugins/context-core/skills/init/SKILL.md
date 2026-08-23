@@ -5,17 +5,15 @@ description: When the user explicitly requests context-core initialization, appl
 
 # Init
 
-For an explicit core-only setup, call exactly one of:
+Only for explicit core setup, call one matching host command:
 
 ```bash
 python3 /loaded/context-core/skills/context/scripts/context_cli.py init --host codex --json
 python3 /loaded/context-core/skills/context/scripts/context_cli.py init --host claude-code --json
 ```
 
-An absent repository receives the canonical root, SNAP, and OBS seeds, followed by the active host policy (`codex -> AGENTS.md`, `claude-code -> CLAUDE.md`). A ready repository with the current managed block returns no-op phases and produces no filesystem diff.
+Absent repositories receive canonical root/SNAP/OBS seeds and the active managed policy (`codex -> AGENTS.md`, `claude-code -> CLAUDE.md`). Ready repositories return no-op phases. Preserve bytes outside managed markers; broken/duplicate markers, symlinks, nested targets, incompatible schema/owner/path, and unsafe partial states fail with zero writes.
 
-Preflight the policy target and markers before every write. Preserve all bytes outside the managed block. A broken/duplicate marker, symlink, nested target, incompatible schema/owner/path, or unsafe partial registration fails with zero writes. If only the root index is missing in an otherwise populated repository, rebuild it solely from exact built-in SNAP/OBS metadata; never claim an unregistered area.
+Addon bootstrap requires the `context-owner-descriptor/v2` schema feature, a canonical descriptor of at most 8 KiB, and its exact empty area seed. Registered descriptor identity is immutable. Never auto-upgrade, downgrade, migrate, delete, or repair unknown trust bytes. Explicit init authorizes only fixed `core_init|area_register|policy_install` transitions.
 
-Before addon bootstrap, require `context-owner-descriptor/v2` in the root-independent schema handshake. Pass a canonical descriptor of at most 8 KiB and the exact empty area seed containing its full descriptor block. Mixed v1/v2 roots are allowed, but a registered v2 descriptor digest is immutable. Do not auto-upgrade, downgrade, migrate, delete, or repair unknown trust bytes.
-
-Only none, exact seed-only, exact root-row+profile-registry-only, and complete registration states may converge on retry. This explicit init authorizes only fixed `core_init|area_register|policy_install`; ordinary SNAP, OBS, DEC, or user-content mutation still requires a complete bundle and exact user-approved `approval_digest`.
+Ordinary capture remains separate. Before suggesting it, run preview and ask once with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply; never show or request a digest, receipt path, internal ID, or core path. Only a direct, explicit, unconditional affirmative answer to that capture question is approval. `알겠어` alone, a condition, edit request, or topic change is not approval. Never regenerate content or plan after approval.

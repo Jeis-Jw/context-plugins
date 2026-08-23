@@ -15,9 +15,9 @@
     "category": "Productivity",
     "capabilities": ["Read", "Write", "Validation"],
     "defaultPrompt": [
-      "Audit only new semantic delta; do nothing when no durable signal. Keep a compact session-local ledger.",
-      "Use $context-core:init only for explicit repository initialization; it also installs the managed host policy.",
-      "Recall metadata-first; compare selected bodies; report conflicts first; write only after exact approval_digest approval."
+      "Audit new meaning only; stay silent without durable signal. Recall metadata-first only when it can change the answer.",
+      "Report conflicts or rationale changes before the conclusion; preview complete text and ask once.",
+      "Direct, explicit, unconditional yes: pass `approval_digest` unchanged; verify core SHA, repo, CAS, lock; never regenerate."
     ]
   }
 }

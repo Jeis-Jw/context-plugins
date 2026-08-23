@@ -7,12 +7,11 @@ description: 작업 중 발견한 사실·근거·시행착오가 이후에도 �
 
 OBS는 `authority: evidence`인 immutable semantic claim이다. DEC처럼 따를 결정으로 표현하지 않는다.
 
-1. capture에는 substantive `관찰`과 최소 한 개의 substantive `근거`가 모두 있어야 한다.
-2. `context_cli.py capabilities --json`의 observation descriptor만 사용해 bounded candidate와 `claim` attestation을 만든다.
-3. title·summary·tags·search metadata 교정은 `annotate`; claim/evidence 의미 변경은 새 successor OBS를 만든 뒤 `supersede`한다.
-4. supersede 전에 `lifecycle prepare`의 exact old/new input만 보고 `same_claim` attestation을 만든다. 두 primary claim을 evidence pointer로 각각 가리킨다.
-5. supersede는 successor create와 predecessor History 이동을 한 owner result와 한 final bundle에 포함한다.
-6. 반증은 free-text reason을 가진 `invalidate`, 실제 재확인은 evidence ref를 가진 `reverify`를 사용한다. 오래됨만으로 retire하지 않는다.
-7. mutation은 complete bundle의 exact digest 승인 뒤 core `transaction apply`만 호출한다. exact ID/path와 backlink guard를 우회하지 않는다.
+1. capture에는 substantive `관찰`과 최소 한 개의 substantive `근거`가 필요하며 capability descriptor만 사용한다.
+2. `annotate`는 metadata만 바꾼다. claim/evidence 의미가 달라지면 양쪽 실제 claim을 준비해 successor OBS와 predecessor History를 한 final bundle로 `supersede`한다.
+3. 반증은 이유가 있는 `invalidate`, 실제 재확인은 evidence ref가 있는 `reverify`다. 오래됨만으로 retire하지 않는다.
+4. ID/path, backlink, repository identity, CAS, lock, atomic-write guard를 유지한다. preview·prepare·attestation은 write 0이다.
 
-CLI는 `../context/scripts/context_cli.py observation ...`을 사용한다. preview/prepare/attestation 단계에서는 filesystem을 쓰지 않는다.
+기록 제안 전에 preview를 실행하고 완성된 렌더링 본문과 함께 한 번만 묻는다. preview stdout의 `approval_digest`는 agent가 그대로 apply에 전달하되 digest·receipt 경로·내부 ID·core 경로를 사용자에게 보이거나 요구하지 않는다. capture 질문에 대한 직접적·명시적·무조건적 긍정만 승인이다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니며 승인 뒤 content·plan을 재생성하지 않는다.
+
+CLI는 `../context/scripts/context_cli.py observation ...`을 사용하고 물리 write는 context-core만 수행한다.

@@ -11,7 +11,7 @@
 3. `$context-decision:init`을 한 번 호출합니다.
 4. installed core public bootstrap이 필요한 core seed와 decision area를 적용하고, 현재 host의 `AGENTS.md` 또는 `CLAUDE.md`에 context 운영지침 managed block을 설치합니다. ready 재호출은 모두 noop입니다.
 
-`context-decision`은 marketplace add, install, enable, update 또는 host configuration 변경을 자동 실행하지 않습니다. Manifest에도 dependency나 implicit/default install metadata가 없고 core 구현을 내장하지 않습니다. Canonical init과 workflow는 subprocess 전에 release-pinned `skills/context/scripts/context_cli.py` path suffix와 SHA-256을 확인하고, 일치한 executable에서 `context-core-schema/v1`, `context-common/v2`, required doctor/transaction/bootstrap command, `context-owner-descriptor/v2` feature와 doctor state를 직접 handshake합니다. 이 검사는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 저수준 compatibility mode의 입력일 뿐 canonical 경로의 신뢰 근거가 아닙니다.
+`context-decision`은 marketplace add, install, enable, update 또는 host configuration 변경을 자동 실행하지 않습니다. Manifest에도 dependency나 implicit/default install metadata가 없고 core 구현을 내장하지 않습니다. Canonical init과 workflow는 subprocess 전에 release-pinned core runtime을 확인하고, 일치한 executable에서 `context-core-schema/v1`, `context-common/v2`, required doctor/transaction/bootstrap command, `context-owner-descriptor/v2` feature와 doctor state를 직접 handshake합니다. 이 검사는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 저수준 compatibility mode의 입력일 뿐 canonical 경로의 신뢰 근거가 아닙니다.
 
 core와 decision은 같은 immutable release checkout에서 함께 설치·update해야 합니다. Decision이 exact core entrypoint bytes를 고정하므로 혼합 설치나 일부만 update한 상태는 `core_surface_mismatch`로 중단됩니다. core와 decision을 같은 release로 맞추고 host reload 뒤 재시도합니다.
 
@@ -28,7 +28,9 @@ Host는 `schema`/`capabilities`를 제외한 모든 저수준 compatibility CLI 
 
 inline `--sec-*`는 plain text가 기본이며 explicit `@file`과 leading `@` literal용 `@@literal`을 지원합니다. 일반 path-like text는 file로 추측하지 않습니다. common primary-claim protocol 상한은 2,000 codepoint이고 built-in SNAP `current_context`, OBS `observation`, DEC `decision`은 각각 owner-specific 1,200 codepoint입니다. owner input은 canonical UTF-8 8 KiB, candidate envelope는 16 KiB입니다. missing·symlink·oversized body file과 limit 초과는 receipt/repository write 전에 실제 크기 진단과 함께 실패합니다.
 
-`preview`는 repository와 Git metadata 밖의 새 절대경로에 mode `0600` frozen receipt를 만들며 민감한 decision material을 포함합니다. Stdout의 user-facing exact `approval_digest`는 repository identity, core absolute path와 pinned SHA, candidate/result digest, nested core bundle과 core digest 전체를 결박합니다. `receipt_digest`는 손상 탐지용일 뿐 승인을 대신하지 않으며 workflow 종료 뒤 receipt는 사용자가 직접 삭제합니다.
+Agent는 기록 제안 전에 complete preview의 완성된 렌더링 본문을 만들고 한 번만 묻습니다. 그 capture 질문에 대한 직접적·명시적·무조건적 긍정만 승인입니다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니며 모호한 평가는 한 줄로 한 번만 재확인합니다. 수정 요청은 새 preview와 새 질문으로 처리합니다.
+
+사용자는 digest, 임시 파일 위치, 내부 ID나 core 경로를 보거나 입력하지 않습니다. Workflow는 질문 전에 repository identity, pinned runtime, semantic result, nested core bundle, CAS와 lock 결박을 고정하고 승인 뒤 재생성하지 않습니다. Tampering, clone·linked-worktree·same-path replay, runtime 변경과 잘못된 승인 material은 repository write 전에 실패합니다.
 
 ## Product flow
 
@@ -52,7 +54,7 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 
 기존 `wiki/` 자동 migration은 제공하지 않습니다. PCMS는 조직 권한·승인 workflow·cross-project search·policy·audit·conflict queue의 control-plane 경계이며, 이 local plugin은 결정 기록과 recall 자체에 집중합니다.
 
-0.2.0은 `claim_fingerprint`, `source_claim_fingerprint`와 batch-local `claim_key`를 제거한 breaking release입니다. `candidate_id`는 owner result 연결용 transport ID일 뿐 의미를 갖지 않습니다. 혼합 설치는 `context-common/v2` handshake에서 fail-closed합니다. 구형 artifact의 제거된 field는 읽을 수 있고 다음 승인 rewrite에서 lazy-clean합니다. 신규 candidate/draft에는 `schema_removed_field`로 계속 거부하며 fingerprint를 의미상 동일성 근거로 사용하지 않습니다.
+0.2.0은 legacy fingerprint field와 batch-local claim key를 제거한 breaking release입니다. Owner-result 연결용 transport reference는 의미를 갖지 않습니다. 혼합 설치는 `context-common/v2` handshake에서 fail-closed합니다. 구형 artifact의 제거된 field는 읽을 수 있고 다음 승인 rewrite에서 lazy-clean합니다. 신규 candidate/draft에는 `schema_removed_field`로 계속 거부하며 fingerprint를 의미상 동일성 근거로 사용하지 않습니다.
 
 0.2.1은 `context-common/v2` 호환 patch release입니다. core doctor의 `partial|invalid` 진단은 전역 preflight 실패가 아니라 warning으로 전달하고, 실제 decision target과 겹치는 blocking issue만 해당 operation을 중단합니다. init target 자체의 schema·owner·path가 안전하지 않을 때만 core bootstrap이 write 0으로 실패합니다.
 
@@ -64,4 +66,4 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 
 0.5.0은 Current DEC의 `결정`·`취지`만 조립하는 read-only `spec-view`와 네 plugin distribution parity를 추가합니다. DEC storage schema와 `context-common/v2`는 유지되고 ASM·TERM 설치 또는 기존 artifact migration은 자동으로 일어나지 않습니다.
 
-0.5.1은 frozen receipt golden path, repository/core identity에 결박된 user-facing approval, release-pinned core handshake, bounded recall recovery와 actual semantic input limit을 추가한 developer-preview patch입니다. `v0.5.1` tag는 아직 생성·push되지 않았습니다.
+0.5.1은 frozen receipt golden path, repository/core identity 결박, release-pinned core handshake, bounded recall recovery와 actual semantic input limit을 추가한 developer-preview patch입니다. `v0.5.1` tag는 아직 생성·push되지 않았습니다.

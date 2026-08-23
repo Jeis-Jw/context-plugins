@@ -5,7 +5,7 @@ description: When explicitly requested, verify the release-pinned context-core a
 
 # Init
 
-Resolve the absolute path of this loaded `SKILL.md`, then its sibling `scripts/decision_init.py`. Resolve the separately loaded core skill to its public `skills/context/scripts/context_cli.py`. Invoke the init adapter exactly once:
+Resolve this loaded `SKILL.md`, its sibling `scripts/decision_init.py`, and the separately loaded core entrypoint. Invoke the adapter exactly once:
 
 ```bash
 INIT_SKILL_FILE="/absolute/path/from-loaded-skill-catalog/plugins/context-decision/skills/init/SKILL.md"
@@ -16,10 +16,10 @@ python3 "$INIT_ENTRYPOINT" \
   --json
 ```
 
-Claude Code may use `INIT_SKILL_FILE="${CLAUDE_PLUGIN_ROOT}/skills/init/SKILL.md"` only when the host supplies that plugin root. Codex must use the absolute path from the loaded skill catalog. Do not infer paths from cwd, scan caches, or use `$CLAUDE_PLUGIN_ROOT` as a Codex fallback.
+Claude Code may use `${CLAUDE_PLUGIN_ROOT}` only when supplied by the host; Codex uses the loaded skill catalog. Never infer from cwd, scan caches, or substitute another runtime.
 
-Before subprocess execution, the adapter verifies the release-pinned entrypoint path suffix and SHA-256 from the decision semantic CLI's `REQUIRED_PLUGIN`. It then directly handshakes `context-core-schema/v1`, `context-common/v2`, required doctor/bootstrap/transaction commands, `context-owner-descriptor/v2`, and the current doctor state. This does not attest marketplace provenance, source, scope, or enabled state. Caller inventory/doctor files are low-level compatibility inputs and are not accepted by this canonical init.
+The release-pinned adapter verifies path suffix and SHA-256, then handshakes `context-core-schema/v1`, `context-common/v2`, required commands, `context-owner-descriptor/v2`, and doctor state. Missing/mismatched/incompatible inputs cause zero subprocess, repository, or host-configuration writes. It passes `partial/invalid/ready` or bootstrap-required absent state to core, which owns repairability.
 
-A missing path, digest mismatch, or incompatible handshake produces zero subprocess, repository, and host-configuration writes. For absent/partial/invalid/ready doctor states, pass the exact state to the pinned core; core owns repairability and diagnostics.
+The fixed descriptor/index seed goes to `context_cli.py bootstrap`; core alone applies `core_init|area_register|policy_install`, preserves bytes outside the managed block, and converges retries.
 
-The adapter passes the fixed descriptor/index seed and explicit host to public `context_cli.py bootstrap --descriptor @file --index-seed @file --host ...`. Core reports `core_init|area_register|policy_install` phases as `applied|noop|failed`, preserves bytes outside the managed block markers, and converges completed phases on retry. No DEC/user-content mutation is authorized without exact digest approval.
+Ordinary capture remains separate. Before suggesting it, run preview and ask once with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply; never show or request a digest, receipt path, internal ID, or core path. Only a direct, explicit, unconditional affirmative answer is approval. `알겠어` alone, a condition, edit request, or topic change is not approval. Never regenerate content or plan after approval.

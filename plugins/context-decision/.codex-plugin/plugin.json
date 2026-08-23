@@ -15,9 +15,9 @@
     "category": "Productivity",
     "capabilities": ["Read", "Validation"],
     "defaultPrompt": [
-      "Before core runs, verify pinned context_cli.py suffix + SHA-256; handshake schema, protocol, commands, features, doctor.",
-      "No marketplace provenance/source/enabled attestation; caller inventory is low-level compatibility input only.",
-      "On a forming choice, compare Current bodies; report conflicts first; write only through exact-digest core approval."
+      "Compare relevant Current DEC bodies for a forming choice; hashes, IDs, and metadata are not semantic evidence.",
+      "Verify pinned core SHA/handshake; preserve frozen receipt, repository identity, CAS, lock; never regenerate.",
+      "Ask once with complete DEC; direct, explicit, unconditional yes: pass `approval_digest` unchanged; hide transport."
     ]
   }
 }

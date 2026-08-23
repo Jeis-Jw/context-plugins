@@ -20,14 +20,14 @@
 - common primary-claim protocol 상한은 2,000 codepoint입니다. Built-in SNAP `current_context`와 OBS `observation`은 각각 owner-specific 1,200 codepoint, DEC `decision`도 별도로 1,200 codepoint를 적용합니다. 각 owner input은 canonical UTF-8 8 KiB로 제한합니다. candidate batch의 16 KiB 상한은 `context-capture-batch/v1`의 `schema`, `audit_count`, `candidates`를 포함한 전체 canonical UTF-8 envelope에 적용하며 최대 8개 count 상한을 별도로 유지합니다. Dict envelope은 이 세 key만 허용하고 `audit_count`는 bool이 아닌 integer `1`이어야 합니다. 기존 bare list 입력은 synthetic v1 envelope로 계속 지원합니다.
 - 이미 읽은 `{id,sha256}`와 pending·dismissed 참조는 session-local ephemeral ledger로 재사용하며, 본문을 복제하거나 repository에 저장하지 않습니다.
 - Audit, route, claim, draft, preview와 denied apply는 repository와 host configuration을 변경하지 않습니다.
-- 명시적 `init`과 addon init용 `bootstrap`만 fixed `core_init|area_register|policy_install`을 coordinator 검증으로 직접 적용합니다. 일반 artifact mutation의 exact digest approval은 유지되며 `refresh --fix index`만 derived index를 승인 없이 즉시 rebuild합니다.
+- 명시적 `init`과 addon init용 `bootstrap`만 fixed `core_init|area_register|policy_install`을 coordinator 검증으로 직접 적용합니다. 일반 artifact mutation은 complete preview 본문의 capture 질문에 직접적·명시적·무조건적으로 긍정한 뒤에만 적용하며 `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아닙니다. Agent가 내부 결박을 처리하고 승인 뒤 재생성하지 않습니다. `refresh --fix index`만 derived index를 승인 없이 즉시 rebuild합니다.
 - v1과 v2 area는 같은 root에 공존합니다. v1 bytes에는 profile registry를 추가하지 않고, v2 descriptor는 등록 뒤 immutable하며 digest가 달라진 재등록은 write 0으로 거절합니다.
 - 등록된 v2 root registry와 area descriptor의 digest가 다르면 `doctor`와 `refresh`는 blocking issue로 보고하고 `refresh --fix index`도 해당 trust bytes를 자동 복구하지 않습니다. 일반 artifact/index drift의 read fallback은 body open을 호출당 20개로 제한하고 초과를 warning으로 보고합니다. healthy index의 metadata miss는 indexed body를 다시 열지 않습니다. 이 hard bound는 body materialization/open, selected output, candidate/envelope와 owner input에 한정되며 index scoring·directory enumeration 및 end-to-end host/model token 사용량의 O(1)을 뜻하지 않습니다.
 - 관리형 운영지침은 conflict·취지 변경을 먼저 알리고, 그 외에는 원 답 뒤 성숙한 후보만 milestone당 한 번 제안합니다. dismissed·deferred 후보는 새 근거 전까지 반복하지 않으며 의미 판정에 hash·ID·metadata를 사용하지 않습니다.
 
 기존 `wiki/`를 자동 migration하지 않습니다. Obsidian은 repository root를 vault로 열 때의 선택적 view일 뿐 runtime dependency가 아닙니다. PCMS는 조직 권한·승인 queue·cross-project search·정책·감사 같은 control-plane 범위를 담당하며, 이 local plugin은 그 기능을 제한해 판매하는 제품이 아닙니다.
 
-0.2.0은 의미 판정에 쓰던 `claim_fingerprint`, `source_claim_fingerprint`와 batch-local `claim_key`를 제거한 breaking release입니다. `candidate_id`는 owner result 연결용 transport ID일 뿐 의미를 갖지 않습니다. 혼합 설치를 호환으로 오판하지 않도록 wire/storage handshake를 `context-common/v2`로 올렸습니다. 제거된 field가 남은 0.1.x artifact는 `schema_removed_field` warning으로 읽고 다음 승인 rewrite에서 lazy-clean합니다. 신규 artifact/candidate에는 계속 허용하지 않습니다.
+0.2.0은 의미 판정에 쓰던 legacy fingerprint field와 batch-local claim key를 제거한 breaking release입니다. Owner-result 연결용 transport reference는 의미를 갖지 않습니다. 혼합 설치를 호환으로 오판하지 않도록 wire/storage handshake를 `context-common/v2`로 올렸습니다. 제거된 field가 남은 0.1.x artifact는 `schema_removed_field` warning으로 읽고 다음 승인 rewrite에서 lazy-clean합니다. 신규 artifact/candidate에는 계속 허용하지 않습니다.
 
 0.2.1은 `context-common/v2` 호환 patch release입니다. corpus 전체 drift가 아니라 실제 target write의 CAS·index·path·lock·approval 경계만 fail-closed하고, read는 index-first 조회와 bounded fallback을 사용합니다. addon 등록은 root lock 안에서 exact-empty directory를 다시 확인해 preview 이후의 directory race도 차단합니다.
 

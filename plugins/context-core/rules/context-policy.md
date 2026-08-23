@@ -1,9 +1,8 @@
 # Context capture policy
 
-매 user turn의 새 의미를 같은 응답 pass에서 별도 model·tool 호출 없이 한 번 audit한다. durable signal이 없으면 audit 상태를 표시하지 않는다. scope·anchor, 읽은 Current `{id,sha256}`, pending·dismissed 참조만 session-local ephemeral ledger로 유지하고 실제 본문이나 후보 전체를 복제·저장하지 않는다.
+- 매 user turn의 새 의미를 한 번 내부 audit한다. 선택·전제·용어가 확정되는 순간, 이전 맥락이 판단을 바꿀 때만 metadata-first로 recall한다. durable signal이 없으면 audit 상태나 capture 질문을 표시하지 않는다.
+- semantic owner는 관련 실제 본문·scope·rationale를 비교한다. conflict 또는 rationale change는 primary 결론 전에 관련 artifact와 차이를 알린다.
+- 그 외에는 원 답변을 먼저 마치고 성숙한 durable 후보만 milestone당 한 번 제안한다. 제안 전에 preview를 실행하고 완성된 렌더링 본문과 함께 한 번만 묻는다.
+- 사용자가 complete preview 본문의 capture 질문에 직접적·명시적·무조건적 긍정으로 답한 뒤에만 쓴다. `알겠어` 단독, 조건·수정 요청·화제 전환은 승인이 아니며 승인 뒤 재생성하지 않는다.
 
-durable 여부는 작업 크기·실행 비용이 아니라 미래 재사용성·번복 비용·현재 상태 영향으로 판정한다.
-
-신호가 있을 때만 index metadata를 먼저 recall하고 관련 실제 본문만 읽는다. 본문이 session context에 있고 scope·evidence·anchor·index와 artifact SHA가 그대로일 때만 재사용한다. semantic owner는 실제 본문·scope·rationale를 비교하며 conflict 또는 rationale change를 primary 결론 전에 알린다. hash, ID와 metadata는 의미 판정 근거가 아니다.
-
-그 외에는 원 답변을 먼저 완료하고, 성숙한 durable 후보만 milestone당 한 번 grouped proposal로 제시한다. dismissed·deferred 후보는 새 근거 전까지 재제안하지 않는다. 어떤 durable write도 사용자의 exact final-bundle 승인 전에는 수행하지 않는다.
+Agent는 preview stdout의 `approval_digest`를 변경 없이 apply에 전달하고, frozen receipt·repository identity·core SHA·CAS·lock·atomic-write 검증을 그대로 유지한다. 이 transport 정보는 사용자에게 보이거나 입력을 요구하지 않는다.

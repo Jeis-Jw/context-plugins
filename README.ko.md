@@ -40,9 +40,9 @@ core와 semantic addon은 반드시 같은 immutable release checkout에서 함�
     ↓
 답변 또는 충돌·취지 변경 알림
     ↓
-기록할 가치가 있을 때만 capture preview 제안
+기록할 가치가 있을 때만 complete preview 제안
     ↓
-사용자가 exact approval_digest 승인
+사용자가 자연어 capture 질문에 한 번 답변
     ↓
 context/*.md와 index를 하나의 transaction으로 갱신
 ```
@@ -127,16 +127,17 @@ context/
 
 ## 안전 경계
 
-- 일반 context 기록은 complete preview의 정확한 `approval_digest`를 사용자가 승인하기 전까지 쓰지 않습니다.
-- DEC golden path의 user-facing `approval_digest`는 repository identity, release-pinned core path/SHA, candidate/result digest와 nested core bundle/digest 전체를 결박합니다. Preview receipt는 민감한 decision 내용을 포함하므로 repository와 Git metadata 밖의 새 절대경로에 mode `0600`으로 만들고 workflow가 끝나면 사용자가 직접 삭제합니다. `receipt_digest`를 다시 계산하는 것은 승인을 대신하지 않습니다.
-- DEC·ASM·TERM은 core 실행 전에 release-pinned `skills/context/scripts/context_cli.py` path suffix와 SHA-256을 확인하고, 일치한 executable에서 schema, `context-common/v2` protocol, required features·commands와 current doctor state를 handshake합니다. 이 검증은 marketplace provenance, catalog source 또는 host enabled state를 attest하지 않으며 caller inventory/doctor는 low-level compatibility input일 뿐입니다.
+- 일반 context 기록은 완성된 렌더링 본문을 보여준 capture 질문에 사용자가 직접적·명시적·무조건적으로 긍정한 뒤에만 적용합니다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니며 모호한 평가는 한 줄로 한 번만 재확인합니다.
+- Agent가 내부 transport 정보를 처리하므로 사용자는 digest, 임시 파일 위치, 내부 ID나 core 경로를 보거나 입력하지 않습니다.
+- Workflow는 질문 전에 complete preview를 고정하고 승인 뒤 재생성하지 않습니다. Repository identity, pinned runtime, CAS, lock, atomic-write 결박은 그대로이며 tampering과 clone·linked-worktree·same-path replay는 write 전에 실패합니다.
+- DEC·ASM·TERM은 release-pinned core runtime에서 schema, `context-common/v2` protocol, required features·commands와 doctor state를 handshake합니다. 이 검증은 marketplace provenance, catalog source 또는 host enabled state를 attest하지 않으며 low-level compatibility surface는 외부 orchestration용으로 유지됩니다.
 - hash, ID나 index metadata만으로 의미가 같다고 판단하지 않고 실제 body, scope와 rationale를 비교합니다.
 - metadata와 index로 후보를 먼저 좁힌 뒤 관련 있는 실제 문서만 읽습니다. Healthy index의 zero-match는 indexed body를 열지 않고, stale/missing index recovery의 body open은 호출당 합계 20개 이하입니다.
 - Hard bound는 artifact body materialization/open, selected output, candidate/envelope와 owner input에 적용됩니다. Index row scoring·directory enumeration과 end-to-end host/model token 사용량은 corpus 크기와 무관한 O(1)을 보장하지 않습니다.
 - common primary-claim protocol 상한은 2,000 codepoint입니다. Built-in SNAP `current_context`, OBS `observation`, DEC `decision`은 각각 owner-specific 1,200 codepoint 상한을 적용합니다.
 - background daemon처럼 대화를 수집하거나 transcript 전체를 자동 보관하지 않습니다.
 - 명시적 `init` 외에는 plugin 설치·활성화와 host configuration을 자동으로 변경하지 않습니다.
-- release-pinned core executable의 path suffix/SHA-256, schema·protocol·required features/commands 또는 operation별 doctor state가 요구 조건과 다르면 target write는 0이며 필요한 exact 좌표를 안내합니다. 이 검증은 marketplace provenance, catalog source 또는 host enabled state를 attest하지 않습니다.
+- release-pinned core runtime, schema·protocol·required features/commands 또는 operation별 doctor state가 요구 조건과 다르면 target write는 0입니다. 이 검증은 marketplace provenance, catalog source 또는 host enabled state를 attest하지 않습니다.
 - 기존 `wiki/`나 과거 distribution의 context를 자동 migration하지 않습니다.
 
 ## 검증 근거
@@ -151,7 +152,7 @@ context/
 | 두 host의 네 plugin | install/load 통과 | ASM/TERM은 optional experimental |
 | actual model/no-signal/token usage | 미확인 | end-to-end 측정 없음 |
 
-Codex prompt material은 3,147자에서 1,339자로 57.5% 감소했습니다. 문자 수 측정이며 token 절감률 주장이 아닙니다.
+Codex prompt material은 3,147자에서 1,331자로 57.7% 감소했습니다. 문자 수 측정이며 token 절감률 주장이 아닙니다.
 
 ## 현재 배포 상태
 

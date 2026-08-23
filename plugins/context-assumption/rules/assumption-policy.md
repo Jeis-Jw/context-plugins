@@ -11,4 +11,4 @@ alwaysApply: true
 - search/read는 assumption-relevant signal이 있을 때만 사용한다.
 - receipt 발급 전 live Current source와 candidate/request에서 owner-result를 다시 생성한다. canonical area 밖 path와 symlink component는 읽지 않는다.
 - 일반 operation은 exact ready doctor에서만 실행한다. partial은 명시적 init에만, invalid는 어떤 operation에도 허용하지 않는다.
-- semantic owner는 repository write를 수행하지 않는다. 모든 durable mutation은 exact approval_digest 승인 뒤 context-core coordinator가 적용한다.
+- semantic owner는 repository write를 수행하지 않는다. 기록 제안 전에 preview를 실행하고 완성된 렌더링 본문과 함께 한 번만 묻는다. preview stdout의 `approval_digest`는 agent가 변경 없이 apply에 전달하되 digest·receipt 경로·내부 ID·core 경로를 사용자에게 보이거나 요구하지 않는다. capture 질문에 대한 직접적·명시적·무조건적 긍정만 승인이고 `알겠어` 단독, 조건, 수정 요청, 화제 전환에는 적용하지 않는다. 승인 뒤에는 재생성하지 않으며 durable mutation은 context-core coordinator만 적용한다.

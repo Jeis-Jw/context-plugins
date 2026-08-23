@@ -33,19 +33,29 @@ class PluginContractTests(unittest.TestCase):
     def test_managed_policy_keeps_the_incremental_loop_call_free_and_ephemeral(self) -> None:
         policy = context_cli.POLICY_BODY
         for contract in (
-            "같은 response pass",
-            "별도 model·tool 호출 없이",
-            "미래 재사용성·번복 비용·현재 상태 영향",
-            "session-local ephemeral ledger",
-            "metadata 먼저",
-            "새 근거가 생기기 전에는 다시 제안하지 않는다",
-            "exact `approval_digest`",
+            "새 의미를 한 번 내부 audit",
+            "선택·전제·용어가 확정되는 순간",
+            "metadata-first",
+            "durable signal이 없으면",
+            "실제 본문·scope·rationale",
+            "primary 결론 전에",
+            "milestone당 한 번",
+            "완성된 렌더링 본문",
+            "직접적·명시적·무조건적 긍정",
+            "`알겠어` 단독",
+            "승인 뒤 재생성하지 않는다",
         ):
             self.assertIn(contract, policy)
+        policy_lines = [line for line in policy.splitlines() if line.startswith("- ")]
+        self.assertEqual(4, len(policy_lines))
+        for forbidden in ("approval_digest", "digest", "hash", "sha256", "fingerprint"):
+            self.assertNotIn(forbidden, policy.casefold())
         self.assertLessEqual(len(policy.encode("utf-8")), 2200)
 
         rule = (PLUGIN / "rules/context-policy.md").read_text(encoding="utf-8")
-        self.assertIn("미래 재사용성·번복 비용·현재 상태 영향", rule)
+        self.assertEqual(policy_lines, [line for line in rule.splitlines() if line.startswith("- ")])
+        agents = (PLUGIN.parents[1] / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn(policy, agents)
 
     def test_public_protocol_states_non_proportional_cost_invariant_and_limit(self) -> None:
         protocol = (PLUGIN / "skills/context/references/context-protocol.md").read_text(encoding="utf-8")

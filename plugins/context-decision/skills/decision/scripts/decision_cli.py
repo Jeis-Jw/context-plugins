@@ -57,7 +57,7 @@ REQUIRED_PLUGIN = {
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
     "entrypoint": "skills/context/scripts/context_cli.py",
-    "entrypoint_sha256": "sha256:2870a949d85338262960a2441b1d2c289240475b03fbc739ed573d2b01dc5258",
+    "entrypoint_sha256": "sha256:67e122da6face9cedce408e8b024b5a97768d517dc97f5f48c85f3a8128942a5",
 }
 OBSERVED_PLUGIN_FIELDS = ("marketplace", "plugin", "source", "enabled", "protocol", "repository_state")
 PREFLIGHT_MESSAGES = {

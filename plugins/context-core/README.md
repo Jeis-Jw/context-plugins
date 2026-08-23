@@ -31,11 +31,11 @@ The managed policy audits only the new semantic delta in the current response pa
 
 ## Approval and repository binding
 
-`transaction preview` seals exact on-disk preconditions, derived index bytes, owner authorization, and operations into a `context-mutation-bundle/v1`. The user must approve the canonical digest of the full approval material.
+The user sees the complete rendered preview and one natural-language capture question. A write is allowed only after a direct, explicit, unconditional affirmative answer. `알겠어` alone, a condition, an edit request, or a topic change is not approval; ambiguous praise is confirmed once.
 
-That material includes exact `context-repository-identity/v1`: resolved worktree and Git common-directory paths plus decimal device/inode strings. Apply verifies the digest and repository identity before any write. A clone, linked worktree, or repository recreated at the same path cannot replay the bundle. HEAD and unrelated content are not bound; normal unrelated edits and idempotent retry remain possible while target CAS still protects affected bytes.
+Transport details remain internal to the agent. Preview freezes on-disk preconditions, derived index bytes, owner authorization, and operations before the question; apply never regenerates them. Repository identity, pinned runtime, CAS, the repository-realpath lock, atomic operations, and deterministic index rebuild remain enforced. Clone or linked-worktree replay, same-path repository recreation, tampering, and changed target bytes fail before writes.
 
-All writes run under the repository-realpath lock and use atomic operations followed by deterministic index rebuild. A denied apply, preview, recall, route, claim, or validation has zero repository and host-policy writes.
+A denied apply, preview, recall, route, claim, or validation has zero repository and host-policy writes.
 
 ## Storage roles
 
