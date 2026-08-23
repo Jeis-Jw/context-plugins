@@ -22,7 +22,7 @@ DEC는 현재 또는 미래 행동을 지배하는 명시적 선택이며 다음
 
 idea, question, fact, preference와 미합의 제안은 `decline` 또는 `needs_clarification`이다. `requested_kind:"decision"`은 owner 선택만 고정하며 이 gate를 우회하지 않는다. CLI는 agent skill의 의미 판단을 대신하지 않고 assertion set, input digest와 RFC 6901 pointer만 fail-closed 검증한다.
 
-저수준 direct surface는 2단계다. `candidate prepare`는 caller가 명시한 semantic field, caller가 제공한 `cand_`+32 lowercase hex transport ID, commitment evidence와 bounded search terms를 정규화한다. canonical workflow는 UUID4 transport ID만 자동 발급하고 `captured_from`을 `conversation`으로 기본화할 수 있다. transport ID는 의미상 가중치가 없으며 owner는 caller 입력 없이 semantic field, evidence나 attestation을 지어내지 않는다. owner skill이 그 object를 판독한 뒤 `capture --candidate @file --attestation @file`로 claim하거나 `--decline-reason`/`--needs-clarification-reason`으로 권위 draft 없이 종료한다. 상수 commitment evidence와 CLI 자체 attestation은 금지다.
+저수준 direct surface는 2단계다. `candidate prepare`는 caller가 명시한 semantic field, caller가 제공한 `cand_`+32 lowercase hex transport ID, commitment evidence와 bounded search terms를 정규화한다. transport ID는 기계적으로 만들 수 있지만 의미상 가중치가 없다. owner는 caller 입력 없이 후보 의미를 지어내지 않는다. canonical workflow는 UUID4 transport ID만 자동 발급하고 `captured_from`을 `conversation`으로 기본화할 수 있으며 semantic field, evidence나 attestation은 발명하지 않는다. owner skill이 그 object를 판독한 뒤 `capture --candidate @file --attestation @file`로 claim하거나 `--decline-reason`/`--needs-clarification-reason`으로 권위 draft 없이 종료한다. 상수 commitment evidence와 CLI 자체 attestation은 금지다.
 
 ## DEC schema와 slot
 
