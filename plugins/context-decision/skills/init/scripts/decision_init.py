@@ -81,8 +81,9 @@ capture contract (not consumed by init):
   Semantic body values support literal text, @file, and @@literal. DEC decision is
   limited to 1,200 codepoints, common primary claims to 2,000 codepoints, canonical
   owner input to 8 KiB, and the full candidate envelope to 16 KiB. The DEC workflow
-  writes its sensitive mode-0600 receipt outside the repository; its user-facing exact
-  approval_digest binds the full approval material and the receipt must be deleted manually.
+  writes its sensitive mode-0600 receipt outside the repository. The agent retains the
+  approval_digest internally, and successful apply or reject removes the default receipt;
+  users are never asked to locate, enter, or delete either transport detail.
 """,
     )
     parser.add_argument("--host", choices=("codex", "claude-code"), required=True)

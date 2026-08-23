@@ -706,6 +706,9 @@ class DistributionProofTests(unittest.TestCase):
             "16 KiB", "0600", "outside the repository", "approval_digest",
         ):
             self.assertIn(token, decision_init)
+        self.assertIn("successful apply or reject removes the default receipt", decision_init)
+        self.assertIn("users are never asked to locate, enter, or delete", decision_init)
+        self.assertNotIn("must be deleted manually", decision_init)
 
         for name, label in (("context-assumption", "ASM"), ("context-term", "TERM")):
             init_help = subprocess.run(
