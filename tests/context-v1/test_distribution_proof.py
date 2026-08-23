@@ -728,6 +728,50 @@ class DistributionProofTests(unittest.TestCase):
             self.assertNotIn("--sec-", claim_help)
             self.assertNotIn("@@literal", claim_help)
 
+    def test_core_obs_snapshot_two_command_receipt_surface_is_distributed(self) -> None:
+        core_cli = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
+        environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+        commands = {
+            "observation": ("observation", "capture", "--help"),
+            "snapshot": ("snapshot", "save", "--help"),
+            "apply": ("transaction", "apply", "--help"),
+        }
+        help_text = {
+            name: subprocess.run(
+                [sys.executable, str(core_cli), *arguments],
+                cwd=ROOT,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=True,
+            ).stdout
+            for name, arguments in commands.items()
+        }
+        for token in ("--attest-reusable-observation", "--attest-evidence-present", "--receipt-file"):
+            self.assertIn(token, help_text["observation"])
+        for token in ("--attest-handoff-requested", "--attest-unfinished-context-present", "--receipt-file"):
+            self.assertIn(token, help_text["snapshot"])
+        for token in ("--plan-bundle", "--receipt-file", "--approved-digest"):
+            self.assertIn(token, help_text["apply"])
+
+        for kind in ("observation", "snapshot"):
+            for language in ("", ".ko"):
+                skill = ROOT / f"plugins/context-core/skills/{kind}/SKILL{language}.md"
+                text = skill.read_text(encoding="utf-8")
+                self.assertIn("transaction apply --receipt-file", text, skill)
+                self.assertIn("result.approval_digest", text, skill)
+                self.assertTrue("no directory scan" in text or "directory scan도 하지 않는다" in text, skill)
+
+        protocol = (ROOT / "plugins/context-core/skills/context/references/context-protocol.md").read_text(encoding="utf-8")
+        for token in (
+            "exactly seven fields", "workflow digest over exactly `{core,plan_bundle}`",
+            "damage only", "agent from preview", "no receipt locator, keep, reject, or TTL lifecycle",
+        ):
+            self.assertIn(token, protocol)
+        source = core_cli.read_text(encoding="utf-8")
+        for forbidden in ("--keep-receipt", "RECEIPT_TTL", "receipt locator"):
+            self.assertNotIn(forbidden, source)
+
     def test_addon_test_helpers_use_unique_import_namespaces(self) -> None:
         contracts = {
             "context-assumption": "assumption_test_support",

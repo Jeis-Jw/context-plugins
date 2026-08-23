@@ -49,6 +49,15 @@ The managed policy requires one audit per conversation delta, silence when there
 - Only context-core writes, under a repository-realpath lock, with atomic operations and deterministic index rebuild.
 - Hidden operations, missing seeds, altered material, changed target preconditions, path escapes, and symlink segments fail before writes.
 
+### Core workflow receipt
+
+- `context-core-workflow-receipt/v1` has exactly seven fields: `schema`, immutable `status:pending`, offset-aware `created_at`, `plan_id`, `core`, `plan_bundle`, and `receipt_digest`. `plan_id` is filename/projection metadata and must equal `plan_bundle.approval_material.plan.plan_id`; it is not semantic identity. `core` is exactly `{path,sha256}` and `plan_bundle` is the exact existing mutation bundle. Candidate IDs and a duplicate core bundle are forbidden.
+- `receipt_digest` is canonical SHA-256 over the other six fields and detects receipt damage only. Approval uses a distinct workflow digest over exactly `{core,plan_bundle}` returned by preview and retained outside the receipt in agent state. `transaction apply --receipt-file ... --approved-digest ...` requires that independent value, then verifies current core path/SHA and passes only the validated nested `plan_bundle.approval_digest` to core apply. A receipt self-digest is never approval evidence.
+- Flag-based OBS/SNAP capture writes one frozen receipt to `tempdir/context-core/<plan_id>.json`; the directory is mode `0700`, the regular file is `0600`, and the prospective path is validated outside both repository and Git metadata before any directory creation. An explicit path never creates the default directory. Receipt targets, direct parents, traversal, symlinks, modes, and inode identity are checked fail-closed.
+- Receipt selection is only the exact path retained by the agent from preview; core never scans a directory or chooses a newest file. Surface tri-state is: no receipt option with `--attestation @file` returns the legacy bundle, the complete built-in flag pair uses the private default receipt, and explicit `--receipt-file` uses only that path. Existing `--plan-bundle @file` apply remains available.
+- OBS flags map to `reusable_observation → /owner_inputs/observation/observation` and `evidence_present → /owner_inputs/observation/evidence/0`. SNAP maps `handoff_requested → /owner_inputs/snapshot/current_context` and `unfinished_context_present → /owner_inputs/snapshot/open_items/0`. Partial, absent, or mixed file/flag attestation fails before receipt or repository writes.
+- Successful receipt apply deletes the receipt. Cleanup-only failure returns `applied:true` plus `receipt_cleanup_failed`; a fully applied receipt is rejected on retry without writes. Core adds no receipt locator, keep, reject, or TTL lifecycle.
+
 ## Generic owner descriptor
 
 `context-owner-descriptor/v1` bytes remain supported and v1/v2 areas may coexist. A v2-capable runtime advertises `context-owner-descriptor/v2` in root-independent `schema.features`. No automatic upgrade, downgrade, migration, deletion, or descriptor replacement exists.
@@ -64,6 +73,8 @@ The managed policy requires one audit per conversation delta, silence when there
 - success: `{"ok":true,"result":{...}}`
 - error: `{"ok":false,"error":{"code":"...","message":"...","details":{...}}}`
 - exit 2: usage/schema/filename; exit 3: root/artifact/input missing; exit 5: owner/path/lifecycle conflict; exit 6: integrity/index failure
+
+`doctor` preserves the four repository states (`absent|partial|invalid|ready`) and exact existing readiness meaning while adding `plugin_version`, resolved `entrypoint`, and `protocol` to its ten-field self-report.
 - `schema` and `capabilities` work without a repository root.
 
 `init --host codex|claude-code` applies an absent root's canonical root/SNAP/OBS seeds and the active host policy (`AGENTS.md` or `CLAUDE.md`). It preflights policy targets/markers before storage writes and preserves bytes outside the managed block.

@@ -41,6 +41,15 @@ recall·capture의 artifact body materialization, bounded output과 model·owner
 - context-core coordinator만 repository-realpath root lock 아래 atomic file operation과 deterministic index rebuild를 수행한다.
 - hidden operation, seed 누락, material/digest 불일치, changed precondition, path escape와 symlink segment는 write 전에 fail-closed한다.
 
+### Core workflow receipt
+
+- `context-core-workflow-receipt/v1`은 정확히 `schema`, immutable `status:pending`, offset-aware `created_at`, `plan_id`, `core`, `plan_bundle`, `receipt_digest` 7-field다. `plan_id`는 filename/projection metadata일 뿐 semantic identity가 아니며 `plan_bundle.approval_material.plan.plan_id`와 같아야 한다. `core`는 exact `{path,sha256}`, `plan_bundle`은 기존 mutation bundle 그대로다. candidate ID나 중복 core bundle field는 금지한다.
+- `receipt_digest`는 나머지 6-field의 canonical SHA-256으로 손상만 탐지한다. 승인은 preview가 반환하고 receipt 밖 agent state에 보존한 exact `{core,plan_bundle}` workflow digest로 별도 결박한다. `transaction apply --receipt-file ... --approved-digest ...`는 이 독립 값을 필수로 검증한 뒤 current core path/SHA를 확인하고, 검증된 nested `plan_bundle.approval_digest`만 core apply에 넘긴다. receipt self-digest는 승인 근거가 아니다.
+- flag 기반 OBS/SNAP preview는 `tempdir/context-core/<plan_id>.json`에 frozen receipt 하나를 만든다. directory는 `0700`, regular file은 `0600`이고, prospective path가 repository와 Git metadata 밖인지 directory 생성 전에 검증한다. explicit path는 default directory를 만들지 않는다. target·direct parent·traversal·symlink·mode·inode identity는 fail-closed한다.
+- selection은 preview에서 agent가 유지한 exact path뿐이며 directory scan이나 newest 선택은 없다. tri-state는 `--attestation @file`과 receipt option 없음이면 기존 bundle, complete built-in flag pair면 private default receipt, `--receipt-file`이면 그 explicit path다. 기존 `--plan-bundle @file` apply도 유지한다.
+- OBS flag는 `reusable_observation → /owner_inputs/observation/observation`, `evidence_present → /owner_inputs/observation/evidence/0`에, SNAP은 `handoff_requested → /owner_inputs/snapshot/current_context`, `unfinished_context_present → /owner_inputs/snapshot/open_items/0`에 고정된다. partial·absent·file/flag 혼용 attestation은 receipt와 repository write 전에 실패한다.
+- receipt apply 성공 시 receipt를 삭제한다. cleanup만 실패하면 `applied:true`와 `receipt_cleanup_failed`를 반환하고, fully applied receipt 재시도는 write 없이 거부한다. core에는 locator·keep·reject·TTL lifecycle을 추가하지 않는다.
+
 ## Generic addon structural profile
 
 `context-owner-descriptor/v1`의 등록·artifact·CLI bytes는 그대로 유지하며 한 root에서 v1과 v2 area가 공존할 수 있다. v2를 지원하는 runtime은 root-independent `schema.features`에 `context-owner-descriptor/v2`를 광고한다. 이 feature가 없는 0.4.1 runtime은 addon이 bootstrap 전에 incompatible core로 판정해 repository bytes를 바꾸지 않는다. 자동 downgrade·upgrade·migration·delete surface는 없다.
@@ -59,6 +68,8 @@ v2 registration이 재시도 가능한 상태는 none, exact seed-only, exact ro
 - success: `{"ok":true,"result":{...}}`
 - error: `{"ok":false,"error":{"code":"...","message":"...","details":{...}}}`
 - exit 2 usage/schema/filename, 3 root/artifact/input missing, 5 owner/path/lifecycle conflict, 6 integrity/index failure
+
+`doctor`는 기존 4개 repository state(`absent|partial|invalid|ready`)와 readiness 의미를 바꾸지 않고 `plugin_version`, resolved `entrypoint`, `protocol`을 더한 exact 10-field self-report를 반환한다.
 - `schema`와 `capabilities`는 repository root 없이 동작한다. `schema.features`는 addon이 bootstrap 전에 확인하는 compatibility handshake다.
 
 `init --host codex|claude-code`은 명시적 호출 하나로 absent root의 canonical root/SNAP/OBS index seed와 활성 host의 관리형 policy block을 적용한다. host mapping은 `codex → AGENTS.md`, `claude-code → CLAUDE.md`다. policy target과 marker를 storage write 전에 preflight하고 managed marker 밖 bytes를 보존한다. valid descriptor와 최신 block이면 unrelated corpus 진단과 무관하게 `core_init`과 `policy_install`이 noop이다. populated repository에서 root index만 없으면 exact built-in SNAP/OBS metadata만 rebuild하고 미등록 area는 자동 claim하지 않으며, init target의 incompatible schema/owner/path만 `partial_core_init`으로 중단한다. 결과는 structured phase와 post-apply doctor receipt를 포함한다.
