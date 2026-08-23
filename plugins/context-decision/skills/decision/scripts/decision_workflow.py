@@ -159,6 +159,7 @@ def _default_receipt_dir(repo: pathlib.Path) -> pathlib.Path:
     except OSError as error:
         raise WorkflowError("receipt_directory_invalid", "default receipt root is unavailable", exit_code=5) from error
     directory = temp_root / RECEIPT_DIRECTORY_NAME
+    _assert_receipt_outside_repository(directory, repo)
     created = False
     try:
         os.mkdir(directory, 0o700)
@@ -721,14 +722,18 @@ def _prepare_operation_inputs(
 
 def preview(args: argparse.Namespace) -> dict[str, Any]:
     repo = decision_cli.repository_root().resolve()
-    default_directory = _default_receipt_dir(repo)
-    _sweep_expired_receipts(repo, default_directory)
-    operation, candidate_id, workflow_input, candidate, attestation = _prepare_operation_inputs(args)
-    receipt_path = (
+    explicit_receipt_path = (
         _receipt_path(args.receipt_file, repo, must_exist=False)
         if args.receipt_file is not None
-        else _receipt_path(default_directory / f"{candidate_id}.json", repo, must_exist=False)
+        else None
     )
+    operation, candidate_id, workflow_input, candidate, attestation = _prepare_operation_inputs(args)
+    if explicit_receipt_path is None:
+        default_directory = _default_receipt_dir(repo)
+        _sweep_expired_receipts(repo, default_directory)
+        receipt_path = _receipt_path(default_directory / f"{candidate_id}.json", repo, must_exist=False)
+    else:
+        receipt_path = explicit_receipt_path
     core_cli = _core_cli(args.core_cli)
     core_cli_sha256 = _file_digest(core_cli)
     schema = _run_core(core_cli, repo, "schema")
@@ -822,6 +827,12 @@ def preview(args: argparse.Namespace) -> dict[str, Any]:
 def apply(args: argparse.Namespace) -> dict[str, Any]:
     repo = decision_cli.repository_root().resolve()
     core_cli = _core_cli(args.core_cli)
+    if not isinstance(args.approved_digest, str) or not args.approved_digest:
+        raise WorkflowError(
+            "approval_digest_required",
+            "apply requires the approval digest returned by preview",
+            exit_code=2,
+        )
     if args.receipt_file is not None:
         receipt_path = _receipt_path(args.receipt_file, repo, must_exist=True)
         receipt, receipt_identity, _ = _load_receipt(receipt_path)
@@ -829,8 +840,7 @@ def apply(args: argparse.Namespace) -> dict[str, Any]:
         default_directory = _default_receipt_dir(repo)
         receipt_path, receipt, receipt_identity = _select_default_receipt(repo, core_cli, default_directory)
     _require_receipt_binding(receipt, repo, core_cli)
-    approved_digest = receipt["approval_digest"] if args.approved_digest is None else args.approved_digest
-    if approved_digest != receipt["approval_digest"]:
+    if args.approved_digest != receipt["approval_digest"]:
         raise WorkflowError("approval_digest_mismatch", "approved digest does not match the frozen workflow receipt", exit_code=5)
     approval_material = receipt["approval_material"]
     with tempfile.TemporaryDirectory(prefix="context-decision-workflow-") as temp:
@@ -970,9 +980,11 @@ receipt and approval:
         "apply",
         description="Apply the unchanged frozen receipt after exact user approval.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""With no locator, apply selects only one fresh pending receipt bound to
+        epilog="""With no receipt locator, apply selects only one fresh pending receipt bound to
 the current repository identity and core SHA. Zero or multiple matches fail closed.
---receipt-file and --approved-digest remain available for explicit low-level use.
+The agent must forward --approved-digest unchanged from preview stdout; the receipt's
+self-digests are not an independent approval channel. --receipt-file remains available
+for explicit low-level selection.
 Success removes the receipt unless --keep-receipt is set. Cleanup failure reports a
 warning after the already successful apply and never retries the repository write.
 
@@ -982,7 +994,7 @@ metadata. approval_digest binds the frozen material; receipt_digest detects dama
     )
     apply_parser.add_argument("--core-cli", required=True)
     apply_parser.add_argument("--receipt-file")
-    apply_parser.add_argument("--approved-digest")
+    apply_parser.add_argument("--approved-digest", required=True)
     apply_parser.add_argument("--keep-receipt", action="store_true")
     apply_parser.add_argument("--json", action="store_true")
     reject_parser = sub.add_parser(

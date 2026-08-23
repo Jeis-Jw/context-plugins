@@ -385,6 +385,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 str(CORE_CLI),
                 "--receipt-file",
                 str(valid_receipt),
+                "--approved-digest",
+                approval_digest,
                 "--json",
             )
             self.assertEqual(5, mismatch.returncode, mismatch.stdout + mismatch.stderr)
@@ -401,7 +403,7 @@ class DecisionWorkflowTests(unittest.TestCase):
             first = self._initialized_repository(first_root)
             second = self._initialized_repository(second_root)
             candidate_path, attestation_path, _ = self._semantic_inputs(root)
-            receipt_path = root / "replay-receipt.json"
+            environment, _ = self._workflow_environment(root)
             preview = run(
                 first,
                 WORKFLOW,
@@ -414,12 +416,13 @@ class DecisionWorkflowTests(unittest.TestCase):
                 f"@{candidate_path}",
                 "--attestation",
                 f"@{attestation_path}",
-                "--receipt-file",
-                str(receipt_path),
                 "--json",
+                environment=environment,
             )
             self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
-            approved_digest = json.loads(preview.stdout)["result"]["approval_digest"]
+            preview_result = json.loads(preview.stdout)["result"]
+            approved_digest = preview_result["approval_digest"]
+            receipt_path = Path(preview_result["receipt_file"])
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             workflow_material = receipt["approval_material"]
             second_identity = repository_identity(second)
@@ -429,11 +432,26 @@ class DecisionWorkflowTests(unittest.TestCase):
             core_digest = canonical_digest(core_bundle["approval_material"])
             core_bundle["approval_digest"] = core_digest
             workflow_material["core_approval_digest"] = core_digest
+            receipt["approval_digest"] = canonical_digest(workflow_material)
             material = dict(receipt)
             material.pop("receipt_digest")
             receipt["receipt_digest"] = canonical_digest(material)
             write_json(receipt_path, receipt)
             before = digest_tree(second)
+
+            missing_transport = run(
+                second,
+                WORKFLOW,
+                "apply",
+                "--core-cli",
+                str(CORE_CLI),
+                "--receipt-file",
+                str(receipt_path),
+                "--json",
+                environment=environment,
+            )
+            self.assertEqual(2, missing_transport.returncode, missing_transport.stdout + missing_transport.stderr)
+            self.assertEqual(before, digest_tree(second))
 
             replay = run(
                 second,
@@ -446,9 +464,25 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "--approved-digest",
                 approved_digest,
                 "--json",
+                environment=environment,
             )
             self.assertEqual(5, replay.returncode, replay.stdout + replay.stderr)
             self.assertEqual("approval_digest_mismatch", json.loads(replay.stdout)["error"]["code"])
+            self.assertEqual(before, digest_tree(second))
+
+            canonical_replay = run(
+                second,
+                WORKFLOW,
+                "apply",
+                "--core-cli",
+                str(CORE_CLI),
+                "--approved-digest",
+                approved_digest,
+                "--json",
+                environment=environment,
+            )
+            self.assertEqual(5, canonical_replay.returncode, canonical_replay.stdout + canonical_replay.stderr)
+            self.assertEqual("approval_digest_mismatch", json.loads(canonical_replay.stdout)["error"]["code"])
             self.assertEqual(before, digest_tree(second))
 
     def test_inline_preview_serializes_explicit_semantics_without_input_files(self) -> None:
@@ -501,6 +535,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 str(CORE_CLI),
                 "--receipt-file",
                 str(receipt_path),
+                "--approved-digest",
+                output["approval_digest"],
                 "--json",
             )
             self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
@@ -717,6 +753,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "apply",
                 "--core-cli",
                 str(CORE_CLI),
+                "--approved-digest",
+                output["approval_digest"],
                 "--json",
                 environment=environment,
             )
@@ -737,6 +775,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "apply",
                 "--core-cli",
                 str(CORE_CLI),
+                "--approved-digest",
+                "sha256:" + "0" * 64,
                 "--json",
                 environment=environment,
             )
@@ -776,6 +816,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "apply",
                 "--core-cli",
                 str(CORE_CLI),
+                "--approved-digest",
+                outputs[0]["approval_digest"],
                 "--json",
                 environment=environment,
             )
@@ -983,7 +1025,60 @@ class DecisionWorkflowTests(unittest.TestCase):
             self.assertEqual(0o755, stat.S_IMODE(mode_receipt_dir.stat().st_mode))
             self.assertEqual(mode_before, digest_tree(mode_repo))
 
-    def test_omitted_digest_still_rejects_tamper_and_precondition_change(self) -> None:
+    def test_repository_local_temp_root_is_rejected_before_default_directory_creation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = self._initialized_repository(root)
+            temp_root = repo / "private-temp"
+            temp_root.mkdir(mode=0o700)
+            default_directory = temp_root / "context-decision"
+            environment = {"TMPDIR": str(temp_root)}
+            before = digest_tree(repo)
+
+            default_preview = run(
+                repo,
+                WORKFLOW,
+                "preview",
+                "--host",
+                "codex",
+                "--core-cli",
+                str(CORE_CLI),
+                *self._inline_arguments(),
+                "--attest-explicit-choice",
+                "--attest-scope-identified",
+                "--attest-commitment-present",
+                "--json",
+                environment=environment,
+            )
+            self.assertEqual(5, default_preview.returncode, default_preview.stdout + default_preview.stderr)
+            self.assertEqual("receipt_path_invalid", json.loads(default_preview.stdout)["error"]["code"])
+            self.assertFalse(default_directory.exists())
+            self.assertEqual(before, digest_tree(repo))
+
+            explicit_receipt = root / "explicit-receipt.json"
+            explicit_preview = run(
+                repo,
+                WORKFLOW,
+                "preview",
+                "--host",
+                "codex",
+                "--core-cli",
+                str(CORE_CLI),
+                *self._inline_arguments(),
+                "--attest-explicit-choice",
+                "--attest-scope-identified",
+                "--attest-commitment-present",
+                "--receipt-file",
+                str(explicit_receipt),
+                "--json",
+                environment=environment,
+            )
+            self.assertEqual(0, explicit_preview.returncode, explicit_preview.stdout + explicit_preview.stderr)
+            self.assertTrue(explicit_receipt.is_file())
+            self.assertFalse(default_directory.exists())
+            self.assertEqual(before, digest_tree(repo))
+
+    def test_external_approval_digest_rejects_fully_rehashed_workflow_tamper(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             repo = self._initialized_repository(root)
@@ -1004,15 +1099,19 @@ class DecisionWorkflowTests(unittest.TestCase):
                 environment=environment,
             )
             self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
-            receipt_path = Path(json.loads(preview.stdout)["result"]["receipt_file"])
+            preview_result = json.loads(preview.stdout)["result"]
+            approved_digest = preview_result["approval_digest"]
+            receipt_path = Path(preview_result["receipt_file"])
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             receipt["approval_material"]["workflow_input_digest"] = "sha256:" + "0" * 64
+            receipt["approval_digest"] = canonical_digest(receipt["approval_material"])
             material = dict(receipt)
             material.pop("receipt_digest")
             receipt["receipt_digest"] = canonical_digest(material)
             write_json(receipt_path, receipt)
             before = digest_tree(repo)
-            tampered = run(
+
+            missing_transport = run(
                 repo,
                 WORKFLOW,
                 "apply",
@@ -1023,10 +1122,42 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "--json",
                 environment=environment,
             )
+            self.assertEqual(2, missing_transport.returncode, missing_transport.stdout + missing_transport.stderr)
+            self.assertEqual(before, digest_tree(repo))
+
+            tampered = run(
+                repo,
+                WORKFLOW,
+                "apply",
+                "--core-cli",
+                str(CORE_CLI),
+                "--receipt-file",
+                str(receipt_path),
+                "--approved-digest",
+                approved_digest,
+                "--json",
+                environment=environment,
+            )
             self.assertEqual(5, tampered.returncode, tampered.stdout + tampered.stderr)
             self.assertEqual("approval_digest_mismatch", json.loads(tampered.stdout)["error"]["code"])
             self.assertEqual(before, digest_tree(repo))
 
+            canonical_tampered = run(
+                repo,
+                WORKFLOW,
+                "apply",
+                "--core-cli",
+                str(CORE_CLI),
+                "--approved-digest",
+                approved_digest,
+                "--json",
+                environment=environment,
+            )
+            self.assertEqual(5, canonical_tampered.returncode, canonical_tampered.stdout + canonical_tampered.stderr)
+            self.assertEqual("approval_digest_mismatch", json.loads(canonical_tampered.stdout)["error"]["code"])
+            self.assertEqual(before, digest_tree(repo))
+
+    def test_stale_receipt_rejects_auto_and_explicit_apply_without_repository_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             repo = self._initialized_repository(root)
@@ -1047,7 +1178,9 @@ class DecisionWorkflowTests(unittest.TestCase):
                 environment=environment,
             )
             self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
-            receipt_path = Path(json.loads(preview.stdout)["result"]["receipt_file"])
+            preview_result = json.loads(preview.stdout)["result"]
+            approved_digest = preview_result["approval_digest"]
+            receipt_path = Path(preview_result["receipt_file"])
             index = repo / "context/decision/decision.index.md"
             index.write_text(index.read_text(encoding="utf-8") + "\n", encoding="utf-8")
             before = digest_tree(repo)
@@ -1057,6 +1190,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "apply",
                 "--core-cli",
                 str(CORE_CLI),
+                "--approved-digest",
+                approved_digest,
                 "--json",
                 environment=environment,
             )
@@ -1072,6 +1207,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 str(CORE_CLI),
                 "--receipt-file",
                 str(receipt_path),
+                "--approved-digest",
+                approved_digest,
                 "--json",
                 environment=environment,
             )
@@ -1103,11 +1240,12 @@ class DecisionWorkflowTests(unittest.TestCase):
                 environment=environment,
             )
             self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
-            receipt_path = Path(json.loads(preview.stdout)["result"]["receipt_file"])
+            preview_result = json.loads(preview.stdout)["result"]
+            receipt_path = Path(preview_result["receipt_file"])
             namespace = SimpleNamespace(
                 core_cli=str(CORE_CLI),
                 receipt_file=str(receipt_path),
-                approved_digest=None,
+                approved_digest=preview_result["approval_digest"],
                 keep_receipt=False,
             )
             original_cwd = Path.cwd()
@@ -1122,7 +1260,7 @@ class DecisionWorkflowTests(unittest.TestCase):
                 canonical = SimpleNamespace(
                     core_cli=str(CORE_CLI),
                     receipt_file=None,
-                    approved_digest=None,
+                    approved_digest=preview_result["approval_digest"],
                     keep_receipt=True,
                 )
                 with (
@@ -1158,7 +1296,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 environment=second_environment,
             )
             self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
-            kept = Path(json.loads(preview.stdout)["result"]["receipt_file"])
+            preview_result = json.loads(preview.stdout)["result"]
+            kept = Path(preview_result["receipt_file"])
             frozen_bytes = kept.read_bytes()
             applied = run(
                 second_repo,
@@ -1166,6 +1305,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "apply",
                 "--core-cli",
                 str(CORE_CLI),
+                "--approved-digest",
+                preview_result["approval_digest"],
                 "--keep-receipt",
                 "--json",
                 environment=second_environment,
@@ -1180,6 +1321,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "apply",
                 "--core-cli",
                 str(CORE_CLI),
+                "--approved-digest",
+                preview_result["approval_digest"],
                 "--json",
                 environment=second_environment,
             )
@@ -1245,7 +1388,18 @@ class DecisionWorkflowTests(unittest.TestCase):
 
             first = preview_inline()
             self.assertEqual(0, first.returncode, first.stdout + first.stderr)
-            applied = run(repo, WORKFLOW, "apply", "--core-cli", str(CORE_CLI), "--json", environment=environment)
+            first_result = json.loads(first.stdout)["result"]
+            applied = run(
+                repo,
+                WORKFLOW,
+                "apply",
+                "--core-cli",
+                str(CORE_CLI),
+                "--approved-digest",
+                first_result["approval_digest"],
+                "--json",
+                environment=environment,
+            )
             self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
             current = run(repo, Path(workflow_module.decision_cli.__file__), "search", "--json")
             self.assertEqual(0, current.returncode, current.stdout + current.stderr)
@@ -1265,7 +1419,18 @@ class DecisionWorkflowTests(unittest.TestCase):
                 decision="인증 세션은 API gateway가 소유한다.",
             )
             self.assertEqual(0, supersede.returncode, supersede.stdout + supersede.stderr)
-            superseded = run(repo, WORKFLOW, "apply", "--core-cli", str(CORE_CLI), "--json", environment=environment)
+            supersede_result = json.loads(supersede.stdout)["result"]
+            superseded = run(
+                repo,
+                WORKFLOW,
+                "apply",
+                "--core-cli",
+                str(CORE_CLI),
+                "--approved-digest",
+                supersede_result["approval_digest"],
+                "--json",
+                environment=environment,
+            )
             self.assertEqual(0, superseded.returncode, superseded.stdout + superseded.stderr)
             current = run(repo, Path(workflow_module.decision_cli.__file__), "search", "--json")
             successor = json.loads(current.stdout)["result"]["items"][0]
@@ -1316,7 +1481,17 @@ class DecisionWorkflowTests(unittest.TestCase):
                 json.dumps(withdraw_receipt["approval_material"]["core_bundle"], ensure_ascii=False),
             )
             self.assertNotIn(transport_id, json.dumps(withdraw_result["approval_preview"], ensure_ascii=False))
-            withdrawn = run(repo, WORKFLOW, "apply", "--core-cli", str(CORE_CLI), "--json", environment=environment)
+            withdrawn = run(
+                repo,
+                WORKFLOW,
+                "apply",
+                "--core-cli",
+                str(CORE_CLI),
+                "--approved-digest",
+                withdraw_result["approval_digest"],
+                "--json",
+                environment=environment,
+            )
             self.assertEqual(0, withdrawn.returncode, withdrawn.stdout + withdrawn.stderr)
             current = run(repo, Path(workflow_module.decision_cli.__file__), "search", "--json")
             self.assertEqual([], json.loads(current.stdout)["result"]["items"])

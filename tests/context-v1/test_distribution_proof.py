@@ -665,8 +665,9 @@ class DistributionProofTests(unittest.TestCase):
             capture_output=True,
             check=True,
         ).stdout
-        for token in ("[--receipt-file RECEIPT_FILE]", "[--approved-digest APPROVED_DIGEST]", "--keep-receipt"):
+        for token in ("[--receipt-file RECEIPT_FILE]", "--approved-digest APPROVED_DIGEST", "--keep-receipt"):
             self.assertIn(token, apply_help)
+        self.assertNotIn("[--approved-digest APPROVED_DIGEST]", apply_help)
 
         reject_help = subprocess.run(
             [sys.executable, str(workflow), "reject", "--help"],

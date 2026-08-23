@@ -378,14 +378,17 @@ class PluginContractTests(unittest.TestCase):
                 "file_mode": "0600",
                 "ttl_seconds": 86400,
                 "automatic_selection": "exactly_one_fresh_pending_repository_and_core_bound_receipt",
+                "approval_transport": "preview_stdout_digest_to_required_apply_argument",
                 "success_cleanup": "remove_unless_keep_receipt",
             },
             schema["workflow_surface"]["receipt_contract"],
         )
         for skill in (decision, decision_ko):
             canonical_commands = skill.split("```bash", 1)[1].split("```", 1)[0]
-            for low_level_locator in ("--candidate-id", "--captured-from", "--receipt-file", "--approved-digest"):
+            for low_level_locator in ("--candidate-id", "--captured-from", "--receipt-file"):
                 self.assertNotIn(low_level_locator, canonical_commands)
+            self.assertIn("--approved-digest", canonical_commands)
+            self.assertIn("preview stdout", skill)
             self.assertIn("--supersede", skill)
             self.assertIn("--withdraw", skill)
             self.assertIn("reject --core-cli", skill)

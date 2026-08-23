@@ -588,6 +588,7 @@ def schema_result() -> dict[str, Any]:
                 "file_mode": "0600",
                 "ttl_seconds": 86400,
                 "automatic_selection": "exactly_one_fresh_pending_repository_and_core_bound_receipt",
+                "approval_transport": "preview_stdout_digest_to_required_apply_argument",
                 "success_cleanup": "remove_unless_keep_receipt",
             },
         },
