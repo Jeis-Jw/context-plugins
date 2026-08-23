@@ -29,6 +29,15 @@ class DecisionConflictTests(unittest.TestCase):
             with self.assertRaises(decision_cli.DecisionError) as physical:
                 decision_cli.validate_batch(repo, second)
             self.assertEqual("decision_slot_conflict", physical.exception.code)
+            self.assertEqual("supersede", physical.exception.details["suggested_action"])
+            self.assertEqual(
+                {
+                    "id": "ctx_550e8400e29b41d4a716446655440000",
+                    "title": "인증 세션 소유권",
+                    "created_at": "2026-08-13T18:20:00+09:00",
+                },
+                physical.exception.details["current"],
+            )
 
         with helpers.git_repo() as temp:
             repo = helpers.Path(temp)
@@ -65,6 +74,7 @@ class DecisionConflictTests(unittest.TestCase):
                 scope=related_value["scope_hint"],
                 decision_key=related_value["owner_inputs"]["decision"]["decision_key"],
             )
+            self.assertEqual("exact_slot", check["coverage"])
             self.assertEqual(["ctx_550e8400e29b41d4a716446655440000"], [item["id"] for item in check["comparison_input"]["current"]])
             self.assertEqual("인증 세션은 BFF가 소유한다.", check["comparison_input"]["current"][0]["sections"]["결정"])
             self.assertEqual(list(decision_cli.SEMANTIC_RELATIONS), check["assessment_contract"]["relations"])
@@ -76,13 +86,6 @@ class DecisionConflictTests(unittest.TestCase):
             )
             self.assertFalse(check["physical_write"])
 
-            fixtures = helpers.PLUGIN.parents[1] / "tests/context-v1/fixtures/host-inventory"
-            cases = helpers.json.loads((fixtures / "preflight-cases.json").read_text(encoding="utf-8"))["cases"]
-            ready = next(case for case in cases if case["expected_code"] == "ready")
-            inventory = repo / "inventory.json"
-            doctor = repo / "doctor.json"
-            inventory.write_text(helpers.json.dumps(ready["inventory"], ensure_ascii=False), encoding="utf-8")
-            doctor.write_text(helpers.json.dumps(ready["doctor"], ensure_ascii=False), encoding="utf-8")
             completed = helpers.subprocess.run(
                 [
                     helpers.sys.executable,
@@ -94,12 +97,6 @@ class DecisionConflictTests(unittest.TestCase):
                     related_value["scope_hint"],
                     "--decision-key",
                     related_value["owner_inputs"]["decision"]["decision_key"],
-                    "--host",
-                    ready["host"],
-                    "--core-inventory",
-                    f"@{inventory}",
-                    "--core-doctor",
-                    f"@{doctor}",
                     "--json",
                 ],
                 cwd=repo,
@@ -110,6 +107,65 @@ class DecisionConflictTests(unittest.TestCase):
             cli_result = helpers.json.loads(completed.stdout)["result"]
             self.assertEqual("context-decision-check/v1", cli_result["schema"])
             self.assertEqual(check["comparison_input"]["current"][0]["id"], cli_result["comparison_input"]["current"][0]["id"])
+
+    def test_discovery_only_check_is_lexical_and_cannot_conclude_no_conflict(self) -> None:
+        with helpers.git_repo() as temp:
+            repo = helpers.Path(temp)
+            existing = helpers.claim_result()
+            helpers.write_decision_area(repo, current=[draft_pair(existing)])
+            before = helpers.tree_digest(repo)
+
+            result = decision_cli.prepare_decision_check(
+                repo,
+                statement="BFF 인증 세션 소유권을 바꾼다.",
+            )
+
+            self.assertEqual("discovery_only", result["coverage"])
+            self.assertEqual(
+                "no-conflict cannot be concluded; re-run with exact scope/decision_key before preview",
+                result["caveat"],
+            )
+            self.assertIsNone(result["comparison_input"]["proposal"]["scope"])
+            self.assertIsNone(result["comparison_input"]["proposal"]["decision_key"])
+            self.assertEqual([], result["deterministic"]["exact_slot"])
+            self.assertEqual([], result["deterministic"]["scope_overlap"])
+            self.assertEqual(before, helpers.tree_digest(repo))
+
+            completed = helpers.subprocess.run(
+                [
+                    helpers.sys.executable,
+                    str(helpers.CLI_PATH),
+                    "check",
+                    "--statement",
+                    "BFF 인증 세션 소유권을 바꾼다.",
+                    "--json",
+                ],
+                cwd=repo,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+            self.assertEqual("discovery_only", helpers.json.loads(completed.stdout)["result"]["coverage"])
+            self.assertEqual(before, helpers.tree_digest(repo))
+
+            for partial_argument in (("--scope", "project/auth"), ("--decision-key", "session-owner")):
+                with self.subTest(partial=partial_argument[0]):
+                    partial = helpers.subprocess.run(
+                        [
+                            helpers.sys.executable,
+                            str(helpers.CLI_PATH),
+                            "check",
+                            "--statement",
+                            "BFF 인증 세션 소유권을 바꾼다.",
+                            *partial_argument,
+                            "--json",
+                        ],
+                        cwd=repo,
+                        text=True,
+                        capture_output=True,
+                    )
+                    self.assertEqual(2, partial.returncode, partial.stdout + partial.stderr)
+                    self.assertEqual("usage_invalid", helpers.json.loads(partial.stdout)["error"]["code"])
 
     def test_check_skips_unrelated_bodies_for_large_current_index(self) -> None:
         rows = [

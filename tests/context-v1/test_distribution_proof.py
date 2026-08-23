@@ -334,7 +334,7 @@ class DistributionProofTests(unittest.TestCase):
         decision_skill = (decision_root / "skills/decision/SKILL.md").read_text(encoding="utf-8")
         for token in ("context-common/v2", "partial/invalid/ready", "scan caches", "managed block"):
             self.assertIn(token, init_skill)
-        for token in ("actual", "conflict", "complete rendered", "Core alone owns", "`알겠어`"):
+        for token in ("actual", "conflict", "complete rendered", "preview stdout", "Core alone owns", "`알겠어`"):
             self.assertIn(token, decision_skill)
         for name in PLUGIN_NAMES[1:]:
             semantic_root = ROOT / "plugins" / name
@@ -654,6 +654,30 @@ class DistributionProofTests(unittest.TestCase):
         ).stdout
         for token in ("@file", "@@literal", "1,200", "2,000", "8 KiB", "16 KiB"):
             self.assertIn(token, preview_help)
+        for token in ("[--candidate-id CANDIDATE_ID]", "[--receipt-file RECEIPT_FILE]", "--supersede", "--withdraw"):
+            self.assertIn(token, preview_help)
+
+        apply_help = subprocess.run(
+            [sys.executable, str(workflow), "apply", "--help"],
+            cwd=ROOT,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        for token in ("[--receipt-file RECEIPT_FILE]", "[--approved-digest APPROVED_DIGEST]", "--keep-receipt"):
+            self.assertIn(token, apply_help)
+
+        reject_help = subprocess.run(
+            [sys.executable, str(workflow), "reject", "--help"],
+            cwd=ROOT,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        for token in ("--receipt-file", "--candidate-id", "--core-cli"):
+            self.assertIn(token, reject_help)
 
         decision_init = subprocess.run(
             [sys.executable, str(ROOT / "plugins/context-decision" / INIT_ENTRYPOINTS["context-decision"]), "--help"],

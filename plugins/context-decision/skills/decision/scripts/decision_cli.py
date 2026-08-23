@@ -568,10 +568,28 @@ def schema_result() -> dict[str, Any]:
         "commands": ["init", "schema", "capabilities", "candidate prepare", "check", "draft", "capture", "search", "read", "brief", "spec-view", "conflicts", "supersede", "import-fallback", "withdraw", "annotate", "revisit", "batch validate", "plan validate"],
         "workflow_surface": {
             "entrypoint": "decision_workflow.py",
-            "commands": ["preview", "apply"],
+            "commands": ["preview", "apply", "reject"],
             "preview_input_modes": ["inline", "files"],
+            "operations": ["capture", "supersede", "withdraw"],
             "inline_assertions": ["explicit_choice", "scope_identified", "commitment_present"],
             "receipt_schema": "context-decision-workflow-receipt/v1",
+            "receipt_contract": {
+                "top_level_fields": [
+                    "schema", "status", "created_at", "candidate_id", "operation",
+                    "approval_material", "approval_digest", "receipt_digest",
+                ],
+                "approval_material_fields": [
+                    "schema", "repository_identity", "core", "operation", "workflow_input_digest",
+                    "owner_result_digest", "core_approval_digest", "core_bundle",
+                ],
+                "status": "pending",
+                "default_directory": "tempdir/context-decision",
+                "directory_mode": "0700",
+                "file_mode": "0600",
+                "ttl_seconds": 86400,
+                "automatic_selection": "exactly_one_fresh_pending_repository_and_core_bound_receipt",
+                "success_cleanup": "remove_unless_keep_receipt",
+            },
         },
     }
 
@@ -1320,7 +1338,26 @@ def validate_batch(repo: pathlib.Path, owner_result: dict[str, Any], prior_bundl
     if transition in {"capture", "decision_fallback_import"}:
         same_slot = [record for record in state.values() if (record["frontmatter"]["scope"], record["frontmatter"]["decision_key"]) == (frontmatter["scope"], frontmatter["decision_key"])]
         if same_slot:
-            raise DecisionError("decision_slot_conflict", "slot already has a current DEC", {"current": [item["id"] for item in same_slot]}, EXIT_CONFLICT)
+            ordered = sorted(same_slot, key=lambda item: (item["frontmatter"]["created_at"], item["id"]))
+            current = ordered[0]
+            details: dict[str, Any] = {
+                "suggested_action": "supersede",
+                "current": {
+                    "id": current["id"],
+                    "title": current["frontmatter"]["title"],
+                    "created_at": current["frontmatter"]["created_at"],
+                },
+            }
+            if len(ordered) > 1:
+                details["current_candidates"] = [
+                    {
+                        "id": item["id"],
+                        "title": item["frontmatter"]["title"],
+                        "created_at": item["frontmatter"]["created_at"],
+                    }
+                    for item in ordered
+                ]
+            raise DecisionError("decision_slot_conflict", "slot already has a current DEC", details, EXIT_CONFLICT)
     if transition == "decision_supersede" and predecessor and (frontmatter["scope"], frontmatter["decision_key"]) != (predecessor["frontmatter"]["scope"], predecessor["frontmatter"]["decision_key"]):
         raise DecisionError("successor_slot_mismatch", "successor must use the exact predecessor slot", exit_code=EXIT_CONFLICT)
     overlaps = [
@@ -1883,8 +1920,8 @@ def prepare_decision_check(
     repo: pathlib.Path,
     *,
     statement: str,
-    scope: str,
-    decision_key: str,
+    scope: str | None = None,
+    decision_key: str | None = None,
     rationale: str = "",
     query: str = "",
     limit: int = 8,
@@ -1900,8 +1937,16 @@ def prepare_decision_check(
         rationale = _bounded_string(rationale, "rationale", 1200)
     if query:
         query = _bounded_string(query, "query", 280)
-    scope = canonical_scope(scope)
-    decision_key = canonical_decision_key(decision_key)
+    if (scope is None) != (decision_key is None):
+        raise DecisionError(
+            "usage_invalid",
+            "check requires both scope and decision_key or neither",
+            exit_code=EXIT_USAGE,
+        )
+    coverage = "exact_slot" if scope is not None else "discovery_only"
+    if coverage == "exact_slot":
+        scope = canonical_scope(scope)
+        decision_key = canonical_decision_key(decision_key)
     index_text, current_rows, _ = _index(repo)
     tokens = _comparison_tokens(statement, rationale, query)
 
@@ -1933,23 +1978,25 @@ def prepare_decision_check(
         row_key = row.get("decision_key")
         score = 0
         reasons: list[str] = []
-        if (row_scope, row_key) == (scope, decision_key):
-            score += 100
-            reasons.append("exact_slot")
-            mandatory_ids.add(row["id"])
-        elif row_key == decision_key and isinstance(row_scope, str) and scopes_overlap(row_scope, scope):
-            score += 80
-            reasons.append("scope_overlap")
-            mandatory_ids.add(row["id"])
-        elif row_key == decision_key:
-            score += 40
-            reasons.append("same_decision_key")
-        elif row_scope == scope:
-            score += 20
-            reasons.append("exact_scope")
-        elif isinstance(row_scope, str) and scopes_overlap(row_scope, scope):
-            score += 20
-            reasons.append("related_scope")
+        if coverage == "exact_slot":
+            assert scope is not None and decision_key is not None
+            if (row_scope, row_key) == (scope, decision_key):
+                score += 100
+                reasons.append("exact_slot")
+                mandatory_ids.add(row["id"])
+            elif row_key == decision_key and isinstance(row_scope, str) and scopes_overlap(row_scope, scope):
+                score += 80
+                reasons.append("scope_overlap")
+                mandatory_ids.add(row["id"])
+            elif row_key == decision_key:
+                score += 40
+                reasons.append("same_decision_key")
+            elif row_scope == scope:
+                score += 20
+                reasons.append("exact_scope")
+            elif isinstance(row_scope, str) and scopes_overlap(row_scope, scope):
+                score += 20
+                reasons.append("related_scope")
         hits = sorted(token for token in distinctive_tokens if token in haystack)
         if hits and (score > 0 or len(hits) >= 2 or any(token_frequency[token] == 1 for token in hits)):
             score += min(len(hits), 8)
@@ -2016,14 +2063,22 @@ def prepare_decision_check(
         "proposal": proposal,
         "current": current,
     }
-    exact = [item for item in current if (item["scope"], item["decision_key"]) == (scope, decision_key)]
-    overlap = [
-        item
-        for item in current
-        if item["decision_key"] == decision_key
-        and item["scope"] != scope
-        and scopes_overlap(item["scope"], scope)
-    ]
+    exact = (
+        [item for item in current if (item["scope"], item["decision_key"]) == (scope, decision_key)]
+        if coverage == "exact_slot"
+        else []
+    )
+    overlap = (
+        [
+            item
+            for item in current
+            if item["decision_key"] == decision_key
+            and item["scope"] != scope
+            and scopes_overlap(item["scope"], scope)
+        ]
+        if coverage == "exact_slot"
+        else []
+    )
     selected_ids = {item["id"] for item in current}
     omitted_count = len(current_rows) - len(current)
     omitted_id_sample = [
@@ -2031,6 +2086,7 @@ def prepare_decision_check(
     ][:MAX_OMITTED_ID_SAMPLE]
     result = {
         "schema": "context-decision-check/v1",
+        "coverage": coverage,
         "comparison_input": comparison_input,
         "input_digest": canonical_digest(comparison_input),
         "deterministic": {
@@ -2059,6 +2115,8 @@ def prepare_decision_check(
         "warning": "relation=new는 조회된 Current 집합 안에서만 유효하며 전역 무충돌 증명이 아니다.",
         "physical_write": False,
     }
+    if coverage == "discovery_only":
+        result["caveat"] = "no-conflict cannot be concluded; re-run with exact scope/decision_key before preview"
     result_bytes = len(canonical_json(result).encode("utf-8"))
     if result_bytes > MAX_CHECK_RESULT_BYTES:
         raise DecisionError(
@@ -2474,8 +2532,8 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--json", action="store_true")
     check = sub.add_parser("check")
     check.add_argument("--statement", required=True)
-    check.add_argument("--scope", required=True)
-    check.add_argument("--decision-key", required=True)
+    check.add_argument("--scope")
+    check.add_argument("--decision-key")
     check.add_argument("--rationale", default="")
     check.add_argument("--query", default="")
     check.add_argument("--limit", type=int, default=8)
@@ -2573,8 +2631,12 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         return schema_result()
     if args.command == "capabilities":
         return {"schema": "context-owner-capabilities/v1", "owners": [decision_capability()]}
-    preflight = require_core_preflight(args, allow_absent=args.command == "init")
+    read_only_commands = {"check", "search", "read", "brief", "spec-view", "conflicts", "revisit"}
+    preflight = None
+    if args.command not in read_only_commands:
+        preflight = require_core_preflight(args, allow_absent=args.command == "init")
     if args.command == "init":
+        assert preflight is not None
         return build_init_plan(preflight)
     if args.command == "candidate" and args.candidate_command == "prepare":
         return build_direct_candidate(args)

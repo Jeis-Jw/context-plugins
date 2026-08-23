@@ -102,10 +102,13 @@ class PluginContractTests(unittest.TestCase):
             self.assertEqual({"repository": "none", "host_configuration": "none"}, rendered["write_policy"])
             self.assertEqual(before, (digest_tree(repo), digest_tree(host)))
 
-    def test_schema_and_capabilities_are_the_only_core_free_surfaces(self) -> None:
+    def test_read_only_surfaces_are_core_free_while_write_preflight_remains(self) -> None:
         protocol = (ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.md").read_text(encoding="utf-8")
         init = (ROOT / "plugins/context-decision/skills/init/SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("Only `schema` and `capabilities` are core-free", protocol)
+        self.assertIn(
+            "`schema`, `capabilities`, `check`, `search`, `read`, `brief`, `spec-view`, `conflicts`, and `revisit` are core-free",
+            protocol,
+        )
         for token in ("entrypoint path", "SHA-256", "protocol", "repository_state=absent"):
             self.assertIn(token, protocol)
         self.assertIn("`context-owner-descriptor/v1`", protocol)
@@ -193,15 +196,29 @@ class PluginContractTests(unittest.TestCase):
                         self.assertEqual({"repository": "none", "host_configuration": "none"}, details["write_policy"])
                         self.assertEqual(before, (digest_tree(repo), digest_tree(host)))
 
-    def test_non_static_cli_fails_closed_without_host_preflight(self) -> None:
+    def test_write_pipeline_cli_fails_closed_without_host_preflight(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
             (repo / "keep.txt").write_text("repository bytes\n", encoding="utf-8")
             before = digest_tree(repo)
-            completed = run_cli(repo, "init", "--json")
-            self.assertEqual(5, completed.returncode, completed.stdout + completed.stderr)
-            self.assertEqual("core_preflight_required", json.loads(completed.stdout)["error"]["code"])
-            self.assertEqual(before, digest_tree(repo))
+            write_commands = (
+                ("init",),
+                (
+                    "candidate", "prepare",
+                    "--candidate-id", "cand_550e8400e29b41d4a716446655440000",
+                    "--title", "title", "--summary", "summary", "--scope", "project/auth",
+                    "--decision-key", "owner", "--captured-from", "conversation",
+                    "--commitment-evidence", "evidence", "--sec-decision", "decision",
+                    "--sec-rationale", "rationale", "--sec-alternatives", "alternative",
+                ),
+                ("draft", "--candidate", "@/missing.json", "--attestation", "@/missing.json"),
+            )
+            for command in write_commands:
+                with self.subTest(command=command[:2]):
+                    completed = run_cli(repo, *command, "--json")
+                    self.assertEqual(5, completed.returncode, completed.stdout + completed.stderr)
+                    self.assertEqual("core_preflight_required", json.loads(completed.stdout)["error"]["code"])
+                    self.assertEqual(before, digest_tree(repo))
             for command in (("schema", "--json"), ("capabilities", "--json")):
                 static = run_cli(repo, *command)
                 self.assertEqual(0, static.returncode, static.stdout + static.stderr)
@@ -326,6 +343,7 @@ class PluginContractTests(unittest.TestCase):
 
     def test_public_skill_documents_preflight_and_two_phase_capture(self) -> None:
         decision = (ROOT / "plugins/context-decision/skills/decision/SKILL.md").read_text(encoding="utf-8")
+        decision_ko = (ROOT / "plugins/context-decision/skills/decision/SKILL.ko.md").read_text(encoding="utf-8")
         init = (ROOT / "plugins/context-decision/skills/init/SKILL.md").read_text(encoding="utf-8")
         protocol = (ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.md").read_text(encoding="utf-8")
         combined = "\n".join((decision, init, protocol))
@@ -342,6 +360,35 @@ class PluginContractTests(unittest.TestCase):
             ["explicit_choice", "scope_identified", "commitment_present"],
             schema["workflow_surface"]["inline_assertions"],
         )
+        self.assertEqual(["preview", "apply", "reject"], schema["workflow_surface"]["commands"])
+        self.assertEqual(["capture", "supersede", "withdraw"], schema["workflow_surface"]["operations"])
+        self.assertEqual(
+            {
+                "top_level_fields": [
+                    "schema", "status", "created_at", "candidate_id", "operation",
+                    "approval_material", "approval_digest", "receipt_digest",
+                ],
+                "approval_material_fields": [
+                    "schema", "repository_identity", "core", "operation", "workflow_input_digest",
+                    "owner_result_digest", "core_approval_digest", "core_bundle",
+                ],
+                "status": "pending",
+                "default_directory": "tempdir/context-decision",
+                "directory_mode": "0700",
+                "file_mode": "0600",
+                "ttl_seconds": 86400,
+                "automatic_selection": "exactly_one_fresh_pending_repository_and_core_bound_receipt",
+                "success_cleanup": "remove_unless_keep_receipt",
+            },
+            schema["workflow_surface"]["receipt_contract"],
+        )
+        for skill in (decision, decision_ko):
+            canonical_commands = skill.split("```bash", 1)[1].split("```", 1)[0]
+            for low_level_locator in ("--candidate-id", "--captured-from", "--receipt-file", "--approved-digest"):
+                self.assertNotIn(low_level_locator, canonical_commands)
+            self.assertIn("--supersede", skill)
+            self.assertIn("--withdraw", skill)
+            self.assertIn("reject --core-cli", skill)
         self.assertTrue(WORKFLOW_PATH.is_file())
 
 

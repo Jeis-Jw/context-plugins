@@ -5,35 +5,37 @@ description: When the incremental audit detects a forming or changing choice, co
 
 # Decision
 
-Use this semantic owner only with the separately installed release-pinned context-core. It does not repeat the conversation audit or write repository bytes. Low-level calls keep `--host`, `--core-inventory @file`, and `--core-doctor @file`; canonical init and capture handshake the pinned core directly.
+Use this semantic owner only with a separately installed context-core. It does not audit the whole conversation again and never writes repository bytes. `check`, `search`, `read`, `brief`, `spec-view`, `conflicts`, and `revisit` are read-only and need no host inventory. Low-level write-pipeline calls retain caller `--host`, `--core-inventory @file`, and `--core-doctor @file` for compatibility. Canonical init and capture instead verify the release-pinned core executable and handshake its schema and doctor directly.
 
-1. Run only for a forming or changing choice. Reuse a Current body only while its scope/anchor and bytes remain in session; otherwise run `check --statement ... --scope ... --decision-key ...` before concluding or proposing capture.
-2. Compare actual Decision, Rationale, and Rejected alternatives. Classify `new|same|supporting|rationale_changed|conflict`; hashes, IDs, and metadata are not semantic evidence. Reuse `same` silently, keep supporting evidence as OBS, and report changes/conflicts before the primary conclusion.
-3. Claim only a caller-provided explicit choice with canonical scope and commitment evidence. The owner never invents meaning or evidence. Finish the original request before one mature proposal; do not re-propose dismissed/deferred candidates without new evidence.
-4. Normal capture uses the loaded decision skill's `scripts/decision_workflow.py preview --inline`. The agent supplies the semantic fields and three `--attest-*` judgments. Resolve sibling decision/core entrypoints internally; preview writes the bundle once to an out-of-repository frozen receipt.
-5. Use low-level `batch validate` for lifecycle/ordered overlays and `spec-view --scope ...` for actual Current Decision/Rationale projection. Core alone owns final validation, repository identity, CAS, lock, index rebuild, and physical write.
-
-Before suggesting capture, run preview and ask once with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply; never show or request a digest, receipt path, internal ID, or core path. Only a direct, explicit, unconditional affirmative answer to that capture question is approval. `알겠어` alone, a condition, edit request, or topic change is not approval; confirm ambiguous praise once. Never regenerate capture, IDs, timestamps, plans, or content after approval.
-
-The following command shape is agent-internal compatibility input, never user input:
+1. Run only when core's incremental audit detects a choice forming or changing. Reuse a Current `{id,sha256}` only while the same scope/anchor and actual body remain in session context. Otherwise run `check --statement ...`; this is `coverage:discovery_only` until both exact `--scope` and `--decision-key` are known. Never conclude no conflict from discovery-only, and repeat the exact-slot check before preview.
+2. Compare the returned actual Decision, Rationale, and Rejected alternatives. Classify `new|same|supporting|rationale_changed|conflict`; sentence similarity, hashes, IDs, and metadata are not semantic evidence.
+3. Reuse `same` silently. Keep the DEC for `supporting` and consider durable new evidence as OBS. Report `rationale_changed|conflict` before the primary conclusion and ask whether to keep or supersede. `new` applies only to the returned set.
+4. Claim only a caller-provided explicit choice that governs present or future action and has canonical scope plus commitment evidence. The owner never invents meaning or evidence. Finish the user's original request before one grouped mature proposal. Do not re-propose dismissed/deferred candidates without new evidence.
+5. For a normal single capture, use the loaded decision skill's sibling `scripts/decision_workflow.py preview --inline`. Supply semantic fields and all three `--attest-*` judgments; candidate ID and `captured_from:conversation` are automatic defaults, while the CLI invents no semantic field, evidence, or judgment.
+6. Use the loaded core skill's sibling `scripts/context_cli.py` for `--core-cli`. Canonical preview creates one private frozen receipt below `tempdir/context-decision`; do not show or request its path, candidate ID, or digest.
+7. Before suggesting capture, run preview and ask once with the complete rendered approval body. Retain preview stdout's `result.approval_digest` in session-local agent state, but never show or request the digest, receipt path, internal ID, or core path. Only a direct, explicit, unconditional affirmative answer to that capture question is approval. `알겠어` alone, a condition, edit request, or topic change is not approval; confirm ambiguous praise once. After approval, call receipt-locator-free `apply` with that exact digest through internal `--approved-digest`. Receipt self-digests are not approval evidence. Never regenerate capture, IDs, timestamps, plans, or content after approval.
+8. For a changed slot, use `preview --supersede <current-id>` with the successor semantics. Use `preview --withdraw <current-id> --reason <text>` to retire without a successor. Both use the same frozen receipt and apply path; History remains `do_not_follow`.
+9. Use locator-free `reject --core-cli ...` to discard the one current pending receipt without repository writes. Explicit `--candidate-id`, `--receipt-file`, and `--keep-receipt` remain low-level compatibility controls, not canonical user inputs. The public `--approved-digest` option remains because the agent, not the user, must carry the independent preview result into every apply.
+10. Use low-level `batch validate` for ordered prior-bundle composition. Core alone owns the complete final bundle, index rebuild, exact-digest gate, CAS/lock, and physical write.
+11. Use `spec-view --scope ...` for a read-only projection of actual Decision and Rationale sections from exact/ancestor/descendant Current DEC entries. Exclude History and `do_not_follow`.
 
 ```bash
 python3 /loaded/context-decision/skills/decision/scripts/decision_workflow.py preview \
   --host <codex|claude-code> \
   --core-cli /loaded/context-core/skills/context/scripts/context_cli.py \
-  --inline --candidate-id cand_0123456789abcdef0123456789abcdef \
+  --inline \
   --title '<title>' --summary '<summary>' --scope '<scope>' \
-  --decision-key '<key>' --captured-from conversation \
+  --decision-key '<key>' \
   --commitment-evidence '<caller-provided evidence>' \
   --sec-decision '<decision>' --sec-rationale '<rationale>' \
   --sec-alternatives '<rejected alternative>' \
   --attest-explicit-choice --attest-scope-identified --attest-commitment-present \
-  --receipt-file /absolute/path/outside/repository/decision-receipt.json --json
+  --json
 
 python3 /loaded/context-decision/skills/decision/scripts/decision_workflow.py apply \
   --core-cli /loaded/context-core/skills/context/scripts/context_cli.py \
-  --receipt-file /absolute/path/outside/repository/decision-receipt.json \
-  --approved-digest sha256:<exact> --json
+  --approved-digest '<agent-retained preview stdout result.approval_digest>' \
+  --json
 ```
 
-Use `candidate prepare`/`capture` or `--candidate @file --attestation @file` only for advanced lifecycle, decline, or frozen inputs. Inline values are literal; explicit `@file` and `@@literal` remain supported. Missing, symlinked, or oversized inputs fail before receipt or repository writes. Limits remain DEC 1,200 codepoints, common claim 2,000 codepoints, owner input 8 KiB, and candidate envelope 16 KiB.
+Add `--supersede <current-id>` to the preview command for replacement, or use `preview --withdraw <current-id> --reason '<reason>'` for withdrawal. Use `candidate prepare`/`capture` or workflow `--candidate @file --attestation @file` only for advanced lifecycle, explicit decline, or already-frozen inputs. Inline `--sec-*` is literal by default; `@file` reads a named regular UTF-8 file and `@@literal` preserves one leading `@`. Missing, symlinked, or oversized files fail before receipt or repository writes. Limits are DEC decision 1,200 codepoints, common primary claim 2,000 codepoints, canonical owner input 8 KiB, and full candidate envelope 16 KiB.

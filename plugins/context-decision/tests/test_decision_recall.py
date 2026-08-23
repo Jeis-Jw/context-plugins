@@ -27,28 +27,12 @@ def run_spec_view_cli(
     scope: str,
     max_bytes: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    fixture_root = helpers.PLUGIN.parents[1] / "tests/context-v1/fixtures/host-inventory"
-    ready = next(
-        case
-        for case in json.loads((fixture_root / "preflight-cases.json").read_text(encoding="utf-8"))["cases"]
-        if case["expected_code"] == "ready"
-    )
-    inventory = repo / "inventory.json"
-    doctor = repo / "doctor.json"
-    inventory.write_text(json.dumps(ready["inventory"], ensure_ascii=False), encoding="utf-8")
-    doctor.write_text(json.dumps(ready["doctor"], ensure_ascii=False), encoding="utf-8")
     command = [
         sys.executable,
         str(helpers.CLI_PATH),
         "spec-view",
         "--scope",
         scope,
-        "--host",
-        ready["host"],
-        "--core-inventory",
-        f"@{inventory}",
-        "--core-doctor",
-        f"@{doctor}",
         "--json",
     ]
     if max_bytes is not None:
@@ -57,6 +41,34 @@ def run_spec_view_cli(
 
 
 class DecisionRecallTests(unittest.TestCase):
+    def test_read_only_cli_surfaces_need_no_host_inventory_and_write_no_repository_bytes(self) -> None:
+        with helpers.git_repo() as temp:
+            repo = helpers.Path(temp)
+            current = helpers.claim_result()
+            helpers.write_decision_area(repo, current=[pair(current)])
+            identifier = "ctx_550e8400e29b41d4a716446655440000"
+            commands = (
+                ("check", "--statement", "인증 세션은 BFF가 소유한다.", "--scope", "project/auth", "--decision-key", "session-owner"),
+                ("search", "--query", "인증"),
+                ("read", "--id", identifier),
+                ("brief", "--id", identifier),
+                ("spec-view", "--scope", "project/auth"),
+                ("conflicts", "--scope", "project/auth", "--decision-key", "session-owner"),
+                ("revisit", "--id", identifier),
+            )
+            before = helpers.tree_digest(repo)
+            for command in commands:
+                with self.subTest(command=command[0]):
+                    completed = subprocess.run(
+                        [sys.executable, str(helpers.CLI_PATH), *command, "--json"],
+                        cwd=repo,
+                        text=True,
+                        capture_output=True,
+                    )
+                    self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+                    self.assertTrue(json.loads(completed.stdout)["ok"])
+                    self.assertEqual(before, helpers.tree_digest(repo))
+
     def test_acceptance_30_revisit(self) -> None:
         with helpers.git_repo() as temp:
             repo = helpers.Path(temp)
