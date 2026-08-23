@@ -19,9 +19,16 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ### W3 — semantic input meaning and limits
 
-- Primary claims retain actual-content equality and are limited to 2,000 codepoints; DEC `decision` is limited to 1,200 codepoints.
+- DEC validation rejects any candidate-owned frontmatter or semantic section that differs from the embedded exact candidate, including capture and supersede successor drafts. A stale validation receipt cannot authorize a modified result.
+- The common primary-claim protocol ceiling is 2,000 codepoints. Built-in SNAP `current_context`, OBS `observation`, and DEC `decision` each use an owner-specific 1,200-codepoint ceiling.
 - Canonical owner input is limited to 8 KiB and the full candidate envelope to 16 KiB.
 - Core and DEC `--sec-*` values now use literal text by default, explicit `@file`, and `@@literal` for one leading `@`. Missing, symlinked and oversized files fail before receipt or repository writes. ASM and TERM receive structured candidate JSON through `--candidate @file` instead.
+
+### Reproducible verification
+
+- Python 3.11: `python3.11 -m pytest -q` → 257 passed, 191 subtests.
+- Python 3.13: `python3.13 -m pytest -q` → 257 passed, 191 subtests.
+- Phase 0: `PYTHONPATH=tests/context-v1/phase0 pythonX -m pytest -q tests/context-v1/phase0` → 15 passed on each interpreter.
 
 ## Release boundary
 

@@ -26,7 +26,7 @@ The managed policy audits only the new semantic delta in the current response pa
 - A healthy metadata miss opens zero indexed artifact bodies.
 - Missing or stale index recovery opens at most 20 bodies per recall.
 - Stage-1 output is bounded to 4 KiB, selected body packs to 8 KiB, and approval previews to 32 KiB.
-- A common primary claim is at most 2,000 codepoints. Canonical owner input is at most 8 KiB. A `context-capture-batch/v1` has at most eight candidates and its entire canonical envelope is at most 16 KiB.
+- The common primary-claim protocol ceiling is 2,000 codepoints. Built-in SNAP `current_context` and OBS `observation` each use an owner-specific 1,200-codepoint ceiling; DEC `decision` independently uses 1,200. Canonical owner input is at most 8 KiB. A `context-capture-batch/v1` has at most eight candidates and its entire canonical envelope is at most 16 KiB.
 - These hard bounds cover body materialization/open, selected output, candidates/envelopes, and owner invocation input. Index scoring and directory enumeration may grow with the index, and end-to-end model tokens are not O(1).
 
 ## Approval and repository binding

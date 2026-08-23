@@ -25,7 +25,7 @@ Hard bounds apply to artifact body materialization/open, selected output, candid
 - Healthy Stage 1: index-only and zero artifact opens/lists/stats.
 - Recovery: at most 20 body opens.
 - Stage-1 output: 4 KiB; selected body pack: 8 KiB; approval preview: 32 KiB.
-- Common primary claim: 2,000 codepoints; canonical owner input: 8 KiB.
+- Common primary-claim protocol ceiling: 2,000 codepoints; built-in SNAP `current_context` and OBS `observation`: 1,200 codepoints each; canonical owner input: 8 KiB.
 - `context-capture-batch/v1`: at most eight candidates and at most 16 KiB for the full canonical `{schema,audit_count,candidates}` envelope. `audit_count` is the non-bool integer `1`; a legacy bare list is charged against the same synthetic envelope budget.
 - DEC additionally limits its primary decision to 1,200 codepoints, brief to 8 KiB, comparison input to 24 KiB, result to 32 KiB, and spec-view stdout to 32 KiB.
 

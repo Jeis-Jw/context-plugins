@@ -108,6 +108,7 @@ class PluginContractTests(unittest.TestCase):
         self.assertIn("Only `schema` and `capabilities` are core-free", protocol)
         for token in ("entrypoint path", "SHA-256", "protocol", "repository_state=absent"):
             self.assertIn(token, protocol)
+        self.assertIn("`context-owner-descriptor/v1`", protocol)
         for forbidden in ("install", "enable", "update", "marketplace", "plugin caches", "embed a core"):
             self.assertIn(forbidden, protocol)
         self.assertIn("release-pinned", init)

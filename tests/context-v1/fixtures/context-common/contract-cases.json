@@ -66,6 +66,7 @@
     "term_owner_conflict": {"input": "valid DEC claim and intentionally faulty TERM claim rebound to one dual-specialized candidate", "expected": ["owner_conflict", "multiple_specialized_owners_claimed", "write_zero"]},
     "term_approval_transaction": {"input": "validated TERM capture receipt passed through public core preview and exact-digest apply in a temporary repository", "expected": ["preview_write_zero", "wrong_digest_rejected", "exact_digest_applied", "authoritative_read"]},
     "term_receipt_spoof_rejection": {"input": "tampered TERM owner result or descriptor-bound receipt passed to public core preview", "expected": ["owner_validation_invalid", "artifact_write_zero", "index_write_zero"]},
-    "term_slot_lifecycle": {"input": "Current TERM followed by descendant-scope intersections across the actual term, aliases and deprecated_terms canonical key sets, then an approved deprecate transition", "expected": ["primary_alias_deprecated_cross_collisions", "term_slot_conflict", "collision_write_zero", "history_do_not_follow", "doctor_ready"]}
+    "term_slot_lifecycle": {"input": "Current TERM followed by descendant-scope intersections across the actual term, aliases and deprecated_terms canonical key sets, then an approved deprecate transition", "expected": ["primary_alias_deprecated_cross_collisions", "term_slot_conflict", "collision_write_zero", "history_do_not_follow", "doctor_ready"]},
+    "decision_semantic_transport_binding": {"input": "DEC owner result whose draft and semantic projection were changed after build while the embedded candidate and receipt remain original", "expected": ["claim_result_mismatch_before_receipt", "stale_receipt_rejected", "artifact_write_zero", "index_write_zero"]}
   }
 }

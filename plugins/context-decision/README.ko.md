@@ -13,6 +13,8 @@
 
 `context-decision`은 marketplace add, install, enable, update 또는 host configuration 변경을 자동 실행하지 않습니다. Manifest에도 dependency나 implicit/default install metadata가 없고 core 구현을 내장하지 않습니다. Canonical init과 workflow는 subprocess 전에 release-pinned `skills/context/scripts/context_cli.py` path suffix와 SHA-256을 확인하고, 일치한 executable에서 `context-core-schema/v1`, `context-common/v2`, required doctor/transaction/bootstrap command, `context-owner-descriptor/v2` feature와 doctor state를 직접 handshake합니다. 이 검사는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 저수준 compatibility mode의 입력일 뿐 canonical 경로의 신뢰 근거가 아닙니다.
 
+core와 decision은 같은 immutable release checkout에서 함께 설치·update해야 합니다. Decision이 exact core entrypoint bytes를 고정하므로 혼합 설치나 일부만 update한 상태는 `core_surface_mismatch`로 중단됩니다. core와 decision을 같은 release로 맞추고 host reload 뒤 재시도합니다.
+
 ## Exact failure UX
 
 - `core_missing`: source `Jeis-Jw/context-plugins`의 `context-core@context-plugins`를 사용자가 선택한 scope에 직접 설치하고 reload 또는 새 session 뒤 `context-decision:init`을 재시도합니다.
@@ -24,7 +26,7 @@
 
 Host는 `schema`/`capabilities`를 제외한 모든 저수준 compatibility CLI 호출에 `--host`, `--core-inventory @file`, `--core-doctor @file`을 전달합니다. canonical init과 일반 `decision_workflow.py preview --inline`은 caller-created inventory/doctor 대신 release-pinned core CLI의 schema와 doctor를 직접 handshake합니다. workflow는 caller가 명시한 semantic field와 세 attestation을 exact input에 결박해 approval preview를 만들며 evidence나 판단을 발명하지 않습니다. 고급 lifecycle·decline에는 `candidate prepare`와 `capture`를 사용하며 fact/idea는 draft 없이 종료합니다.
 
-inline `--sec-*`는 plain text가 기본이며 explicit `@file`과 leading `@` literal용 `@@literal`을 지원합니다. 일반 path-like text는 file로 추측하지 않습니다. common primary claim은 2,000 codepoint, DEC decision은 1,200 codepoint, owner input은 canonical UTF-8 8 KiB, candidate envelope는 16 KiB입니다. missing·symlink·oversized body file과 limit 초과는 receipt/repository write 전에 실제 크기 진단과 함께 실패합니다.
+inline `--sec-*`는 plain text가 기본이며 explicit `@file`과 leading `@` literal용 `@@literal`을 지원합니다. 일반 path-like text는 file로 추측하지 않습니다. common primary-claim protocol 상한은 2,000 codepoint이고 built-in SNAP `current_context`, OBS `observation`, DEC `decision`은 각각 owner-specific 1,200 codepoint입니다. owner input은 canonical UTF-8 8 KiB, candidate envelope는 16 KiB입니다. missing·symlink·oversized body file과 limit 초과는 receipt/repository write 전에 실제 크기 진단과 함께 실패합니다.
 
 `preview`는 repository와 Git metadata 밖의 새 절대경로에 mode `0600` frozen receipt를 만들며 민감한 decision material을 포함합니다. Stdout의 user-facing exact `approval_digest`는 repository identity, core absolute path와 pinned SHA, candidate/result digest, nested core bundle과 core digest 전체를 결박합니다. `receipt_digest`는 손상 탐지용일 뿐 승인을 대신하지 않으며 workflow 종료 뒤 receipt는 사용자가 직접 삭제합니다.
 

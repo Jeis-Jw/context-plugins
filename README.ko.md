@@ -27,6 +27,8 @@ Context Plugins는 모든 대화를 보관하지 않습니다. 현재 판단에 
 
 지원하는 developer-preview profile은 `context-core`와 `context-decision`을 별도로 설치한 뒤 `$context-decision:init`을 한 번 실행하는 구성입니다. bundle/meta-plugin은 없습니다. ASM과 TERM은 optional experimental surface이며 서로를 자동 설치하거나 대신 초기화하지 않습니다.
 
+core와 semantic addon은 반드시 같은 immutable release checkout에서 함께 설치·update해야 합니다. 각 addon이 exact core entrypoint bytes를 고정하므로 혼합 설치나 일부만 update한 상태는 `core_surface_mismatch`로 중단됩니다. 이때 core와 해당 addon을 같은 release로 함께 다시 설치·update하고 host reload 뒤 재시도합니다.
+
 ## 동작 방식
 
 ```text
@@ -131,6 +133,7 @@ context/
 - hash, ID나 index metadata만으로 의미가 같다고 판단하지 않고 실제 body, scope와 rationale를 비교합니다.
 - metadata와 index로 후보를 먼저 좁힌 뒤 관련 있는 실제 문서만 읽습니다. Healthy index의 zero-match는 indexed body를 열지 않고, stale/missing index recovery의 body open은 호출당 합계 20개 이하입니다.
 - Hard bound는 artifact body materialization/open, selected output, candidate/envelope와 owner input에 적용됩니다. Index row scoring·directory enumeration과 end-to-end host/model token 사용량은 corpus 크기와 무관한 O(1)을 보장하지 않습니다.
+- common primary-claim protocol 상한은 2,000 codepoint입니다. Built-in SNAP `current_context`, OBS `observation`, DEC `decision`은 각각 owner-specific 1,200 codepoint 상한을 적용합니다.
 - background daemon처럼 대화를 수집하거나 transcript 전체를 자동 보관하지 않습니다.
 - 명시적 `init` 외에는 plugin 설치·활성화와 host configuration을 자동으로 변경하지 않습니다.
 - release-pinned core executable의 path suffix/SHA-256, schema·protocol·required features/commands 또는 operation별 doctor state가 요구 조건과 다르면 target write는 0이며 필요한 exact 좌표를 안내합니다. 이 검증은 marketplace provenance, catalog source 또는 host enabled state를 attest하지 않습니다.
@@ -140,7 +143,9 @@ context/
 
 | 근거 | 결과 | 경계 |
 |---|---|---|
-| 2026-08-22 deterministic acceptance | 10/10 통과 | scripted fixture/assertion |
+| Python 3.11 전체 suite, 2026-08-23 | 257 passed, 191 subtests | `python3.11 -m pytest -q` |
+| Python 3.13 전체 suite, 2026-08-23 | 257 passed, 191 subtests | `python3.13 -m pytest -q` |
+| 두 interpreter의 Phase 0 | 각각 15 passed | `PYTHONPATH=tests/context-v1/phase0 pythonX -m pytest -q tests/context-v1/phase0` |
 | Codex `0.149.0-alpha.4.1` | core+decision fresh install/cache lifecycle 통과 | actual model behavior 근거 아님 |
 | Claude Code `2.1.89` | core+decision fresh install/cache lifecycle 통과 | runtime UX는 experimental |
 | 두 host의 네 plugin | install/load 통과 | ASM/TERM은 optional experimental |

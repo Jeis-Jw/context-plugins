@@ -730,6 +730,68 @@ def _list_body(values: Sequence[str]) -> str:
     return "\n".join(f"- {value}" for value in values)
 
 
+def _validate_claim_draft_binding(
+    candidate: dict[str, Any],
+    frontmatter: dict[str, Any],
+    sections: dict[str, str],
+) -> None:
+    """Bind every candidate-owned DEC field to the materialized Current draft."""
+
+    scope, key, values = validate_candidate(candidate)
+    expected_frontmatter: dict[str, Any] = {
+        "schema": "context-decision/v1",
+        "title": candidate["title"].strip(),
+        "summary": candidate["summary"].strip(),
+        "captured_from": candidate["captured_from"],
+        "scope": scope,
+        "decision_key": key,
+    }
+    for field in ("source_refs", "tags", "search_terms"):
+        if candidate.get(field):
+            expected_frontmatter[field] = list(candidate[field])
+    if values.get("revisit_when"):
+        expected_frontmatter["revisit_when"] = list(values["revisit_when"])
+    if values.get("revisit_on"):
+        expected_frontmatter["revisit_on"] = values["revisit_on"]
+    if candidate.get("informed_by"):
+        expected_frontmatter["relations"] = {
+            "informed_by": [require_context_id(item, "informed_by") for item in candidate["informed_by"]],
+        }
+    candidate_owned_fields = {
+        "schema", "title", "summary", "captured_from", "source_refs", "tags", "search_terms",
+        "scope", "decision_key", "revisit_when", "revisit_on", "relations",
+    }
+    actual_frontmatter = {
+        field: frontmatter[field]
+        for field in candidate_owned_fields
+        if field in frontmatter
+    }
+    if actual_frontmatter != expected_frontmatter:
+        raise DecisionError(
+            "claim_result_mismatch",
+            "DEC draft frontmatter differs from the embedded candidate",
+            exit_code=EXIT_CONFLICT,
+        )
+
+    expected_sections = {
+        "결정": values["decision"].strip(),
+        "취지": values["rationale"].strip(),
+        "반려대안": _list_body(values["rejected_alternatives"]),
+    }
+    if values.get("constraints"):
+        expected_sections["근거와 제약"] = _list_body(values["constraints"])
+    if values.get("tradeoffs"):
+        expected_sections["트레이드오프"] = _list_body(values["tradeoffs"])
+    if values.get("revisit_when"):
+        expected_sections["재평가 조건"] = _list_body(values["revisit_when"])
+    if sections != expected_sections:
+        raise DecisionError(
+            "claim_result_mismatch",
+            "DEC draft sections differ from the embedded decision owner inputs",
+            exit_code=EXIT_CONFLICT,
+        )
+
+
 def _draft_from_candidate(
     candidate: dict[str, Any],
     *,
@@ -891,6 +953,8 @@ def validate_owner_result(result: dict[str, Any]) -> None:
     if result.get("owner") != "context-decision" or result.get("target_kind") != "decision" or result.get("capability_digest") != canonical_digest(decision_capability()):
         raise DecisionError("capability_digest_mismatch", "owner/capability binding is invalid", exit_code=EXIT_CONFLICT)
     inputs = _input_map(result)
+    if "claim" in inputs:
+        validate_candidate(inputs["claim"]["value"])
     attestations: dict[str, dict[str, Any]] = {}
     for item in result.get("semantic_attestations", []):
         operation = item.get("operation")
@@ -947,13 +1011,13 @@ def validate_owner_result(result: dict[str, Any]) -> None:
         projection = draft.get("semantic_projection")
         expected_kind = "observation" if is_observation else "decision"
         primary_section = "관찰" if is_observation else "결정"
+        supporting_section = "근거" if is_observation else "취지"
         if (
             not isinstance(projection, dict)
             or set(projection) != {"kind", "primary_claim", "supporting_context"}
             or projection.get("kind") != expected_kind
             or projection.get("primary_claim") != sections[primary_section]
-            or not isinstance(projection.get("supporting_context"), list)
-            or len(projection["supporting_context"]) > 4
+            or projection.get("supporting_context") != [sections[supporting_section]]
         ):
             raise DecisionError("plan_preview_mismatch", "draft semantic projection is invalid", exit_code=EXIT_CONFLICT)
         (observation_drafts if is_observation else draft_by_id)[draft["effect_id"]] = (frontmatter, sections, draft)
@@ -963,6 +1027,19 @@ def validate_owner_result(result: dict[str, Any]) -> None:
         if operation["op"] != "delete" and operation["effect_id"] not in draft_by_id and operation["effect_id"] not in observation_drafts:
             raise DecisionError("plan_preview_mismatch", "non-delete operation lacks a destination draft", exit_code=EXIT_CONFLICT)
     transition = result["transition"]
+    if "claim" in inputs:
+        current_claim_drafts = [
+            (frontmatter, sections)
+            for frontmatter, sections, draft in draft_by_id.values()
+            if "/retired/" not in draft["path"]
+        ]
+        if len(current_claim_drafts) != 1:
+            raise DecisionError(
+                "claim_result_mismatch",
+                "a claimed DEC result must contain exactly one Current draft",
+                exit_code=EXIT_CONFLICT,
+            )
+        _validate_claim_draft_binding(inputs["claim"]["value"], *current_claim_drafts[0])
     if transition == "capture" and (len(drafts) != 1 or len(effects) != 1 or effects[0].get("action") != "create"):
         raise DecisionError("plan_preview_mismatch", "capture must create exactly one current DEC", exit_code=EXIT_CONFLICT)
     if transition == "decision_supersede":

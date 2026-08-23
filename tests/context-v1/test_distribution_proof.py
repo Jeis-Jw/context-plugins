@@ -490,14 +490,17 @@ class DistributionProofTests(unittest.TestCase):
         for token in ("W1-W3", "context-common/v2", "linked worktree", "@file", "@@literal"):
             self.assertIn(token, migration)
         for token in (
-            "2026-08-22",
-            "10/10 passed",
+            "2026-08-23",
+            "257 passed, 191 subtests",
+            "Phase 0",
+            "15 passed each",
             "0.149.0-alpha.4.1",
             "Claude Code `2.1.89`",
             "All four plugins installed and loaded",
             "Actual model behavior",
             "Unverified",
             "not a token-savings claim",
+            "core_surface_mismatch",
         ):
             self.assertIn(token, root_readme)
 

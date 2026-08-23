@@ -112,6 +112,36 @@ class MutationPlanTests(unittest.TestCase):
             decision_cli.validate_batch(repo, supersede)
             self.assertEqual(before, helpers.tree_digest(repo))
 
+    def test_supersede_rejects_successor_draft_detached_from_candidate(self) -> None:
+        with helpers.git_repo() as temp:
+            repo = helpers.Path(temp)
+            active = helpers.claim_result()
+            helpers.write_decision_area(repo, current=[pair(active)])
+            before = helpers.tree_digest(repo)
+            successor = helpers.candidate(
+                decision="인증 세션은 auth service가 소유한다.",
+                candidate_id="cand_550e8400e29b41d4a716446655440001",
+            )
+            result = decision_cli.build_supersede_result(
+                repo,
+                "ctx_550e8400e29b41d4a716446655440000",
+                successor,
+                helpers.attestation(successor),
+                identifier="ctx_123e4567e89b42d3a456426614174001",
+                retired_at="2026-08-14T09:00:00+09:00",
+            )
+            altered = copy.deepcopy(result)
+            draft = next(item for item in altered["artifact_drafts"] if "/retired/" not in item["path"])
+            draft["content"] = draft["content"].replace(
+                "인증 세션은 auth service가 소유한다.",
+                "인증 세션은 완전히 다른 경계가 소유한다.",
+            )
+            draft["semantic_projection"]["primary_claim"] = "인증 세션은 완전히 다른 경계가 소유한다."
+            with self.assertRaises(decision_cli.DecisionError) as caught:
+                decision_cli.validate_batch(repo, altered)
+            self.assertEqual("claim_result_mismatch", caught.exception.code)
+            self.assertEqual(before, helpers.tree_digest(repo))
+
     def test_cli_core_free_static_surfaces_do_not_modify_repository(self) -> None:
         with helpers.git_repo() as temp:
             repo = helpers.Path(temp)

@@ -16,6 +16,8 @@ The supported developer-preview profile is deliberately small:
 
 There is no bundle or meta-plugin. `context-decision:init` uses the separately installed core to initialize core storage, register the DEC area, and install the managed host policy in one idempotent operation. A separate `$context-core:init` is not required for this profile.
 
+Install core and every semantic addon from the same immutable release checkout. Each addon pins the exact core entrypoint bytes; a mixed or partially updated install fails with `core_surface_mismatch`. Update or reinstall core and the affected addon together, reload the host, and retry.
+
 `context-assumption` (ASM) and `context-term` (TERM) are optional experimental semantic owners. Install and initialize either one separately only when its lifecycle is needed. They are not part of the supported core+decision profile and are never installed or enabled implicitly.
 
 ## Why it exists
@@ -82,14 +84,16 @@ Run each optional owner's init once. One addon never initializes another addon.
 - Semantic addons verify the release-pinned `skills/context/scripts/context_cli.py` path suffix and SHA-256 before execution, then handshake schema, `context-common/v2`, required commands, `context-owner-descriptor/v2`, and doctor state. This does not attest marketplace provenance, catalog source, or host enabled state. Caller inventory/doctor files are low-level compatibility inputs only.
 - Healthy index misses open zero indexed artifact bodies. Stale or missing index recovery opens at most 20 bodies per recall.
 - Hard bounds cover body materialization/open, selected output, candidates/envelopes, and owner input. Index scoring/directory enumeration and end-to-end model tokens are not O(1).
-- Primary claims are at most 2,000 codepoints; DEC `decision` is at most 1,200 codepoints; canonical owner input is at most 8 KiB; the full candidate envelope is at most 16 KiB.
+- The common primary-claim ceiling is 2,000 codepoints. Built-in SNAP `current_context`, OBS `observation`, and DEC `decision` each use an owner-specific 1,200-codepoint ceiling. Canonical owner input is at most 8 KiB; the full candidate envelope is at most 16 KiB.
 - Core and DEC `--sec-*` values are literals by default. `@file` reads a named regular UTF-8 file and `@@literal` preserves one leading `@`; path-like plain text remains literal. Experimental ASM and TERM instead receive structured candidate JSON through `--candidate @file`.
 
 ## Verification evidence
 
 | Evidence | Result | Boundary |
 |---|---|---|
-| Deterministic acceptance runs, 2026-08-22 | 10/10 passed | Scripted fixtures and assertions |
+| Python 3.11 full suite, 2026-08-23 | 257 passed, 191 subtests | `python3.11 -m pytest -q` |
+| Python 3.13 full suite, 2026-08-23 | 257 passed, 191 subtests | `python3.13 -m pytest -q` |
+| Phase 0 on both interpreters | 15 passed each | `PYTHONPATH=tests/context-v1/phase0 pythonX -m pytest -q tests/context-v1/phase0` |
 | Codex `0.149.0-alpha.4.1` | Fresh install and cache lifecycle passed for core+decision | Host lifecycle evidence, not model-behavior evidence |
 | Claude Code `2.1.89` | Fresh install and cache lifecycle passed for core+decision | Runtime UX remains experimental |
 | Codex + Claude Code | All four plugins installed and loaded | ASM/TERM remain optional experimental surfaces |

@@ -62,7 +62,7 @@ The complete bundle/material stays in a new receipt outside the repository and G
 
 Receipt overwrite, repository-local receipt, clone/linked-worktree/same-path-recreated replay, changed core bytes, and wrong approval all fail before writes. Apply forwards the frozen bundle and does not regenerate it. Delete the sensitive receipt manually when the workflow is complete.
 
-Inline `--sec-*` values are literal by default. `@file` reads a named regular UTF-8 file; `@@literal` preserves one leading `@`; path-like plain text remains literal. Missing, symlinked, and oversized files fail before receipt or repository writes. Bounds are common primary claim 2,000 codepoints, DEC decision 1,200 codepoints, canonical owner input 8 KiB, and complete candidate envelope 16 KiB.
+Inline `--sec-*` values are literal by default. `@file` reads a named regular UTF-8 file; `@@literal` preserves one leading `@`; path-like plain text remains literal. Missing, symlinked, and oversized files fail before receipt or repository writes. The common primary-claim protocol ceiling is 2,000 codepoints; built-in SNAP `current_context`, OBS `observation`, and DEC `decision` each use an owner-specific 1,200-codepoint ceiling. Canonical owner input is at most 8 KiB and the complete candidate envelope at most 16 KiB.
 
 ## Recall, spec view, and init
 
@@ -72,7 +72,7 @@ Inline `--sec-*` values are literal by default. `@file` reads a named regular UT
 
 `spec-view --scope` selects exact/strict-ancestor/strict-descendant Current DEC metadata and materializes only `결정` and `취지`, ordered by `(created_at,id)`. It excludes History and `do_not_follow`. Complete JSON stdout including the final newline is at most 32 KiB; trailing entries are omitted whole and counted.
 
-Init verifies the release-pinned core and doctor, then passes an exact `context-owner-descriptor/v2` and empty DEC index seed to core bootstrap. One call may complete core root setup, DEC registration, and managed policy installation. The decision CLI itself writes none of those bytes.
+Init verifies a v2-capable release-pinned core and doctor, then passes the DEC area's exact legacy-compatible `context-owner-descriptor/v1` and empty DEC index seed to core bootstrap. One call may complete core root setup, DEC registration, and managed policy installation. The decision CLI itself writes none of those bytes.
 
 ## Output
 

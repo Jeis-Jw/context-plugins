@@ -10,6 +10,8 @@
 
 There is no bundle or meta-plugin. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.5.1` tag is not published yet; installation and publication remain owner-gated.
 
+Core and decision must come from the same immutable release checkout. Decision pins the exact core entrypoint bytes, so a mixed or partially updated install fails with `core_surface_mismatch`; update or reinstall both together, reload the host, and retry.
+
 ## Executable trust boundary
 
 Before any core subprocess, canonical init and workflow verify that the supplied absolute `--core-cli` matches the release-pinned `skills/context/scripts/context_cli.py` path suffix and SHA-256. Only then do they handshake:
@@ -47,7 +49,8 @@ Clone replay, linked-worktree replay, same-path repository recreation, receipt t
 Inline `--sec-*` values are literals by default. `@file` reads a named regular UTF-8 file and `@@literal` preserves one leading `@`; path-like plain text stays literal. Missing, symlinked, or oversized files fail before receipt or repository writes.
 
 - DEC `decision`: 1,200 codepoints
-- common primary claim: 2,000 codepoints
+- common primary-claim protocol ceiling: 2,000 codepoints
+- built-in SNAP `current_context` and OBS `observation`: 1,200 codepoints each
 - canonical owner input: 8 KiB
 - full candidate envelope: 16 KiB
 

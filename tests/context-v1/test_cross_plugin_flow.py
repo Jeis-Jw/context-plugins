@@ -1552,6 +1552,68 @@ class CrossPluginFlowTests(unittest.TestCase):
             self.assertEqual("Session Gateway", read["frontmatter"]["replacement_term"])
             self.assertEqual("ready", public_result(run_cli(repo, CORE_CLI, "doctor", "--json"))["repository_state"])
 
+    def test_acceptance_67_decision_semantic_transport_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            public_result(run_cli(repo, CORE_CLI, "init", "--host", "codex", "--json"))
+            public_result(run_cli(
+                repo,
+                DECISION_INIT,
+                "--host", "codex",
+                "--core-cli", str(CORE_CLI),
+                "--json",
+            ))
+            inventory, doctor = public_preflight(root, repo, prefix="decision-transport")
+            preflight = preflight_arguments(inventory, doctor)
+            candidate = choice("cand_123e4567e89b42d3a456426614174670")
+            owner_result = decision_cli.build_claim_result(
+                candidate,
+                decision_attestation(candidate),
+                identifier="ctx_550e8400e29b41d4a716446655440067",
+                created_at="2026-08-23T02:30:00+09:00",
+                repo=repo,
+            )
+            honest_receipt = decision_cli.validate_batch(repo, owner_result)
+            altered = copy.deepcopy(owner_result)
+            draft = altered["artifact_drafts"][0]
+            draft["content"] = draft["content"].replace(
+                "인증 세션은 BFF가 소유한다.",
+                "인증 세션은 SPA가 소유한다.",
+            )
+            draft["semantic_projection"]["primary_claim"] = "인증 세션은 SPA가 소유한다."
+            altered_path = write_json(root / "decision-transport-altered-result.json", altered)
+            before = repository_bytes(repo)
+
+            rejected_validation = run_cli(
+                repo,
+                DECISION_CLI,
+                "batch",
+                "validate",
+                "--owner-result", f"@{altered_path}",
+                *preflight,
+                "--json",
+            )
+            self.assertEqual(5, rejected_validation.returncode, rejected_validation.stdout + rejected_validation.stderr)
+            self.assertEqual("claim_result_mismatch", json.loads(rejected_validation.stdout)["error"]["code"])
+            self.assertEqual(before, repository_bytes(repo))
+
+            receipt_path = write_json(root / "decision-transport-honest-receipt.json", honest_receipt)
+            rejected_preview = run_cli(
+                repo,
+                CORE_CLI,
+                "transaction",
+                "preview",
+                "--owner-result", f"@{altered_path}",
+                "--owner-validation", f"@{receipt_path}",
+                "--json",
+            )
+            self.assertEqual(5, rejected_preview.returncode, rejected_preview.stdout + rejected_preview.stderr)
+            self.assertEqual("owner_validation_invalid", json.loads(rejected_preview.stdout)["error"]["code"])
+            self.assertEqual(before, repository_bytes(repo))
+
 
 if __name__ == "__main__":
     unittest.main()

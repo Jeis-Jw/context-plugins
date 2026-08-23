@@ -250,6 +250,26 @@ class DecisionSchemaTests(unittest.TestCase):
         with self.assertRaises(decision_cli.DecisionError):
             decision_cli.validate_owner_result(altered)
 
+    def test_complete_draft_rejects_candidate_owned_semantic_tampering(self) -> None:
+        original = claim_result()
+        cases = (
+            ("인증 세션은 BFF가 소유한다.", "인증 세션은 SPA가 소유한다.", "primary_claim"),
+            ("브라우저별 cookie 차이를 서버 경계 안으로 모은다.", "브라우저가 token을 직접 관리한다.", "supporting_context"),
+            ("SPA token 소유: XSS 노출이 커져 반려", "BFF 소유: 운영비가 커져 반려", None),
+        )
+        for expected, replacement, projection_field in cases:
+            with self.subTest(field=projection_field or "rejected_alternatives"):
+                altered = json.loads(json.dumps(original))
+                draft = altered["artifact_drafts"][0]
+                draft["content"] = draft["content"].replace(expected, replacement)
+                if projection_field == "primary_claim":
+                    draft["semantic_projection"][projection_field] = replacement
+                elif projection_field == "supporting_context":
+                    draft["semantic_projection"][projection_field] = [replacement]
+                with self.assertRaises(decision_cli.DecisionError) as caught:
+                    decision_cli.validate_owner_result(altered)
+                self.assertEqual("claim_result_mismatch", caught.exception.code)
+
     def test_candidate_id_is_transport_only(self) -> None:
         transport = candidate(candidate_id="cand_00000000000000000000000000000000")
         self.assertEqual("project/auth", decision_cli.validate_candidate(transport)[0])
