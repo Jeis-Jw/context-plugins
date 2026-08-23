@@ -447,6 +447,10 @@ class DistributionProofTests(unittest.TestCase):
                 or "직접적·명시적·무조건적" in text,
                 path,
             )
+            self.assertTrue(
+                "to that capture question" in text or "capture 질문에 대한" in text,
+                path,
+            )
             self.assertTrue("complete rendered body" in text or "완성된 렌더링 본문" in text, path)
             self.assertTrue("receipt path" in text or "receipt 경로" in text, path)
             self.assertTrue("topic change" in text or "화제 전환" in text, path)
