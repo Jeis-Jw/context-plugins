@@ -8,18 +8,18 @@ captured_from: "{{captured_from}}"
 scope: "{{scope}}"
 ---
 
-## 가정
+## Assumption
 
 {{assumption}}
 
-## 근거
+## Basis
 
 {{basis}}
 
-## 확정 조건
+## Confirmation conditions
 
 {{confirm_conditions}}
 
-## 반증 조건
+## Refutation conditions
 
 {{refute_conditions}}

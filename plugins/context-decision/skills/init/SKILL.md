@@ -1,6 +1,6 @@
 ---
 name: init
-description: When explicitly requested, verify the release-pinned context-core and initialize core storage, the DEC area, and the active host policy in one idempotent operation.
+description: When explicitly requested, verify the pinned context-core and initialize core storage, DEC, and the active host policy idempotently.
 ---
 
 # Init
@@ -18,8 +18,10 @@ python3 "$INIT_ENTRYPOINT" \
 
 Claude Code may use `${CLAUDE_PLUGIN_ROOT}` only when supplied by the host; Codex uses the loaded skill catalog. Never infer from cwd, scan caches, or substitute another runtime.
 
-The release-pinned adapter verifies path suffix and SHA-256, then handshakes `context-core-schema/v1`, `context-common/v2`, required commands, `context-owner-descriptor/v2`, and doctor state. Missing/mismatched/incompatible inputs cause zero subprocess, repository, or host-configuration writes. It passes `partial/invalid/ready` or bootstrap-required absent state to core, which owns repairability.
+The release-pinned adapter verifies path suffix and SHA-256, then handshakes `context-core-schema/v1`, `context-common/v2`, required commands, `context-owner-descriptor/v2`, and doctor state. Missing, mismatched, or incompatible inputs cause zero subprocess, repository, or host-configuration writes. It passes `partial/invalid/ready` or bootstrap-required absent state to core, which owns repairability.
 
-The fixed descriptor/index seed goes to `context_cli.py bootstrap`; core alone applies `core_init|area_register|policy_install`, preserves bytes outside the managed block, and converges retries.
+The fixed descriptor and index seed go to `context_cli.py bootstrap`; core alone applies `core_init|area_register|policy_install`, preserves bytes outside the managed block, and converges retries.
 
-Ordinary capture remains separate. Before suggesting it, run preview and ask once with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply; never show or request a digest, receipt path, internal ID, or core path. Only a direct, explicit, unconditional affirmative answer to that capture question is approval. `알겠어` alone, a condition, edit request, or topic change is not approval. Never regenerate content or plan after approval.
+Follow context-core's active-language contract. An explicit user language choice wins; otherwise use the host preference, then established conversation language, then English. OS locale is not authoritative. Use the active language for user-facing setup guidance and explanatory errors; keep machine-readable surfaces in English.
+
+Ordinary capture remains separate. Before suggesting it, run preview and ask once in the active language with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply; never show or request a digest, receipt path, internal ID, or core path. Only a direct, explicit, unconditional affirmative answer to that specific capture question is approval. A generic acknowledgement, condition, edit request, or topic change is not. Never regenerate content or plan after approval.

@@ -34,7 +34,7 @@ Agent는 기록 제안 전에 complete preview의 완성된 렌더링 본문을 
 
 ## Product flow
 
-context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하고, 선택의 형성·변경 신호가 있을 때만 context-decision을 부릅니다. 같은 scope·anchor와 `{id,sha256}`의 본문이 session context에 남아 있을 때만 재사용하며, 본문이 없거나 관련 anchor가 바뀌면 `check`가 metadata로 후보를 줄이고 Current DEC의 실제 `결정`, `취지`, `반려대안`을 제공합니다. Healthy index zero-match는 indexed body open 0이고 stale/missing recovery body open은 호출당 합계 20개 이하입니다. Hard bound는 body materialization/open, selected output, candidate/envelope와 owner input에 한정되며 index scoring·directory enumeration 및 end-to-end model token 사용량의 O(1)을 보장하지 않습니다.
+context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하고, 선택의 형성·변경 신호가 있을 때만 context-decision을 부릅니다. 같은 scope·anchor와 `{id,sha256}`의 본문이 session context에 남아 있을 때만 재사용하며, 본문이 없거나 관련 anchor가 바뀌면 `check`가 metadata로 후보를 줄이고 Current DEC의 canonical `Decision`, `Rationale`, `Rejected alternatives`를 제공합니다. 기존 `결정`, `취지`, `반려대안`은 read/round-trip용 legacy alias이며 신규 artifact의 canonical heading이 아닙니다. Healthy index zero-match는 indexed body open 0이고 stale/missing recovery body open은 호출당 합계 20개 이하입니다. Hard bound는 body materialization/open, selected output, candidate/envelope와 owner input에 한정되며 index scoring·directory enumeration 및 end-to-end model token 사용량의 O(1)을 보장하지 않습니다.
 
 - `same`: 기존 결정을 재사용하고 중복 기록하지 않음
 - `supporting`: 기존 결정을 유지하고 재사용 가치가 있는 새 근거만 OBS 후보로 제안
@@ -46,7 +46,7 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 
 ## Read-only spec view
 
-`decision_cli.py spec-view --scope <scope>`는 지정 scope와 exact·strict ancestor·strict descendant 관계인 Current DEC를 area index metadata에서 먼저 고른 뒤, 선택된 실제 본문의 `결정`과 `취지`만 읽기용 명세로 조립합니다. 문자열 prefix는 scope 관계로 보지 않으며 History와 `do_not_follow`는 포함하지 않습니다.
+`decision_cli.py spec-view --scope <scope>`는 지정 scope와 exact·strict ancestor·strict descendant 관계인 Current DEC를 area index metadata에서 먼저 고른 뒤, 선택된 실제 본문의 canonical `Decision`과 `Rationale`만 읽기용 명세로 조립합니다. 기존 `결정`과 `취지` heading은 legacy alias로 읽어 canonical 영어 key로 반환하며 저장된 heading을 자동 변경하지 않습니다. 문자열 prefix는 scope 관계로 보지 않으며 History와 `do_not_follow`는 포함하지 않습니다.
 
 결과는 `(created_at, id)` 오름차순이고 JSON envelope와 마지막 newline을 포함한 실제 CLI stdout UTF-8 기준 최대 32 KiB입니다. 상한을 넘으면 같은 순서의 뒤쪽 DEC를 section 중간 절단 없이 항목 전체로 제외하고 `omitted_count`를 반환합니다. 이 projection은 호출할 때마다 다시 계산하며 approval, 저장 또는 filesystem write를 수행하지 않습니다.
 
@@ -64,7 +64,7 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 
 0.4.1은 `context-core`의 판정·비용 계약 개선과 distribution version을 맞춘 patch release이며 decision semantics와 `context-common/v2` 계약은 변경하지 않습니다.
 
-0.5.0은 Current DEC의 `결정`·`취지`만 조립하는 read-only `spec-view`와 네 plugin distribution parity를 추가합니다. DEC storage schema와 `context-common/v2`는 유지되고 ASM·TERM 설치 또는 기존 artifact migration은 자동으로 일어나지 않습니다.
+0.5.0은 Current DEC의 canonical `Decision`·`Rationale`만 조립하는 read-only `spec-view`와 네 plugin distribution parity를 추가합니다. legacy 한국어 heading도 읽지만 자동 migration은 하지 않습니다. DEC storage schema와 `context-common/v2`는 유지되고 ASM·TERM 설치 또는 기존 artifact migration은 자동으로 일어나지 않습니다.
 
 0.5.1은 frozen receipt golden path, repository/core identity 결박, release-pinned core handshake, bounded recall recovery와 actual semantic input limit을 추가한 developer-preview patch입니다.
 

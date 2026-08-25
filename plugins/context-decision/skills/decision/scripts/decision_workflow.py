@@ -27,8 +27,8 @@ RECEIPT_DIRECTORY_NAME = "context-decision"
 RECEIPT_TTL_SECONDS = 24 * 60 * 60
 CANDIDATE_ID_RE = re.compile(r"^cand_[0-9a-f]{32}$")
 DEFAULT_RECEIPT_NAME_RE = re.compile(r"^(cand_[0-9a-f]{32})\.json$")
-REPREVIEW_MESSAGE = "저장 전 상태가 바뀌어 다시 미리보기 필요"
-CORE_MISMATCH_MESSAGE = "plugin 버전 불일치 — 재설치 후 새 세션"
+REPREVIEW_MESSAGE = "State changed before storage; create a new preview."
+CORE_MISMATCH_MESSAGE = "Plugin version mismatch; reinstall and start a new session."
 
 
 class WorkflowError(Exception):
@@ -1026,9 +1026,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             current = error.details.get("current", {})
             title = current.get("title") if isinstance(current, dict) else None
             payload["error"]["message"] = (
-                f"기존 결정 '{title}'이 있어 supersede로 진행할지 확인"
+                f"A Current decision named '{title}' exists; confirm whether to supersede it."
                 if isinstance(title, str) and title
-                else "기존 결정이 있어 supersede로 진행할지 확인"
+                else "A Current decision exists; confirm whether to supersede it."
             )
         elif error.code == "core_surface_mismatch":
             payload["error"]["message"] = CORE_MISMATCH_MESSAGE

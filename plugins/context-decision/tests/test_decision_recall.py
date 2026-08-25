@@ -284,7 +284,7 @@ class DecisionRecallTests(unittest.TestCase):
                 [item["id"] for item in first["items"]],
             )
             self.assertNotIn("ctx_cccccccccccc4cccaccccccccccccccc", opened)
-            self.assertTrue(all(set(item["sections"]) == {"결정", "취지"} for item in first["items"]))
+            self.assertTrue(all(set(item["sections"]) == {"Decision", "Rationale"} for item in first["items"]))
             self.assertEqual(0, first["retrieval"]["history_body_reads"])
             self.assertFalse(first["physical_write"])
             self.assertEqual("ephemeral", first["projection"])
@@ -348,8 +348,8 @@ class DecisionRecallTests(unittest.TestCase):
                 [(item["created_at"], item["id"]) for item in result["items"]],
             )
             for item in result["items"]:
-                self.assertTrue(item["sections"]["결정"].endswith("가" * 200))
-                self.assertTrue(item["sections"]["취지"].endswith("나" * 250))
+                self.assertTrue(item["sections"]["Decision"].endswith("가" * 200))
+                self.assertTrue(item["sections"]["Rationale"].endswith("나" * 250))
             self.assertEqual(result["returned"] + 1, result["retrieval"]["body_reads"])
             self.assertEqual(before, helpers.tree_digest(repo))
 
@@ -466,18 +466,18 @@ class DecisionRecallTests(unittest.TestCase):
                 "returned": 9,
                 "omitted_count": 1,
                 "truncated": True,
-                "max_bytes": 2206,
+                "max_bytes": 2251,
                 "retrieval": {**full["retrieval"], "body_reads": 9},
             }
-            self.assertEqual(2206, len(decision_cli._serialize_success(nine_items, json_mode=True).encode("utf-8")))
+            self.assertEqual(2251, len(decision_cli._serialize_success(nine_items, json_mode=True).encode("utf-8")))
             nine_items["retrieval"]["body_reads"] = 10
-            self.assertEqual(2207, len(decision_cli._serialize_success(nine_items, json_mode=True).encode("utf-8")))
+            self.assertEqual(2252, len(decision_cli._serialize_success(nine_items, json_mode=True).encode("utf-8")))
 
-            completed = run_spec_view_cli(repo, scope="p", max_bytes=2206)
+            completed = run_spec_view_cli(repo, scope="p", max_bytes=2251)
             self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
             result = json.loads(completed.stdout)["result"]
             self.assertEqual(decision_cli._serialize_success(result, json_mode=True), completed.stdout)
-            self.assertLessEqual(len(completed.stdout.encode("utf-8")), 2206)
+            self.assertLessEqual(len(completed.stdout.encode("utf-8")), 2251)
             self.assertEqual(8, result["returned"])
             self.assertEqual(2, result["omitted_count"])
             self.assertEqual(10, result["retrieval"]["body_reads"])

@@ -31,9 +31,11 @@ MAX_PRIMARY_CLAIM_CODEPOINTS = 2000
 ID_RE = re.compile(r"^ctx_[0-9a-f]{32}$")
 LOCAL_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
 ENTRY_RE = re.compile(r"^.*<!-- context-entry (\{.*\}) -->$")
-SECTIONS = ("정의",)
-REQUIRED_SECTIONS = ("정의",)
-PLACEHOLDERS = {"...", "TODO", "TBD", "해당 없음"}
+SECTIONS = ("Definition",)
+REQUIRED_SECTIONS = ("Definition",)
+LEGACY_SECTION_ALIASES = {"정의": "Definition"}
+LEGACY_SECTIONS = tuple(LEGACY_SECTION_ALIASES)
+PLACEHOLDERS = {"...", "TODO", "TBD", "N/A", "해당 없음"}
 CANDIDATE_FIELDS = {
     "schema", "candidate_id", "title", "claim", "summary", "captured_from", "requested_kind",
     "specialized_kinds", "fallback_kind", "owner_inputs", "scope_hint", "evidence", "tags",
@@ -48,7 +50,7 @@ REQUIRED_PLUGIN = {
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
     "entrypoint": "skills/context/scripts/context_cli.py",
-    "entrypoint_sha256": "sha256:9a776e7e964c10495cc7b14f5f3b44d4c8faf13b34d30343af9520dd0360a900",
+    "entrypoint_sha256": "sha256:8ac5891a4e14ff30461a0c9fd8c105cda046c3e9da67993c03141d2ba137b7f3",
 }
 
 
@@ -62,6 +64,16 @@ class TermError(Exception):
 
     def envelope(self) -> dict[str, Any]:
         return {"ok": False, "error": {"code": self.code, "message": self.message, "details": self.details}}
+
+
+def _canonical_section_name(name: str) -> str:
+    return LEGACY_SECTION_ALIASES.get(name, name)
+
+
+def _section_value(sections: dict[str, str], canonical: str = "Definition") -> str:
+    if canonical in sections:
+        return sections[canonical]
+    return sections.get("정의", "")
 
 
 def nfc(value: str) -> str:
@@ -334,7 +346,9 @@ def owner_descriptor() -> dict[str, Any]:
                 "superseded_by": {"type": "context_id", "required": False},
                 "supersedes": {"type": "context_id_list", "required": False, "min_items": 0, "max_items": 12},
             },
-            "sections": {"ordered": list(SECTIONS), "required": list(REQUIRED_SECTIONS), "primary": "정의"},
+            # Keep the registered v2 descriptor byte-compatible with existing repositories.
+            # Core treats this name as a legacy alias while new artifacts use English headings.
+            "sections": {"ordered": list(LEGACY_SECTIONS), "required": list(LEGACY_SECTIONS), "primary": "정의"},
             "index_projection": ["scope", "term_key", "term"],
             "lifecycle": {
                 "allowed_topologies": ["create_current", "replace_same_state", "retire_current", "supersede_current"],
@@ -372,12 +386,12 @@ def term_capability() -> dict[str, Any]:
         "authority": "authoritative",
         "descriptor_digest": canonical_digest(descriptor),
         "claim_surface": {"type": "agent_skill", "name": "context-term:term", "operation": "claim"},
-        "claim_rule": "project-specific 또는 project-special meaning이 명시된 용어와 정의만 claim한다",
+        "claim_rule": "Claim only a term with an explicit project-specific or project-special meaning and definition",
         "claim_assertions": ["term_identified", "definition_present"],
         "lifecycle_operations": {
             "same_claim": {
                 "surface": {"type": "agent_skill", "name": "context-term:term", "operation": "same_claim"},
-                "rule": "두 실제 term/definition 본문이 같은 project terminology claim을 뜻한다",
+                "rule": "Both actual term and Definition bodies express the same project terminology claim",
                 "assertions": ["same_semantic_claim"],
             }
         },
@@ -479,13 +493,14 @@ def render_document(frontmatter: dict[str, Any], sections: dict[str, str]) -> st
             raise TermError("lifecycle_invalid", "retired_reason is invalid")
     elif any(field in frontmatter for field in ("deprecation_reason", "replacement_term", "superseded_by")):
         raise TermError("lifecycle_invalid", "Current term contains retired-only fields")
-    if set(sections) != set(REQUIRED_SECTIONS):
+    if len(sections) != 1 or {_canonical_section_name(name) for name in sections} != set(REQUIRED_SECTIONS):
         raise TermError("schema_invalid", "term must contain exactly the definition section")
-    definition = _substantive(sections["정의"], maximum=4000, field="definition")
+    heading = next(iter(sections))
+    definition = _substantive(_section_value(sections), maximum=4000, field="definition")
     lines = ["---"]
     for key, value in frontmatter.items():
         lines.append(f"{key}: {json.dumps(value, ensure_ascii=False, separators=(',', ':'))}")
-    lines.extend(["---", "", "## 정의", "", definition, ""])
+    lines.extend(["---", "", f"## {heading}", "", definition, ""])
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
@@ -726,7 +741,7 @@ def _semantic_input(operation: str, value: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sections_from_input(owner_input: dict[str, Any]) -> dict[str, str]:
-    return {"정의": owner_input["definition"]}
+    return {"Definition": owner_input["definition"]}
 
 
 def build_claim_result(
@@ -786,7 +801,7 @@ def build_claim_result(
             "effect_id": effect_id,
             "path": path,
             "content": content,
-            "semantic_projection": {"kind": "term", "primary_claim": sections["정의"], "supporting_context": [owner_input["term"]]},
+            "semantic_projection": {"kind": "term", "primary_claim": sections["Definition"], "supporting_context": [owner_input["term"]]},
         }]
         effects = [{"effect_id": effect_id, "action": "create", "area": "term", "id": identifier, "state": "current"}]
         operations = [{"op": "create", "effect_id": effect_id, "area": "term", "path": path}]
@@ -837,7 +852,7 @@ def _validate_projection(draft: dict[str, Any]) -> tuple[dict[str, Any], dict[st
         raise TermError("owner_result_invalid", "semantic projection is invalid", exit_code=EXIT_CONFLICT)
     if (
         projection.get("kind") != "term"
-        or projection.get("primary_claim") != sections["정의"]
+        or projection.get("primary_claim") != _section_value(sections)
         or projection.get("supporting_context") != [frontmatter["term"]]
     ):
         raise TermError("owner_result_invalid", "semantic projection differs from actual term body", exit_code=EXIT_CONFLICT)
@@ -938,8 +953,8 @@ area: "term"
 owner: "context-term"
 artifact_schema: "context-term/v1"
 authority: "authoritative"
-summary: "project-specific 용어와 그 canonical 정의를 관리한다."
-search_terms: ["term","terminology","용어","정의"]
+summary: "Manage project-specific terms and their canonical definitions."
+search_terms: ["term","terminology","definition"]
 projection_fields: ["scope","term_key","term"]
 ---
 
@@ -1248,7 +1263,7 @@ def _single_mutation_result(record: dict[str, Any], transition: str, frontmatter
         "schema": "context-owner-result/v1", "result_type": "mutation", "transition": transition,
         "owner": "context-term", "target_kind": "term", "capability_digest": canonical_digest(term_capability()),
         "semantic_inputs": [_semantic_input("mutation_request", request)], "semantic_attestations": [],
-        "artifact_drafts": [{"effect_id": effect_id, "path": path, "content": content, "semantic_projection": {"kind": "term", "primary_claim": sections["정의"], "supporting_context": [frontmatter["term"]]} }],
+        "artifact_drafts": [{"effect_id": effect_id, "path": path, "content": content, "semantic_projection": {"kind": "term", "primary_claim": _section_value(sections), "supporting_context": [frontmatter["term"]]} }],
         "effects": [{"effect_id": effect_id, "action": "retire" if retire else "replace", "area": "term", "id": frontmatter["id"], "state": "history" if retire else "current"}],
         "proposed_plan": {"schema": "context-owner-plan/v1", "transition": transition, "read_preconditions": [{"id": frontmatter["id"], "path": record["path"], "sha256": record["sha256"]}], "operations": [{"op": "move" if retire else "replace", "effect_id": effect_id, "area": "term", "from_path": record["path"], "to_path": path} if retire else {"op": "replace", "effect_id": effect_id, "area": "term", "path": path}]},
     }
@@ -1290,7 +1305,7 @@ def prepare_same_claim_input(repo: pathlib.Path, identifier: str, successor_cand
             "id": identifier,
             "path": record["path"],
             "sha256": record["sha256"],
-            "primary_claim": {"term": record["frontmatter"]["term"], "definition": record["sections"]["정의"]},
+            "primary_claim": {"term": record["frontmatter"]["term"], "definition": _section_value(record["sections"])},
         },
         "successor": {
             "candidate_id": successor_candidate["candidate_id"],
@@ -1346,8 +1361,8 @@ def build_supersede_result(
         "semantic_inputs": [_semantic_input("claim", successor_candidate), _semantic_input("same_claim", same_claim_input), _semantic_input("mutation_request", request)],
         "semantic_attestations": [claim_attestation, same_claim_attestation],
         "artifact_drafts": [
-            {"effect_id": old_effect, "path": old_path, "content": old_content, "semantic_projection": {"kind": "term", "primary_claim": record["sections"]["정의"], "supporting_context": [record["frontmatter"]["term"]]}},
-            {"effect_id": new_effect, "path": new_path, "content": new_content, "semantic_projection": {"kind": "term", "primary_claim": new_sections["정의"], "supporting_context": [new_frontmatter["term"]]}},
+            {"effect_id": old_effect, "path": old_path, "content": old_content, "semantic_projection": {"kind": "term", "primary_claim": _section_value(record["sections"]), "supporting_context": [record["frontmatter"]["term"]]}},
+            {"effect_id": new_effect, "path": new_path, "content": new_content, "semantic_projection": {"kind": "term", "primary_claim": new_sections["Definition"], "supporting_context": [new_frontmatter["term"]]}},
         ],
         "effects": [
             {"effect_id": old_effect, "action": "retire", "area": "term", "id": identifier, "state": "history"},
@@ -1413,7 +1428,8 @@ def read_term(repo: pathlib.Path, *, signal: str, identifier: str) -> dict[str, 
     if len(rows) != 1:
         raise TermError("artifact_not_found", "term id was not found exactly once", {"id": identifier}, EXIT_NOT_FOUND)
     record = _record(repo, rows[0])
-    return {"schema": "context-term-read/v1", "id": identifier, "path": record["path"], "state": record["state"], "authority": "authoritative" if record["state"] == "current" else "historical", "do_not_follow": record["state"] == "history", "frontmatter": record["frontmatter"], "sections": record["sections"], "sha256": record["sha256"], "signal": signal, "physical_write": False}
+    sections = {_canonical_section_name(name): value for name, value in record["sections"].items()}
+    return {"schema": "context-term-read/v1", "id": identifier, "path": record["path"], "state": record["state"], "authority": "authoritative" if record["state"] == "current" else "historical", "do_not_follow": record["state"] == "history", "frontmatter": record["frontmatter"], "sections": sections, "sha256": record["sha256"], "signal": signal, "physical_write": False}
 
 
 def _input_map(result: dict[str, Any]) -> dict[str, dict[str, Any]]:

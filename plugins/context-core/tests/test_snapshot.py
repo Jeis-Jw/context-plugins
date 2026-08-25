@@ -287,8 +287,8 @@ class SnapshotTests(unittest.TestCase):
             merged = context_cli.snapshot_load(repo, identifier)
             self.assertEqual(original["artifact"]["created_at"], merged["artifact"]["created_at"])
             self.assertEqual("2026-08-13T19:00:00+09:00", merged["artifact"]["updated_at"])
-            self.assertEqual(original["sections"]["현재 맥락"], merged["sections"]["현재 맥락"])
-            self.assertEqual("- 새 열린 항목", merged["sections"]["열린 항목"])
+            self.assertEqual(original["sections"]["Current context"], merged["sections"]["Current context"])
+            self.assertEqual("- 새 열린 항목", merged["sections"]["Open items"])
 
             before = tree_digest(repo)
             noop = context_cli.build_snapshot_update_bundle(

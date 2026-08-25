@@ -319,8 +319,8 @@ class StorageIndexTests(unittest.TestCase):
                 self.assertEqual(1, parsed.call_count)
                 read = context_cli.observation_read(repo, observation_id)
                 self.assertEqual(2, parsed.call_count)
-            self.assertEqual("selected snapshot body", loaded["sections"]["현재 맥락"])
-            self.assertEqual("workspace fixture evidence", read["sections"]["근거"])
+            self.assertEqual("selected snapshot body", loaded["sections"]["Current context"])
+            self.assertEqual("workspace fixture evidence", read["sections"]["Evidence"])
             self.assertEqual([], loaded["warnings"])
             self.assertEqual([], read["warnings"])
 

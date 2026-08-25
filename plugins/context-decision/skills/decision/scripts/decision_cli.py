@@ -33,22 +33,31 @@ MAX_OWNER_INPUT_BYTES = 8 * 1024
 MAX_PRIMARY_CLAIM_CODEPOINTS = 2000
 MAX_DECISION_CODEPOINTS = 1200
 MAX_OMITTED_ID_SAMPLE = 8
-PLACEHOLDERS = {"...", "TODO", "TBD", "해당 없음"}
+PLACEHOLDERS = {"...", "TODO", "TBD", "N/A", "해당 없음"}
 ID_RE = re.compile(r"^ctx_[0-9a-f]{32}$")
 LOCAL_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
 FIELD_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 ENTRY_RE = re.compile(r"^.*<!-- context-entry (\{.*\}) -->$")
-CORE_SECTIONS = ("결정", "취지", "반려대안")
-ALL_SECTIONS = CORE_SECTIONS + ("근거와 제약", "트레이드오프", "재평가 조건")
+CORE_SECTIONS = ("Decision", "Rationale", "Rejected alternatives")
+ALL_SECTIONS = CORE_SECTIONS + ("Evidence and constraints", "Trade-offs", "Revisit conditions")
+LEGACY_SECTION_ALIASES = {
+    "결정": "Decision", "취지": "Rationale", "반려대안": "Rejected alternatives",
+    "근거와 제약": "Evidence and constraints", "트레이드오프": "Trade-offs", "재평가 조건": "Revisit conditions",
+}
+OBSERVATION_SECTIONS = ("Observation", "Evidence", "Impact", "Current handling", "Follow-up conditions")
+LEGACY_OBSERVATION_ALIASES = {
+    "관찰": "Observation", "근거": "Evidence", "영향": "Impact",
+    "현재 처리": "Current handling", "후속 조건": "Follow-up conditions",
+}
 REMOVED_FINGERPRINT_FIELDS = {"claim_fingerprint", "source_claim_fingerprint"}
 REMOVED_CANDIDATE_FIELDS = REMOVED_FINGERPRINT_FIELDS | {"claim_key"}
 SEMANTIC_RELATIONS = ("new", "same", "supporting", "rationale_changed", "conflict")
 RELATION_ACTIONS = {
-    "new": "결정이 확정되면 capture 여부를 묻는다.",
-    "same": "새 DEC를 만들지 않고 기존 DEC를 인용한다.",
-    "supporting": "결정 변경 없이 새 근거라면 OBS capture 여부를 검토한다.",
-    "rationale_changed": "기존 취지를 유지할지 successor DEC로 바꿀지 사용자에게 묻는다.",
-    "conflict": "충돌하는 Current DEC와 차이를 먼저 알리고 유지·수정·supersede 여부를 묻는다.",
+    "new": "Ask about capture after the decision becomes explicit.",
+    "same": "Cite the existing DEC without creating another one.",
+    "supporting": "If the evidence is durable, consider OBS without changing the decision.",
+    "rationale_changed": "Ask whether to retain the existing rationale or create a successor DEC.",
+    "conflict": "Report the conflicting Current DEC first and ask whether to keep, revise, or supersede it.",
 }
 REQUIRED_PLUGIN = {
     "marketplace": "context-plugins",
@@ -58,16 +67,16 @@ REQUIRED_PLUGIN = {
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
     "entrypoint": "skills/context/scripts/context_cli.py",
-    "entrypoint_sha256": "sha256:9a776e7e964c10495cc7b14f5f3b44d4c8faf13b34d30343af9520dd0360a900",
+    "entrypoint_sha256": "sha256:8ac5891a4e14ff30461a0c9fd8c105cda046c3e9da67993c03141d2ba137b7f3",
 }
 OBSERVED_PLUGIN_FIELDS = ("marketplace", "plugin", "source", "enabled", "protocol", "repository_state")
 PREFLIGHT_MESSAGES = {
-    "core_missing": "exact context-core가 현재 host inventory에 없다.",
-    "core_source_mismatch": "동명 core의 marketplace 또는 source가 요구 좌표와 다르다.",
-    "core_disabled": "exact context-core가 현재 scope에서 비활성이다.",
-    "core_incompatible": "exact context-core가 context-common/v2 handshake를 통과하지 못했다.",
-    "core_uninitialized": "exact core는 준비됐고 repository bootstrap이 필요하다.",
-    "ready": "exact context-core가 준비됐다. repository 진단은 작업 대상과 겹칠 때만 차단한다.",
+    "core_missing": "The exact context-core is absent from the current host inventory.",
+    "core_source_mismatch": "A same-named core has a different marketplace or source coordinate.",
+    "core_disabled": "The exact context-core is disabled in the current scope.",
+    "core_incompatible": "The exact context-core failed the context-common/v2 handshake.",
+    "core_uninitialized": "The exact core is ready but the repository requires bootstrap.",
+    "ready": "The exact context-core is ready; repository diagnostics block only when they overlap the target.",
 }
 
 
@@ -81,6 +90,23 @@ class DecisionError(Exception):
 
     def envelope(self) -> dict[str, Any]:
         return {"ok": False, "error": {"code": self.code, "message": self.message, "details": self.details}}
+
+
+def _canonical_section_name(name: str, *, observation: bool = False) -> str:
+    aliases = LEGACY_OBSERVATION_ALIASES if observation else LEGACY_SECTION_ALIASES
+    return aliases.get(name, name)
+
+
+def _legacy_section_name(canonical: str, *, observation: bool = False) -> str | None:
+    aliases = LEGACY_OBSERVATION_ALIASES if observation else LEGACY_SECTION_ALIASES
+    return next((legacy for legacy, target in aliases.items() if target == canonical), None)
+
+
+def _section_value(sections: dict[str, str], canonical: str, *, observation: bool = False) -> str:
+    if canonical in sections:
+        return sections[canonical]
+    legacy = _legacy_section_name(canonical, observation=observation)
+    return sections.get(legacy, "") if legacy is not None else ""
 
 
 def nfc(value: str) -> str:
@@ -376,6 +402,9 @@ def parse_document(text: str) -> tuple[dict[str, Any], dict[str, str]]:
         raise DecisionError("frontmatter_unsupported", "frontmatter must be followed by one blank line")
     sections: dict[str, str] = {}
     current: str | None = None
+    current_canonical: str | None = None
+    seen_canonical: set[str] = set()
+    section_style: str | None = None
     buffer: list[str] = []
     in_fence: str | None = None
     for line in lines[closing + 2 :]:
@@ -388,9 +417,16 @@ def parse_document(text: str) -> tuple[dict[str, Any], dict[str, str]]:
             if current is not None:
                 sections[current] = "\n".join(buffer).strip()
             name = heading.group(1)
-            if name not in ALL_SECTIONS or name in sections or (current and ALL_SECTIONS.index(name) <= ALL_SECTIONS.index(current)):
+            canonical = _canonical_section_name(name)
+            style = "legacy" if name in LEGACY_SECTION_ALIASES else "canonical"
+            if section_style is not None and style != section_style:
+                raise DecisionError("section_schema_error", "canonical and legacy section headings cannot be mixed", {"section": name})
+            if canonical not in ALL_SECTIONS or canonical in seen_canonical or (current_canonical and ALL_SECTIONS.index(canonical) <= ALL_SECTIONS.index(current_canonical)):
                 raise DecisionError("section_schema_error", "unknown, duplicate, or out-of-order H2 section", {"section": name})
             current = name
+            current_canonical = canonical
+            seen_canonical.add(canonical)
+            section_style = style
             buffer = []
         elif current is None and line.strip():
             raise DecisionError("section_schema_error", "content before the first section is forbidden")
@@ -451,7 +487,7 @@ def parse_observation_document(text: str) -> tuple[dict[str, Any], dict[str, str
             raise DecisionError("section_schema_error", "observation content before sections is invalid")
     if current is not None:
         sections[current] = "\n".join(buffer).strip()
-    if frontmatter.get("schema") != "context-observation/v1" or not all(frontmatter.get(key) for key in ("id", "title", "summary", "created_at", "captured_from")) or not all(sections.get(key) for key in ("관찰", "근거")):
+    if frontmatter.get("schema") != "context-observation/v1" or not all(frontmatter.get(key) for key in ("id", "title", "summary", "created_at", "captured_from")) or not all(_section_value(sections, key, observation=True) for key in ("Observation", "Evidence")):
         raise DecisionError("schema_invalid", "fallback observation is incomplete", exit_code=EXIT_CONFLICT)
     require_context_id(frontmatter["id"])
     return frontmatter, sections
@@ -462,8 +498,15 @@ def render_observation_document(frontmatter: dict[str, Any], sections: dict[str,
     ordered = [key for key in OBSERVATION_KEY_ORDER if key in canonical_frontmatter]
     ordered.extend(sorted(set(canonical_frontmatter) - set(ordered)))
     lines = ["---"] + [f"{key}: {json.dumps(canonical_frontmatter[key], ensure_ascii=False, separators=(',', ':'))}" for key in ordered] + ["---", ""]
-    for name in ("관찰", "근거", "영향", "현재 처리", "후속 조건"):
-        if name in sections:
+    canonical_to_actual = {_canonical_section_name(name, observation=True): name for name in sections}
+    if len(canonical_to_actual) != len(sections) or set(canonical_to_actual) - set(OBSERVATION_SECTIONS):
+        raise DecisionError("section_schema_error", "observation sections are unknown or aliased twice")
+    styles = {"legacy" if name in LEGACY_OBSERVATION_ALIASES else "canonical" for name in sections}
+    if len(styles) > 1:
+        raise DecisionError("section_schema_error", "canonical and legacy observation headings cannot be mixed")
+    for canonical in OBSERVATION_SECTIONS:
+        name = canonical_to_actual.get(canonical)
+        if name is not None:
             lines.extend([f"## {name}", "", sections[name].strip(), ""])
     return "\n".join(lines).rstrip("\n") + "\n"
 
@@ -489,13 +532,19 @@ def validate_decision_document(frontmatter: dict[str, Any], sections: dict[str, 
         raise DecisionError("slot_invalid", "stored scope and decision_key must already be canonical")
     if "verified_at" in frontmatter or "status" in frontmatter:
         raise DecisionError("schema_invalid", "DEC forbids verified_at and status")
+    canonical_names = {_canonical_section_name(name) for name in sections}
     for name in CORE_SECTIONS:
-        content = sections.get(name, "").strip()
+        content = _section_value(sections, name).strip()
         if not content or content in PLACEHOLDERS:
             raise DecisionError("section_schema_error", "required DEC section is missing or placeholder", {"section": name})
-    unknown = set(sections) - set(ALL_SECTIONS)
+    unknown = canonical_names - set(ALL_SECTIONS)
     if unknown:
         raise DecisionError("section_schema_error", "unknown DEC sections are forbidden", {"sections": sorted(unknown)})
+    if len(canonical_names) != len(sections):
+        raise DecisionError("section_schema_error", "canonical and legacy aliases cannot both be present")
+    styles = {"legacy" if name in LEGACY_SECTION_ALIASES else "canonical" for name in sections}
+    if len(styles) > 1:
+        raise DecisionError("section_schema_error", "canonical and legacy section headings cannot be mixed")
     if "retired_reason" in frontmatter:
         if frontmatter["retired_reason"] not in {"superseded", "withdrawn"} or "retired_at" not in frontmatter:
             raise DecisionError("lifecycle_invalid", "retired DEC metadata is incomplete", exit_code=EXIT_CONFLICT)
@@ -515,8 +564,10 @@ def render_document(frontmatter: dict[str, Any], sections: dict[str, str]) -> st
             raise DecisionError("frontmatter_unsupported", "frontmatter value is unsupported", {"key": key})
         lines.append(f"{key}: {json.dumps(value, ensure_ascii=False, separators=(',', ':'))}")
     lines.extend(["---", ""])
-    for name in ALL_SECTIONS:
-        if name in sections:
+    canonical_to_actual = {_canonical_section_name(name): name for name in sections}
+    for canonical in ALL_SECTIONS:
+        name = canonical_to_actual.get(canonical)
+        if name is not None:
             lines.extend([f"## {name}", "", sections[name].strip(), ""])
     return "\n".join(lines).rstrip("\n") + "\n"
 
@@ -531,12 +582,12 @@ def decision_capability() -> dict[str, Any]:
         "claim_surface": {"type": "agent_skill", "name": "context-decision:decision", "operation": "claim"},
         "comparison_surface": {"type": "cli", "command": "decision_cli.py check"},
         "batch_validation_surface": {"type": "cli", "command": "decision_cli.py batch validate"},
-        "claim_rule": "현재 또는 미래 행동을 지배하는 명시적 선택이며 scope와 따를 의사가 있다",
+        "claim_rule": "An explicit choice governs present or future action and has scope plus commitment",
         "claim_assertions": ["explicit_choice", "scope_identified", "commitment_present"],
         "lifecycle_operations": {
             "same_claim": {
                 "surface": {"type": "agent_skill", "name": "context-decision:decision", "operation": "same_claim"},
-                "rule": "decision-like fallback OBS의 primary claim을 새 DEC가 같은 의미로 인수한다",
+                "rule": "The new DEC carries forward the decision-like fallback OBS primary claim with the same meaning",
                 "assertions": ["same_semantic_claim"],
             }
         },
@@ -794,17 +845,18 @@ def _validate_claim_draft_binding(
         )
 
     expected_sections = {
-        "결정": values["decision"].strip(),
-        "취지": values["rationale"].strip(),
-        "반려대안": _list_body(values["rejected_alternatives"]),
+        "Decision": values["decision"].strip(),
+        "Rationale": values["rationale"].strip(),
+        "Rejected alternatives": _list_body(values["rejected_alternatives"]),
     }
     if values.get("constraints"):
-        expected_sections["근거와 제약"] = _list_body(values["constraints"])
+        expected_sections["Evidence and constraints"] = _list_body(values["constraints"])
     if values.get("tradeoffs"):
-        expected_sections["트레이드오프"] = _list_body(values["tradeoffs"])
+        expected_sections["Trade-offs"] = _list_body(values["tradeoffs"])
     if values.get("revisit_when"):
-        expected_sections["재평가 조건"] = _list_body(values["revisit_when"])
-    if sections != expected_sections:
+        expected_sections["Revisit conditions"] = _list_body(values["revisit_when"])
+    actual_sections = {_canonical_section_name(name): value for name, value in sections.items()}
+    if actual_sections != expected_sections:
         raise DecisionError(
             "claim_result_mismatch",
             "DEC draft sections differ from the embedded decision owner inputs",
@@ -847,16 +899,16 @@ def _draft_from_candidate(
     if extra_frontmatter:
         frontmatter.update(extra_frontmatter)
     sections = {
-        "결정": decision,
-        "취지": values["rationale"].strip(),
-        "반려대안": _list_body(values["rejected_alternatives"]),
+        "Decision": decision,
+        "Rationale": values["rationale"].strip(),
+        "Rejected alternatives": _list_body(values["rejected_alternatives"]),
     }
     if values.get("constraints"):
-        sections["근거와 제약"] = _list_body(values["constraints"])
+        sections["Evidence and constraints"] = _list_body(values["constraints"])
     if values.get("tradeoffs"):
-        sections["트레이드오프"] = _list_body(values["tradeoffs"])
+        sections["Trade-offs"] = _list_body(values["tradeoffs"])
     if values.get("revisit_when"):
-        sections["재평가 조건"] = _list_body(values["revisit_when"])
+        sections["Revisit conditions"] = _list_body(values["revisit_when"])
     content = render_document(frontmatter, sections)
     basename = filename or natural_filename(frontmatter["title"])
     if pathlib.PurePosixPath(basename).name != basename or not basename.endswith(".md") or basename.endswith(".index.md"):
@@ -913,8 +965,8 @@ def build_claim_result(
             "content": content,
             "semantic_projection": {
                 "kind": "decision",
-                "primary_claim": parse_document(content)[1]["결정"],
-                "supporting_context": [parse_document(content)[1]["취지"]],
+                "primary_claim": _section_value(parse_document(content)[1], "Decision"),
+                "supporting_context": [_section_value(parse_document(content)[1], "Rationale")],
             },
         }],
         "effects": [{
@@ -1030,14 +1082,14 @@ def validate_owner_result(result: dict[str, Any]) -> None:
         frontmatter, sections = parse_observation_document(draft.get("content", "")) if is_observation else parse_document(draft.get("content", ""))
         projection = draft.get("semantic_projection")
         expected_kind = "observation" if is_observation else "decision"
-        primary_section = "관찰" if is_observation else "결정"
-        supporting_section = "근거" if is_observation else "취지"
+        primary_section = "Observation" if is_observation else "Decision"
+        supporting_section = "Evidence" if is_observation else "Rationale"
         if (
             not isinstance(projection, dict)
             or set(projection) != {"kind", "primary_claim", "supporting_context"}
             or projection.get("kind") != expected_kind
-            or projection.get("primary_claim") != sections[primary_section]
-            or projection.get("supporting_context") != [sections[supporting_section]]
+            or projection.get("primary_claim") != _section_value(sections, primary_section, observation=is_observation)
+            or projection.get("supporting_context") != [_section_value(sections, supporting_section, observation=is_observation)]
         ):
             raise DecisionError("plan_preview_mismatch", "draft semantic projection is invalid", exit_code=EXIT_CONFLICT)
         (observation_drafts if is_observation else draft_by_id)[draft["effect_id"]] = (frontmatter, sections, draft)
@@ -1147,8 +1199,8 @@ area: \"decision\"
 owner: \"context-decision\"
 artifact_schema: \"context-decision/v1\"
 authority: \"authoritative\"
-summary: \"결정·취지·반려대안과 현재 유효성을 관리한다.\"
-search_terms: [\"결정\",\"rationale\",\"rejected alternative\"]
+summary: \"Manage decisions, rationale, rejected alternatives, and current validity.\"
+search_terms: [\"decision\",\"rationale\",\"rejected alternative\"]
 projection_fields: [\"scope\",\"decision_key\",\"revisit_on\"]
 ---
 
@@ -1388,8 +1440,8 @@ def validate_batch(repo: pathlib.Path, owner_result: dict[str, Any], prior_bundl
     facts = {
         "scope": frontmatter["scope"],
         "decision_key": frontmatter["decision_key"],
-        "primary_claim": sections["결정"],
-        "rationale": sections["취지"],
+        "primary_claim": _section_value(sections, "Decision"),
+        "rationale": _section_value(sections, "Rationale"),
         "acknowledged_conflicts": acknowledged,
     }
     receipt = {
@@ -1479,8 +1531,8 @@ def build_supersede_result(
         "semantic_inputs": claim["semantic_inputs"] + [_semantic_input("mutation_request", request)],
         "semantic_attestations": claim["semantic_attestations"],
         "artifact_drafts": [
-            {"effect_id": old_effect, "path": old_history, "content": old_content, "semantic_projection": {"kind": "decision", "primary_claim": predecessor["sections"]["결정"], "supporting_context": [predecessor["sections"]["취지"]]}},
-            {"effect_id": new_effect, "path": new_path, "content": new_content, "semantic_projection": {"kind": "decision", "primary_claim": new_sections["결정"], "supporting_context": [new_sections["취지"]]}},
+            {"effect_id": old_effect, "path": old_history, "content": old_content, "semantic_projection": {"kind": "decision", "primary_claim": _section_value(predecessor["sections"], "Decision"), "supporting_context": [_section_value(predecessor["sections"], "Rationale")]}},
+            {"effect_id": new_effect, "path": new_path, "content": new_content, "semantic_projection": {"kind": "decision", "primary_claim": new_sections["Decision"], "supporting_context": [new_sections["Rationale"]]}},
         ],
         "effects": [
             {"effect_id": old_effect, "action": "retire", "area": "decision", "id": predecessor_id, "state": "history", "reason": "superseded", "successor": new_fm["id"]},
@@ -1561,17 +1613,17 @@ def build_fallback_import_result(
     if predecessor_id != obs_fm["id"] or successor.get("id") != dec_fm["id"] or successor.get("path") != dec_draft["path"]:
         raise DecisionError("lifecycle_input_mismatch", "lifecycle ids or paths differ from artifact drafts", exit_code=EXIT_CONFLICT)
     if (
-        predecessor.get("primary_claim") != obs_sections["관찰"]
+        predecessor.get("primary_claim") != _section_value(obs_sections, "Observation", observation=True)
         or predecessor.get("artifact_sha256") != bytes_digest(source_bytes)
-        or successor.get("primary_claim") != dec_sections["결정"]
+        or successor.get("primary_claim") != _section_value(dec_sections, "Decision")
         or successor.get("artifact_sha256") != file_digest(dec_draft["content"])
         or obs_fm.get("kind_hint") != "decision"
         or not isinstance(predecessor.get("supporting_context"), list)
         or not isinstance(successor.get("supporting_context"), list)
         or len(predecessor["supporting_context"]) > 4
         or len(successor["supporting_context"]) > 4
-        or predecessor["supporting_context"] != [line[2:].strip() for line in obs_sections["근거"].splitlines() if line.startswith("- ")][:4]
-        or successor["supporting_context"] != [dec_sections["취지"]]
+        or predecessor["supporting_context"] != [line[2:].strip() for line in _section_value(obs_sections, "Evidence", observation=True).splitlines() if line.startswith("- ")][:4]
+        or successor["supporting_context"] != [_section_value(dec_sections, "Rationale")]
     ):
         raise DecisionError("fallback_semantic_input_mismatch", "fallback artifact identity or semantic projection differs", exit_code=EXIT_CONFLICT)
     if predecessor_id in dec_fm.get("relations", {}).get("informed_by", []):
@@ -1611,8 +1663,8 @@ def build_fallback_import_result(
         "semantic_inputs": successor_result["semantic_inputs"] + [_semantic_input("same_claim", lifecycle_input), _semantic_input("mutation_request", request)],
         "semantic_attestations": successor_result["semantic_attestations"] + [lifecycle_attestation],
         "artifact_drafts": [
-            {"effect_id": obs_effect, "path": obs_history, "content": obs_content, "semantic_projection": {"kind": "observation", "primary_claim": obs_sections["관찰"], "supporting_context": [obs_sections["근거"]]}},
-            {"effect_id": dec_effect, "path": dec_draft["path"], "content": dec_content, "semantic_projection": {"kind": "decision", "primary_claim": dec_sections["결정"], "supporting_context": [dec_sections["취지"]]}},
+            {"effect_id": obs_effect, "path": obs_history, "content": obs_content, "semantic_projection": {"kind": "observation", "primary_claim": _section_value(obs_sections, "Observation", observation=True), "supporting_context": [_section_value(obs_sections, "Evidence", observation=True)]}},
+            {"effect_id": dec_effect, "path": dec_draft["path"], "content": dec_content, "semantic_projection": {"kind": "decision", "primary_claim": _section_value(dec_sections, "Decision"), "supporting_context": [_section_value(dec_sections, "Rationale")]}},
         ],
         "effects": [
             {"effect_id": obs_effect, "action": "retire", "area": "observation", "id": predecessor_id, "state": "history", "reason": "superseded", "successor": dec_fm["id"]},
@@ -1647,7 +1699,7 @@ def build_withdraw_result(repo: pathlib.Path, identifier: str, reason: str, *, r
         "schema": "context-owner-result/v1", "result_type": "mutation", "transition": "decision_withdraw",
         "owner": "context-decision", "target_kind": "decision", "capability_digest": canonical_digest(decision_capability()),
         "semantic_inputs": [_semantic_input("mutation_request", request)], "semantic_attestations": [],
-        "artifact_drafts": [{"effect_id": effect, "path": path, "content": content, "semantic_projection": {"kind": "decision", "primary_claim": record["sections"]["결정"], "supporting_context": [record["sections"]["취지"]]}}],
+        "artifact_drafts": [{"effect_id": effect, "path": path, "content": content, "semantic_projection": {"kind": "decision", "primary_claim": _section_value(record["sections"], "Decision"), "supporting_context": [_section_value(record["sections"], "Rationale")]}}],
         "effects": [{"effect_id": effect, "action": "retire", "area": "decision", "id": identifier, "state": "history", "reason": "withdrawn"}],
         "proposed_plan": {"schema": "context-owner-plan/v1", "transition": "decision_withdraw", "read_preconditions": [], "operations": [{"op": "move", "effect_id": effect, "area": "decision", "id": identifier, "from_path": record["path"], "to_path": path}]},
     }
@@ -1685,7 +1737,7 @@ def build_annotate_result(
         "schema": "context-owner-result/v1", "result_type": "mutation", "transition": "decision_annotate",
         "owner": "context-decision", "target_kind": "decision", "capability_digest": canonical_digest(decision_capability()),
         "semantic_inputs": [_semantic_input("mutation_request", request)], "semantic_attestations": [],
-        "artifact_drafts": [{"effect_id": effect, "path": record["path"], "content": content, "semantic_projection": {"kind": "decision", "primary_claim": record["sections"]["결정"], "supporting_context": [record["sections"]["취지"]]}}],
+        "artifact_drafts": [{"effect_id": effect, "path": record["path"], "content": content, "semantic_projection": {"kind": "decision", "primary_claim": _section_value(record["sections"], "Decision"), "supporting_context": [_section_value(record["sections"], "Rationale")]}}],
         "effects": [{"effect_id": effect, "action": "replace", "area": "decision", "id": identifier, "state": "current"}],
         "proposed_plan": {"schema": "context-owner-plan/v1", "transition": "decision_annotate", "read_preconditions": [], "operations": [{"op": "replace", "effect_id": effect, "area": "decision", "id": identifier, "path": record["path"]}]},
     }
@@ -1738,11 +1790,13 @@ def read_decision(repo: pathlib.Path, identifier: str, *, sections: Sequence[str
     if len(matches) != 1:
         raise DecisionError("artifact_not_found", "DEC id was not found", {"id": identifier}, EXIT_NOT_FOUND)
     record = _record(repo, matches[0])
-    names = list(sections) if sections else list(record["sections"])
+    names = [_canonical_section_name(name) for name in sections] if sections else [
+        name for name in ALL_SECTIONS if _section_value(record["sections"], name)
+    ]
     unknown = set(names) - set(ALL_SECTIONS)
     if unknown:
         raise DecisionError("section_schema_error", "unknown DEC section requested", {"sections": sorted(unknown)})
-    selected = {name: record["sections"][name] for name in names if name in record["sections"]}
+    selected = {name: _section_value(record["sections"], name) for name in names if _section_value(record["sections"], name)}
     result = {
         "artifact": {"id": identifier, "path": record["path"], "state": record["state"], "title": record["frontmatter"]["title"], "summary": record["frontmatter"]["summary"], "scope": record["frontmatter"]["scope"], "decision_key": record["frontmatter"]["decision_key"]},
         "sections": selected,
@@ -1787,7 +1841,7 @@ def brief_decisions(
         item = {
             "id": fm["id"], "title": fm["title"], "summary": fm["summary"], "scope": fm["scope"], "decision_key": fm["decision_key"],
             "state": record["state"], "authority": "authoritative" if record["state"] == "current" else "historical",
-            "sections": {name: record["sections"][name] for name in CORE_SECTIONS},
+            "sections": {name: _section_value(record["sections"], name) for name in CORE_SECTIONS},
             "informed_by": fm.get("relations", {}).get("informed_by", []),
             "revisit_due": bool(fm.get("revisit_on") and datetime.date.fromisoformat(fm["revisit_on"]) <= today),
         }
@@ -1885,8 +1939,8 @@ def spec_view(
             "scope": record["frontmatter"]["scope"],
             "decision_key": record["frontmatter"]["decision_key"],
             "sections": {
-                "결정": record["sections"]["결정"],
-                "취지": record["sections"]["취지"],
+                "Decision": _section_value(record["sections"], "Decision"),
+                "Rationale": _section_value(record["sections"], "Rationale"),
             },
         }
         items.append(item)
@@ -2045,7 +2099,7 @@ def prepare_decision_check(
             "summary": record["frontmatter"]["summary"],
             "scope": record["frontmatter"]["scope"],
             "decision_key": record["frontmatter"]["decision_key"],
-            "sections": {name: record["sections"][name] for name in CORE_SECTIONS},
+            "sections": {name: _section_value(record["sections"], name) for name in CORE_SECTIONS},
             "retrieval_reasons": reasons,
         }
         candidate_input = {"schema": "context-decision-comparison-input/v1", "proposal": proposal, "current": [*current, item]}
@@ -2099,7 +2153,7 @@ def prepare_decision_check(
             "relations": list(SEMANTIC_RELATIONS),
             "required_fields": ["relation", "related_ids", "reason"],
             "actions": dict(RELATION_ACTIONS),
-            "rule": "각 Current DEC의 실제 결정·취지·반려대안을 proposal과 비교한다. 문장 유사도나 hash를 의미 판정으로 사용하지 않는다.",
+            "rule": "Compare each Current DEC's actual Decision, Rationale, and Rejected alternatives with the proposal; sentence similarity and hashes are not semantic judgment.",
         },
         "retrieval": {
             "total_current": len(current_rows),
@@ -2114,7 +2168,7 @@ def prepare_decision_check(
             "full_current_set": omitted_count == 0,
             "bounded": True,
         },
-        "warning": "relation=new는 조회된 Current 집합 안에서만 유효하며 전역 무충돌 증명이 아니다.",
+        "warning": "relation=new is valid only within the queried Current set and does not prove global absence of conflict.",
         "physical_write": False,
     }
     if coverage == "discovery_only":
@@ -2344,29 +2398,29 @@ def _manual_actions(code: str) -> list[str]:
     selector = REQUIRED_PLUGIN["selector"]
     marketplace = REQUIRED_PLUGIN["marketplace"]
     source = REQUIRED_PLUGIN["source"]
-    retry = "host reload 또는 새 session 뒤 context-decision:init을 다시 실행한다."
+    retry = "Reload the host or start a new session, then run context-decision:init again."
     return {
         "core_missing": [
-            f"provider marketplace {marketplace} (source {source})에서 {selector}를 사용자가 직접 설치한다.",
-            "설치 scope는 사용자가 직접 선택한다.",
+            f"Install {selector} explicitly from provider marketplace {marketplace} (source {source}).",
+            "Choose the installation scope explicitly.",
             retry,
         ],
         "core_source_mismatch": [
-            f"source {source}의 exact {selector} 좌표를 사용자가 직접 설치한다.",
-            "다른 marketplace의 동명 plugin은 충족으로 간주하지 않는다.",
+            f"Install the exact {selector} coordinate from source {source} explicitly.",
+            "A same-named plugin from another marketplace does not satisfy the requirement.",
             retry,
         ],
         "core_disabled": [
-            f"exact {selector}를 사용자가 선택한 올바른 scope에서 직접 활성화한다.",
+            f"Enable the exact {selector} explicitly in the intended scope.",
             retry,
         ],
         "core_incompatible": [
-            f"exact {selector}를 {PROTOCOL} 호환 버전으로 사용자가 직접 업데이트한다.",
+            f"Update the exact {selector} explicitly to a {PROTOCOL}-compatible version.",
             retry,
         ],
         "core_uninitialized": [
-            "context-decision:init이 installed context-core public bootstrap surface를 호출한다.",
-            "같은 명시적 호출에서 core init 뒤 decision area 등록을 계속한다.",
+            "context-decision:init calls the installed context-core public bootstrap surface.",
+            "The same explicit invocation continues with decision-area registration after core init.",
         ],
         "ready": [],
     }[code]

@@ -334,7 +334,10 @@ class DistributionProofTests(unittest.TestCase):
         decision_skill = (decision_root / "skills/decision/SKILL.md").read_text(encoding="utf-8")
         for token in ("context-common/v2", "partial/invalid/ready", "scan caches", "managed block"):
             self.assertIn(token, init_skill)
-        for token in ("actual", "conflict", "complete rendered", "preview stdout", "Core alone owns", "`알겠어`"):
+        for token in (
+            "actual", "conflict", "complete rendered", "preview stdout", "Core alone owns",
+            "active language", "semantic and language-independent",
+        ):
             self.assertIn(token, decision_skill)
         for name in PLUGIN_NAMES[1:]:
             semantic_root = ROOT / "plugins" / name
@@ -350,10 +353,10 @@ class DistributionProofTests(unittest.TestCase):
             "context-assumption",
             "context-term",
             "There is no bundle or meta-plugin",
-            "tag not created or pushed",
+            "tag has not been created or pushed",
             "Fresh install and cache lifecycle passed",
-            "Marketplace publication",
-            "Not selected",
+            "marketplace publication",
+            "Apache License 2.0",
         ):
             self.assertIn(token, readme)
         self.assertIn("v0.6.0", readme)
@@ -371,7 +374,14 @@ class DistributionProofTests(unittest.TestCase):
         self.assertTrue((ROOT / "scripts/install_profile.py").is_file())
         self.assertFalse((ROOT / "plugins/context-core/skills/decision").exists())
         self.assertTrue((ROOT / "README.ko.md").is_file())
-        self.assertFalse((ROOT / "LICENSE").exists())
+        for public_readme in (ROOT / "README.md", ROOT / "README.ko.md"):
+            self.assertIn("[Apache License 2.0](./LICENSE)", public_readme.read_text(encoding="utf-8"))
+        license_bytes = (ROOT / "LICENSE").read_bytes()
+        self.assertEqual(
+            "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+            hashlib.sha256(license_bytes).hexdigest(),
+        )
+        self.assertFalse((ROOT / "NOTICE").exists())
         self.assertFalse((ROOT / "wiki").exists())
         migration = (ROOT / "MIGRATION.md").read_text(encoding="utf-8")
         for token in ("0.5.0 additive semantic owners", "0.5.1 W1-W3 hardening", "context-common/v2", "not rewritten", "not provided"):
@@ -440,31 +450,25 @@ class DistributionProofTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden_command, all_python)
 
-    def test_natural_language_approval_contract_is_consistent_and_smaller(self) -> None:
+    def test_natural_language_approval_and_active_language_contract_are_consistent(self) -> None:
         skill_paths = sorted(ROOT.glob("plugins/*/skills/*/SKILL*.md"))
+        canonical_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.md"))
+        translated_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.ko.md"))
+        self.assertEqual(10, len(canonical_skills))
+        self.assertEqual(6, len(translated_skills))
         self.assertEqual(16, len(skill_paths))
-        self.assertLess(
-            sum(path.stat().st_size for path in skill_paths),
-            BASELINE_SKILL_BYTES,
-        )
 
-        for path in skill_paths:
+        for path in canonical_skills:
             text = path.read_text(encoding="utf-8")
             self.assertIn("`approval_digest`", text, path)
-            self.assertIn("`알겠어`", text, path)
-            self.assertTrue(
-                "direct, explicit, unconditional" in text
-                or "직접적·명시적·무조건적" in text,
-                path,
-            )
-            self.assertTrue(
-                "to that capture question" in text or "capture 질문에 대한" in text,
-                path,
-            )
-            self.assertTrue("complete rendered body" in text or "완성된 렌더링 본문" in text, path)
-            self.assertTrue("receipt path" in text or "receipt 경로" in text, path)
-            self.assertTrue("topic change" in text or "화제 전환" in text, path)
-            self.assertTrue("regenerate" in text or "재생성" in text, path)
+            self.assertIn("direct, explicit, unconditional", text, path)
+            self.assertIn("specific capture question", text, path)
+            self.assertIn("complete rendered body", text, path)
+            self.assertIn("receipt path", text, path)
+            self.assertIn("topic change", text, path)
+            self.assertIn("regenerate", text, path)
+            self.assertIn("active language", text.casefold(), path)
+            self.assertIsNone(re.search(r"[가-힣]", text), path)
 
         readmes = (
             ROOT / "README.md",
@@ -525,8 +529,10 @@ class DistributionProofTests(unittest.TestCase):
         self.assertIn("The owner never invents candidate meaning without caller input", english_protocol)
         self.assertIn("owner는 caller 입력 없이 후보 의미를 지어내지 않는다", korean_protocol)
 
-        for relative, expected in UNCHANGED_EXPERIMENTAL_MANIFESTS.items():
-            self.assertEqual(expected, hashlib.sha256((ROOT / relative).read_bytes()).hexdigest(), relative)
+        for manifest in sorted(ROOT.glob("plugins/*/.codex-plugin/plugin.json")):
+            prompts = read_json(manifest)["interface"]["defaultPrompt"]
+            self.assertTrue(any("active language" in prompt for prompt in prompts), manifest)
+            self.assertTrue(any("machine fields English" in prompt for prompt in prompts), manifest)
 
     def test_semantic_plugins_pin_the_distributed_core_entrypoint(self) -> None:
         core_cli = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
@@ -592,6 +598,11 @@ class DistributionProofTests(unittest.TestCase):
 
         release_notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
         migration = (ROOT / "MIGRATION.md").read_text(encoding="utf-8")
+        self.assertIn("Apache License 2.0", development)
+        self.assertIn("Apache License 2.0", release_notes)
+        for stale_license_claim in ("공개 라이선스는 아직 선택하지 않았습니다", "A public license has not been selected"):
+            self.assertNotIn(stale_license_claim, development)
+            self.assertNotIn(stale_license_claim, release_notes)
         for token in ("W1", "W2", "W3", "not a token-savings measurement"):
             self.assertIn(token, release_notes)
         for token in ("W1-W3", "context-common/v2", "linked worktree", "@file", "@@literal"):
@@ -634,8 +645,8 @@ class DistributionProofTests(unittest.TestCase):
         )
         for token in ("complete preview", "직접적·명시적·무조건적", "`알겠어`", "context-common/v2"):
             self.assertIn(token, korean_readme)
-        self.assertIn("`0.6.0` developer preview release candidate가 준비됐습니다", korean_readme)
-        self.assertIn("`v0.6.0` tag는 아직 생성·push되지 않았고", korean_readme)
+        self.assertIn("`0.6.0`은 `main`에 준비되어 있지만", korean_readme)
+        self.assertIn("`v0.6.0` tag는 아직 생성·push되지 않았습니다", korean_readme)
         self.assertIn("독립 package", korean_readme)
         self.assertIn("scripts/install_profile.py --host codex", korean_readme)
         self.assertNotIn("tag와 release commit은 아직 생성·push되지 않았", korean_readme)

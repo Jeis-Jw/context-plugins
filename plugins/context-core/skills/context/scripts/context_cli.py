@@ -78,11 +78,29 @@ ADDITIVE_KEY_ORDER = {
     ),
 }
 SECTION_SPECS = {
-    "context-snapshot/v1": (("현재 맥락", "열린 항목", "다음 단계", "정해진 것", "참조", "capture 후보"), ("현재 맥락", "열린 항목", "다음 단계")),
-    "context-observation/v1": (("관찰", "근거", "영향", "현재 처리", "후속 조건"), ("관찰", "근거")),
-    "context-decision/v1": (("결정", "취지", "반려대안", "근거와 제약", "트레이드오프", "재평가 조건"), ("결정", "취지", "반려대안")),
+    "context-snapshot/v1": (("Current context", "Open items", "Next steps", "Decided", "References", "Capture candidates"), ("Current context", "Open items", "Next steps")),
+    "context-observation/v1": (("Observation", "Evidence", "Impact", "Current handling", "Follow-up conditions"), ("Observation", "Evidence")),
+    "context-decision/v1": (("Decision", "Rationale", "Rejected alternatives", "Evidence and constraints", "Trade-offs", "Revisit conditions"), ("Decision", "Rationale", "Rejected alternatives")),
 }
-PLACEHOLDERS = {"...", "TODO", "TBD", "해당 없음"}
+LEGACY_SECTION_ALIASES = {
+    "context-snapshot/v1": {
+        "현재 맥락": "Current context", "열린 항목": "Open items", "다음 단계": "Next steps",
+        "정해진 것": "Decided", "참조": "References", "capture 후보": "Capture candidates",
+    },
+    "context-observation/v1": {
+        "관찰": "Observation", "근거": "Evidence", "영향": "Impact",
+        "현재 처리": "Current handling", "후속 조건": "Follow-up conditions",
+    },
+    "context-decision/v1": {
+        "결정": "Decision", "취지": "Rationale", "반려대안": "Rejected alternatives",
+        "근거와 제약": "Evidence and constraints", "트레이드오프": "Trade-offs", "재평가 조건": "Revisit conditions",
+    },
+    "context-assumption/v1": {
+        "가정": "Assumption", "근거": "Basis", "확정 조건": "Confirmation conditions", "반증 조건": "Refutation conditions",
+    },
+    "context-term/v1": {"정의": "Definition"},
+}
+PLACEHOLDERS = {"...", "TODO", "TBD", "N/A", "해당 없음"}
 FILENAME_FORBIDDEN = set('/\\<>:"|?*[]#^')
 WINDOWS_RESERVED = re.compile(r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$", re.IGNORECASE)
 FIELD_KEY = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -106,10 +124,12 @@ POLICY_END = "<!-- END context-core-policy (managed by context-core) -->"
 POLICY_BODY = """<!-- BEGIN context-core-policy (managed by context-core) -->
 ## Durable context workflow
 
-- 매 user turn의 새 의미를 한 번 내부 audit한다. 선택·전제·용어가 확정되는 순간, 이전 맥락이 판단을 바꿀 때만 metadata-first로 recall한다. durable signal이 없으면 audit 상태나 capture 질문을 표시하지 않는다.
-- semantic owner는 관련 실제 본문·scope·rationale를 비교한다. conflict 또는 rationale change는 primary 결론 전에 관련 artifact와 차이를 알린다.
-- 그 외에는 원 답변을 먼저 마치고 성숙한 durable 후보만 milestone당 한 번 제안한다. 제안 전에 preview를 실행하고 완성된 렌더링 본문과 함께 한 번만 묻는다.
-- 사용자가 complete preview 본문의 capture 질문에 직접적·명시적·무조건적 긍정으로 답한 뒤에만 쓴다. `알겠어` 단독, 조건·수정 요청·화제 전환은 승인이 아니며 승인 뒤 재생성하지 않는다.
+- Resolve the active language from an explicit user language choice, then the host's preferred response language or applicable system instruction, then the established conversation language, and finally English. A current-response request overrides a conflicting persistent pin. OS locale is not authoritative. Code, filenames, quotations, and isolated foreign terms do not switch the conversation language.
+- Use the active language for responses, capture questions, previews, and explanatory error guidance. Keep machine-readable surfaces in canonical English, including schema IDs, JSON keys, commands and options, error codes, filenames, and metadata fields. Preserve durable artifact prose without semantic translation.
+- Audit each user turn's new meaning once. When a choice, premise, or term becomes settled, recall metadata first only if prior context can change the answer. With no durable signal, show no audit status or capture question.
+- Let the semantic owner compare relevant actual bodies, scope, and rationale. Report a conflict or rationale change before the primary conclusion.
+- Otherwise finish the request first and propose only mature durable candidates, once per milestone. Run preview before proposing and ask once with the complete rendered body.
+- Write only after a direct, explicit, unconditional affirmative answer to that specific capture question. Approval is semantic and language-independent. A generic acknowledgement, praise, condition, edit request, or topic change is not approval. Confirm ambiguity once in the active language and never regenerate after approval.
 <!-- END context-core-policy (managed by context-core) -->"""
 POLICY_TARGETS = {"AGENTS.md", "CLAUDE.md"}
 POLICY_HOST_TARGETS = {"codex": "AGENTS.md", "claude-code": "CLAUDE.md"}
@@ -153,6 +173,38 @@ class IOMetrics:
     artifact_directory_lists: int = 0
     artifact_stats: int = 0
     output_bytes: int = 0
+
+
+def _canonical_section_name(schema: str, name: str) -> str:
+    return LEGACY_SECTION_ALIASES.get(schema, {}).get(name, name)
+
+
+def _legacy_section_name(schema: str, canonical: str) -> str | None:
+    return next(
+        (legacy for legacy, target in LEGACY_SECTION_ALIASES.get(schema, {}).items() if target == canonical),
+        None,
+    )
+
+
+def _section_value(sections: dict[str, str], schema: str, canonical: str) -> str | None:
+    if canonical in sections:
+        return sections[canonical]
+    legacy = _legacy_section_name(schema, canonical)
+    return sections.get(legacy) if legacy is not None else None
+
+
+def _sections_in_existing_style(
+    sections: dict[str, str],
+    schema: str,
+    existing: dict[str, str],
+) -> dict[str, str]:
+    legacy_style = any(name in LEGACY_SECTION_ALIASES.get(schema, {}) for name in existing)
+    output: dict[str, str] = {}
+    for name, value in sections.items():
+        canonical = _canonical_section_name(schema, name)
+        target = (_legacy_section_name(schema, canonical) or canonical) if legacy_style else canonical
+        output[target] = value
+    return output
 
 
 def nfc(value: str) -> str:
@@ -850,13 +902,18 @@ def parse_document(text: str, descriptor: dict[str, Any] | None = None) -> Docum
     warnings = _validate_common_document(frontmatter, descriptor)
     schema = frontmatter["schema"]
     profile = _descriptor_profile(descriptor)
-    allowed, required = (
+    raw_allowed, raw_required = (
         (tuple(profile["sections"]["ordered"]), tuple(profile["sections"]["required"]))
         if profile is not None
         else SECTION_SPECS[schema]
     )
+    allowed = tuple(_canonical_section_name(schema, name) for name in raw_allowed)
+    required = tuple(_canonical_section_name(schema, name) for name in raw_required)
     sections: dict[str, str] = {}
     current: str | None = None
+    current_canonical: str | None = None
+    seen_canonical: set[str] = set()
+    section_style: str | None = None
     buffer: list[str] = []
     in_fence: str | None = None
     for line in lines[closing + 2 :]:
@@ -869,9 +926,20 @@ def parse_document(text: str, descriptor: dict[str, Any] | None = None) -> Docum
             if current is not None:
                 sections[current] = "\n".join(buffer).strip()
             name = heading.group(1)
-            if name not in allowed or name in sections or (current and allowed.index(name) <= allowed.index(current)):
+            canonical = _canonical_section_name(schema, name)
+            style = "legacy" if name in LEGACY_SECTION_ALIASES.get(schema, {}) else "canonical"
+            if section_style is not None and style != section_style:
+                raise ContextError("section_schema_error", "canonical and legacy section headings cannot be mixed", {"section": name})
+            if (
+                canonical not in allowed
+                or canonical in seen_canonical
+                or (current_canonical and allowed.index(canonical) <= allowed.index(current_canonical))
+            ):
                 raise ContextError("section_schema_error", "unknown, duplicate, or out-of-order H2 section", {"section": name})
             current = name
+            current_canonical = canonical
+            seen_canonical.add(canonical)
+            section_style = style
             buffer = []
         else:
             if current is None and line.strip():
@@ -881,7 +949,7 @@ def parse_document(text: str, descriptor: dict[str, Any] | None = None) -> Docum
     if current is not None:
         sections[current] = "\n".join(buffer).strip()
     for name in required:
-        content = sections.get(name, "").strip()
+        content = (_section_value(sections, schema, name) or "").strip()
         if not content or content in PLACEHOLDERS:
             raise ContextError("section_schema_error", "required section is missing or placeholder", {"section": name})
     return Document(frontmatter=frontmatter, sections=sections, warnings=warnings)
@@ -900,16 +968,29 @@ def render_document(
     _validate_common_document(canonical_frontmatter, descriptor)
     schema = canonical_frontmatter["schema"]
     profile = _descriptor_profile(descriptor)
-    allowed, required = (
+    raw_allowed, raw_required = (
         (tuple(profile["sections"]["ordered"]), tuple(profile["sections"]["required"]))
         if profile is not None
         else SECTION_SPECS[schema]
     )
-    unknown = set(sections) - set(allowed)
+    allowed = tuple(_canonical_section_name(schema, name) for name in raw_allowed)
+    required = tuple(_canonical_section_name(schema, name) for name in raw_required)
+    canonical_to_actual: dict[str, str] = {}
+    styles: set[str] = set()
+    for name in sections:
+        canonical = _canonical_section_name(schema, name)
+        if canonical in canonical_to_actual:
+            raise ContextError("section_schema_error", "canonical and legacy aliases cannot both be rendered", {"section": canonical})
+        canonical_to_actual[canonical] = name
+        styles.add("legacy" if name in LEGACY_SECTION_ALIASES.get(schema, {}) else "canonical")
+    unknown = set(canonical_to_actual) - set(allowed)
     if unknown:
         raise ContextError("section_schema_error", "unknown sections cannot be rendered", {"sections": sorted(unknown)})
+    if len(styles) > 1:
+        raise ContextError("section_schema_error", "canonical and legacy section headings cannot be mixed")
     for name in required:
-        if not sections.get(name, "").strip() or sections[name].strip() in PLACEHOLDERS:
+        content = (_section_value(sections, schema, name) or "").strip()
+        if not content or content in PLACEHOLDERS:
             raise ContextError("section_schema_error", "required section is missing or placeholder", {"section": name})
     known = COMMON_KEY_ORDER + (tuple(profile["fields"]) if profile is not None else ADDITIVE_KEY_ORDER.get(schema, ()))
     ordered = [key for key in known if key in canonical_frontmatter]
@@ -922,8 +1003,9 @@ def render_document(
         lines.append(f"{key}: {compact_json(value)}")
     lines.extend(["---", ""])
     for name in allowed:
-        if name in sections:
-            lines.extend([f"## {name}", "", sections[name].strip(), ""])
+        actual = canonical_to_actual.get(name)
+        if actual is not None:
+            lines.extend([f"## {actual}", "", sections[actual].strip(), ""])
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
@@ -1295,7 +1377,7 @@ def _root_seed() -> str:
 schema: \"context-root-index/v1\"
 index: true
 owner: \"context-core\"
-summary: \"프로젝트의 공유 context 영역 catalog\"
+summary: \"Catalog of shared project context areas\"
 ---
 
 # Context
@@ -1324,7 +1406,7 @@ def _area_seed(area: str, owner: str, artifact_schema: str, authority: str, summ
 def _builtin_area_specs() -> list[tuple[dict[str, Any], str, str]]:
     return [
         ({"area": "snapshot", "path": "context/snapshot/snapshot.index.md", "owner": "context-core", "claims": ["snapshot"], "artifact_schema": "context-snapshot/v1", "authority": "staging"}, "Snapshot", "session handoff staging"),
-        ({"area": "observation", "path": "context/observation/observation.index.md", "owner": "context-core", "claims": ["observation"], "artifact_schema": "context-observation/v1", "authority": "evidence"}, "Observation", "비권위 발견과 근거"),
+        ({"area": "observation", "path": "context/observation/observation.index.md", "owner": "context-core", "claims": ["observation"], "artifact_schema": "context-observation/v1", "authority": "evidence"}, "Observation", "Non-authoritative findings and evidence"),
     ]
 
 
@@ -1593,7 +1675,13 @@ def _expanded_item(
     selected_sections: Sequence[str],
     max_bytes: int,
 ) -> dict[str, Any]:
-    available = {name: document.sections[name] for name in selected_sections if name in document.sections}
+    schema = document.frontmatter["schema"]
+    canonical_sections = tuple(_canonical_section_name(schema, name) for name in selected_sections)
+    available = {
+        name: value
+        for name in canonical_sections
+        if (value := _section_value(document.sections, schema, name)) is not None
+    }
     return _fit_section_payload(
         item,
         available,
@@ -1787,7 +1875,10 @@ def recall_repository(
             except FileNotFoundError:
                 continue
             warnings.extend(warning["code"] for warning in document.warnings)
-            selected_sections = sections or tuple(document.sections)
+            selected_sections = sections or tuple(
+                _canonical_section_name(document.frontmatter["schema"], name)
+                for name in document.sections
+            )
             result_with_placeholder = _recall_result(output + [{}], total_matches, fallback, warnings)
             result_overhead = len(canonical_json(result_with_placeholder).encode("utf-8")) - len(canonical_json({}).encode("utf-8"))
             item_budget = min(MAX_SECTION_ITEM_BYTES, effective_max_bytes - result_overhead)
@@ -1811,7 +1902,7 @@ def builtin_capability(kind: str) -> dict[str, Any]:
             "schema": "context-owner-capability/v1", "owner": "context-core", "kind": "snapshot",
             "artifact_schema": "context-snapshot/v1", "authority": "staging",
             "claim_surface": {"type": "agent_skill", "name": "context-core:snapshot", "operation": "claim"},
-            "claim_rule": "사용자가 재개할 unfinished session handoff를 명시적으로 저장하려 한다",
+            "claim_rule": "The user explicitly wants to store a handoff for an unfinished session",
             "claim_assertions": ["handoff_requested", "unfinished_context_present"],
             "draft_fields": {
                 "required": {
@@ -1832,9 +1923,9 @@ def builtin_capability(kind: str) -> dict[str, Any]:
             "schema": "context-owner-capability/v1", "owner": "context-core", "kind": "observation",
             "artifact_schema": "context-observation/v1", "authority": "evidence",
             "claim_surface": {"type": "agent_skill", "name": "context-core:observation", "operation": "claim"},
-            "claim_rule": "나중에 조사·판단에 재사용할 수 있는 발견 또는 근거다",
+            "claim_rule": "The finding or evidence can be reused in later investigation or judgment",
             "claim_assertions": ["reusable_observation", "evidence_present"],
-            "lifecycle_operations": {"same_claim": {"surface": {"type": "agent_skill", "name": "context-core:observation", "operation": "same_claim"}, "rule": "successor OBS가 predecessor OBS의 같은 관찰 claim을 교정하거나 더 정확히 인수한다", "assertions": ["same_semantic_claim"]}},
+            "lifecycle_operations": {"same_claim": {"surface": {"type": "agent_skill", "name": "context-core:observation", "operation": "same_claim"}, "rule": "The successor OBS corrects or more accurately carries forward the predecessor's same observation claim", "assertions": ["same_semantic_claim"]}},
             "draft_fields": {
                 "required": {
                     "observation": {"type": "string", "min_chars": 1, "max_chars": 1200},
@@ -2292,25 +2383,25 @@ def _validate_claim_draft(kind: str, candidate: dict[str, Any], draft: dict[str,
         raise ContextError("claim_result_mismatch", "claim draft envelope differs from embedded candidate", exit_code=EXIT_CONFLICT)
     if kind == "snapshot":
         expected = {
-            "현재 맥락": owner_inputs["current_context"],
-            "열린 항목": owner_inputs["open_items"],
-            "다음 단계": owner_inputs["next_steps"],
+            "Current context": owner_inputs["current_context"],
+            "Open items": owner_inputs["open_items"],
+            "Next steps": owner_inputs["next_steps"],
         }
-        optional = (("decided", "정해진 것"), ("refs", "참조"), ("capture_candidates", "capture 후보"))
+        optional = (("decided", "Decided"), ("refs", "References"), ("capture_candidates", "Capture candidates"))
         if frontmatter.get("anchors", []) != owner_inputs.get("anchors", []):
             raise ContextError("claim_result_mismatch", "snapshot anchors differ from embedded candidate", exit_code=EXIT_CONFLICT)
     else:
         primary = owner_inputs["observation"]
-        expected = {"관찰": primary, "근거": owner_inputs["evidence"]}
-        optional = (("impact", "영향"), ("current_handling", "현재 처리"), ("followup_conditions", "후속 조건"))
+        expected = {"Observation": primary, "Evidence": owner_inputs["evidence"]}
+        optional = (("impact", "Impact"), ("current_handling", "Current handling"), ("followup_conditions", "Follow-up conditions"))
         if frontmatter.get("kind_hint") != candidate.get("kind_hint"):
             raise ContextError("claim_result_mismatch", "observation kind_hint differs from embedded candidate", exit_code=EXIT_CONFLICT)
     for field, section in optional:
         value = owner_inputs.get(field)
         if value:
             expected[section] = value
-    if set(document.sections) != set(expected) or any(
-        not (_list_section_matches(document.sections.get(section), value) if isinstance(value, list) else document.sections.get(section) == value)
+    if {_canonical_section_name(frontmatter["schema"], name) for name in document.sections} != set(expected) or any(
+        not (_list_section_matches(_section_value(document.sections, frontmatter["schema"], section), value) if isinstance(value, list) else _section_value(document.sections, frontmatter["schema"], section) == value)
         for section, value in expected.items()
     ):
         raise ContextError("claim_result_mismatch", "claim draft sections differ from embedded owner inputs", exit_code=EXIT_CONFLICT)
@@ -2355,17 +2446,17 @@ def draft_owner_result(
         if owner_inputs.get("anchors"):
             frontmatter["anchors"] = owner_inputs["anchors"]
         sections = {
-            "현재 맥락": owner_inputs["current_context"],
-            "열린 항목": _list_section(owner_inputs["open_items"]),
-            "다음 단계": _list_section(owner_inputs["next_steps"]),
+            "Current context": owner_inputs["current_context"],
+            "Open items": _list_section(owner_inputs["open_items"]),
+            "Next steps": _list_section(owner_inputs["next_steps"]),
         }
-        optional_sections = (("decided", "정해진 것"), ("refs", "참조"), ("capture_candidates", "capture 후보"))
+        optional_sections = (("decided", "Decided"), ("refs", "References"), ("capture_candidates", "Capture candidates"))
     else:
         primary_claim = owner_inputs["observation"]
         if candidate.get("kind_hint") == "decision":
             frontmatter["kind_hint"] = "decision"
-        sections = {"관찰": primary_claim, "근거": _list_section(owner_inputs["evidence"])}
-        optional_sections = (("impact", "영향"), ("current_handling", "현재 처리"), ("followup_conditions", "후속 조건"))
+        sections = {"Observation": primary_claim, "Evidence": _list_section(owner_inputs["evidence"])}
+        optional_sections = (("impact", "Impact"), ("current_handling", "Current handling"), ("followup_conditions", "Follow-up conditions"))
     for field, section in optional_sections:
         value = owner_inputs.get(field)
         if value:
@@ -2568,12 +2659,12 @@ def validate_owner_result(
         primary_name = (
             profile["sections"]["primary"]
             if profile is not None and draft_kind == kind
-            else {"snapshot": "현재 맥락", "observation": "관찰", "decision": "결정"}.get(draft_kind)
+            else {"snapshot": "Current context", "observation": "Observation", "decision": "Decision"}.get(draft_kind)
         )
         if (
             primary_name is None
             or projection["kind"] != draft_kind
-            or projection["primary_claim"] != document.sections[primary_name]
+            or projection["primary_claim"] != _section_value(document.sections, document.frontmatter["schema"], _canonical_section_name(document.frontmatter["schema"], primary_name))
             or not isinstance(projection["supporting_context"], list)
             or len(projection["supporting_context"]) > 4
         ):
@@ -2959,12 +3050,14 @@ def build_observation_capture_bundle(
 
 
 def _semantic_projection(kind: str, document: Document) -> dict[str, Any]:
-    primary_name = "현재 맥락" if kind == "snapshot" else "관찰"
-    supporting_name = "열린 항목" if kind == "snapshot" else "근거"
-    supporting = [line[2:].strip() for line in document.sections.get(supporting_name, "").splitlines() if line.startswith("- ")][:4]
+    schema = document.frontmatter["schema"]
+    primary_name = "Current context" if kind == "snapshot" else "Observation"
+    supporting_name = "Open items" if kind == "snapshot" else "Evidence"
+    supporting_body = _section_value(document.sections, schema, supporting_name) or ""
+    supporting = [line[2:].strip() for line in supporting_body.splitlines() if line.startswith("- ")][:4]
     return {
         "kind": kind,
-        "primary_claim": document.sections[primary_name],
+        "primary_claim": _section_value(document.sections, schema, primary_name),
         "supporting_context": supporting,
     }
 
@@ -3093,13 +3186,15 @@ def build_snapshot_update_bundle(
 ) -> dict[str, Any]:
     path, document = _artifact_in_area(repo, identifier, "snapshot", current_only=True)
     sections = dict(sections or {})
+    sections = _sections_in_existing_style(sections, "context-snapshot/v1", document.sections)
     allowed, required = SECTION_SPECS["context-snapshot/v1"]
-    if set(sections) - set(allowed):
+    canonical_sections = {_canonical_section_name("context-snapshot/v1", name) for name in sections}
+    if canonical_sections - set(allowed):
         raise ContextError("section_schema_error", "snapshot update contains an unknown section")
-    if not merge and not set(required).issubset(sections):
+    if not merge and not set(required).issubset(canonical_sections):
         raise ContextError("snapshot_full_update_required", "full snapshot update requires all required sections", {"required": list(required)})
     for name, content in sections.items():
-        if name in required and not _substantive(content):
+        if _canonical_section_name("context-snapshot/v1", name) in required and not _substantive(content):
             raise ContextError("section_schema_error", "required snapshot section is not substantive", {"section": name})
     clear_set = set(clear)
     if clear_set - {"anchors", "tags", "search_terms", "source_refs"}:
@@ -3113,8 +3208,7 @@ def build_snapshot_update_bundle(
         next_sections = dict(document.sections)
         next_sections.update(sections)
     else:
-        next_sections = {name: sections[name] for name in required}
-        next_sections.update({name: sections[name] for name in allowed if name not in required and name in sections})
+        next_sections = dict(sections)
         for field in ("anchors", "tags", "search_terms", "source_refs"):
             if field not in updates and field not in clear_set:
                 frontmatter.pop(field, None)
@@ -3164,8 +3258,17 @@ def _read_artifact(
         warnings=warnings,
     )
     warnings.extend(warning["code"] for warning in document.warnings)
-    selected = sections or tuple(document.sections)
-    available = {name: document.sections[name] for name in selected if name in document.sections}
+    schema = document.frontmatter["schema"]
+    selected = (
+        tuple(_canonical_section_name(schema, name) for name in sections)
+        if sections
+        else tuple(_canonical_section_name(schema, name) for name in document.sections)
+    )
+    available = {
+        name: value
+        for name in selected
+        if (value := _section_value(document.sections, schema, name)) is not None
+    }
     result: dict[str, Any] = {
         "artifact": dict(document.frontmatter),
         "path": path.relative_to(repo).as_posix(),
@@ -3254,7 +3357,7 @@ def _core_init_contents() -> dict[str, str]:
             "context-core",
             "context-observation/v1",
             "evidence",
-            "비권위 발견과 근거",
+            "Non-authoritative findings and evidence",
             search_terms=("observation", "evidence"),
         ),
     }
@@ -3354,7 +3457,7 @@ def _bootstrap_phase_error(
         *completed,
         {"phase": phase, "status": "failed", "code": error.code, "changed_paths": []},
     ]
-    details["retry"] = "같은 명시적 init 호출을 재시도한다. partial 또는 invalid state는 먼저 수동 복구한다."
+    details["retry"] = "Retry the same explicit init call; repair partial or invalid state manually first."
     return ContextError(error.code, error.message, details, error.exit_code)
 
 
@@ -4849,7 +4952,7 @@ def prepare_lifecycle_input(repo: pathlib.Path, transition: str, predecessor_id:
             "id": predecessor_id,
             "kind": "observation",
             "path": predecessor_path.relative_to(repo).as_posix(),
-            "primary_claim": predecessor.sections["관찰"],
+            "primary_claim": _section_value(predecessor.sections, "context-observation/v1", "Observation"),
             "artifact_sha256": sha256_bytes(predecessor_path.read_bytes()),
             "supporting_context": _semantic_projection("observation", predecessor)["supporting_context"],
         },
@@ -5087,7 +5190,7 @@ def _validate_core_init_control(
             search_terms=("handoff", "resume"),
         ),
         "context/observation/observation.index.md": _area_seed(
-            "observation", "context-core", "context-observation/v1", "evidence", "비권위 발견과 근거",
+            "observation", "context-core", "context-observation/v1", "evidence", "Non-authoritative findings and evidence",
             search_terms=("observation", "evidence"),
         ),
     }
@@ -5649,11 +5752,11 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
                 lifecycle["source_candidate_digest"] != next(item["input_digest"] for item in owner_result["semantic_inputs"] if item["operation"] == "claim")
                 or lifecycle["predecessor"]["id"] != predecessor_id
                 or lifecycle["predecessor"]["path"] != predecessor_target.get("path")
-                or lifecycle["predecessor"]["primary_claim"] != retired.sections["관찰"]
+                or lifecycle["predecessor"]["primary_claim"] != _section_value(retired.sections, "context-observation/v1", "Observation")
                 or lifecycle["predecessor"]["artifact_sha256"] != predecessor_target.get("sha256")
                 or lifecycle["successor"]["id"] != successor_id
                 or lifecycle["successor"]["path"] != drafts[create_effects[0]["effect_id"]]["path"]
-                or lifecycle["successor"]["primary_claim"] != created.sections["관찰"]
+                or lifecycle["successor"]["primary_claim"] != _section_value(created.sections, "context-observation/v1", "Observation")
                 or lifecycle["successor"]["artifact_sha256"] != request.get("successor_artifact_sha256")
                 or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(request.get("successor_artifact_sha256")))
                 or request["requested_changes"].get("predecessor") != predecessor_id
@@ -5680,11 +5783,11 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
                 or lifecycle.get("successor", {}).get("kind") != "decision"
                 or lifecycle.get("predecessor", {}).get("id") != retired.frontmatter["id"]
                 or lifecycle.get("predecessor", {}).get("path") != target.get("path")
-                or lifecycle.get("predecessor", {}).get("primary_claim") != retired.sections["관찰"]
+                or lifecycle.get("predecessor", {}).get("primary_claim") != _section_value(retired.sections, "context-observation/v1", "Observation")
                 or lifecycle.get("predecessor", {}).get("artifact_sha256") != target.get("sha256")
                 or lifecycle.get("successor", {}).get("id") != created.frontmatter["id"]
                 or lifecycle.get("successor", {}).get("path") != drafts[dec_effects[0]["effect_id"]]["path"]
-                or lifecycle.get("successor", {}).get("primary_claim") != created.sections["결정"]
+                or lifecycle.get("successor", {}).get("primary_claim") != _section_value(created.sections, "context-decision/v1", "Decision")
                 or lifecycle.get("successor", {}).get("artifact_sha256") != request.get("successor_artifact_sha256")
                 or retired.frontmatter.get("kind_hint") != "decision"
                 or retired.frontmatter.get("superseded_by") != created.frontmatter["id"]
@@ -6877,8 +6980,8 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
             )
         if args.snapshot_command == "update":
             sections = _section_arguments(args, (
-                ("sec_context", "현재 맥락"), ("sec_open_items", "열린 항목"), ("sec_next_steps", "다음 단계"),
-                ("sec_decided", "정해진 것"), ("sec_refs", "참조"), ("sec_candidates", "capture 후보"),
+                ("sec_context", "Current context"), ("sec_open_items", "Open items"), ("sec_next_steps", "Next steps"),
+                ("sec_decided", "Decided"), ("sec_refs", "References"), ("sec_candidates", "Capture candidates"),
             ))
             return _maybe_freeze_bundle_receipt(
                 repo,

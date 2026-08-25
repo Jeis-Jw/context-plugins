@@ -206,12 +206,12 @@ def classify_preflight(inventory, doctor, required_plugin):
 
 
 _MESSAGES = {
-    "core_missing": "exact context-core가 현재 host inventory에 없다.",
-    "core_source_mismatch": "동명 core의 marketplace 또는 source가 요구 좌표와 다르다.",
-    "core_disabled": "exact context-core가 현재 scope에서 비활성이다.",
-    "core_incompatible": "exact context-core가 context-common/v2 handshake를 통과하지 못했다.",
-    "core_uninitialized": "exact core는 준비됐고 repository bootstrap이 필요하다.",
-    "ready": "exact context-core가 준비됐다. repository 진단은 작업 대상과 겹칠 때만 차단한다.",
+    "core_missing": "The exact context-core is absent from the current host inventory.",
+    "core_source_mismatch": "A same-named core has a different marketplace or source coordinate.",
+    "core_disabled": "The exact context-core is disabled in the current scope.",
+    "core_incompatible": "The exact context-core failed the context-common/v2 handshake.",
+    "core_uninitialized": "The exact core is ready but the repository requires bootstrap.",
+    "ready": "The exact context-core is ready; repository diagnostics block only when they overlap the target.",
 }
 
 
@@ -219,29 +219,29 @@ def _manual_actions(code, required):
     selector = required["selector"]
     provider = required["marketplace"]
     source = required["source"]
-    retry = "host reload 또는 새 session 뒤 context-decision:init을 다시 실행한다."
+    retry = "Reload the host or start a new session, then run context-decision:init again."
     actions = {
         "core_missing": [
-            f"provider marketplace {provider} (source {source})에서 {selector}를 사용자가 직접 설치한다.",
-            "설치 scope는 사용자가 직접 선택한다.",
+            f"Install {selector} explicitly from provider marketplace {provider} (source {source}).",
+            "Choose the installation scope explicitly.",
             retry,
         ],
         "core_source_mismatch": [
-            f"source {source}의 exact {selector} 좌표를 사용자가 직접 설치한다.",
-            "다른 marketplace의 동명 plugin은 충족으로 간주하지 않는다.",
+            f"Install the exact {selector} coordinate from source {source} explicitly.",
+            "A same-named plugin from another marketplace does not satisfy the requirement.",
             retry,
         ],
         "core_disabled": [
-            f"exact {selector}를 사용자가 선택한 올바른 scope에서 직접 활성화한다.",
+            f"Enable the exact {selector} explicitly in the intended scope.",
             retry,
         ],
         "core_incompatible": [
-            f"exact {selector}를 {required['required_protocol']} 호환 버전으로 사용자가 직접 업데이트한다.",
+            f"Update the exact {selector} explicitly to a {required['required_protocol']}-compatible version.",
             retry,
         ],
         "core_uninitialized": [
-            "context-decision:init이 installed context-core public bootstrap surface를 호출한다.",
-            "같은 명시적 호출에서 core init 뒤 decision area 등록을 계속한다.",
+            "context-decision:init calls the installed context-core public bootstrap surface.",
+            "The same explicit invocation continues with decision-area registration after core init.",
         ],
         "ready": [],
     }

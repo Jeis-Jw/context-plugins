@@ -76,7 +76,7 @@ class DecisionConflictTests(unittest.TestCase):
             )
             self.assertEqual("exact_slot", check["coverage"])
             self.assertEqual(["ctx_550e8400e29b41d4a716446655440000"], [item["id"] for item in check["comparison_input"]["current"]])
-            self.assertEqual("인증 세션은 BFF가 소유한다.", check["comparison_input"]["current"][0]["sections"]["결정"])
+            self.assertEqual("인증 세션은 BFF가 소유한다.", check["comparison_input"]["current"][0]["sections"]["Decision"])
             self.assertEqual(list(decision_cli.SEMANTIC_RELATIONS), check["assessment_contract"]["relations"])
             self.assertEqual(1, check["retrieval"]["body_reads"])
             self.assertGreater(check["retrieval"]["selected_semantic_bytes"], 0)

@@ -9,26 +9,26 @@ scope: "{{scope}}"
 decision_key: "{{decision_key}}"
 ---
 
-## 결정
+## Decision
 
 {{decision}}
 
-## 취지
+## Rationale
 
 {{rationale}}
 
-## 반려대안
+## Rejected alternatives
 
 {{rejected_alternatives}}
 
-## 근거와 제약
+## Evidence and constraints
 
 {{constraints}}
 
-## 트레이드오프
+## Trade-offs
 
 {{tradeoffs}}
 
-## 재평가 조건
+## Revisit conditions
 
 {{revisit_when}}

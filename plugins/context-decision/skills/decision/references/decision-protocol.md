@@ -31,7 +31,7 @@ Low-level `candidate prepare` normalizes caller-provided semantic fields, a call
 
 ## DEC schema and slot
 
-The required body sections are `결정`, `취지`, and `반려대안`. Missing, empty, or placeholder content fails. If no alternative was reviewed, use `검토하지 않음: <reason>`. Optional sections are `근거와 제약`, `트레이드오프`, and `재평가 조건`. `verified_at` and common `status` are forbidden.
+The canonical required body sections are `Decision`, `Rationale`, and `Rejected alternatives`. Missing, empty, or placeholder content fails. If no alternative was reviewed, record an explicit reason such as `Not reviewed: <reason>`. Optional canonical sections are `Evidence and constraints`, `Trade-offs`, and `Revisit conditions`. The Korean names `결정`, `취지`, `반려대안`, `근거와 제약`, `트레이드오프`, and `재평가 조건` are legacy read and round-trip aliases only; new artifacts use the canonical English headings. `verified_at` and common `status` are forbidden.
 
 Scope canonicalization is trim -> NFKC/casefold -> remove outer slashes -> normalize each non-alphanumeric run to `-`. Empty/dot segments, over eight segments, a segment over 40 characters, and total scope over 160 characters fail. `decision_key` uses the same normalization, forbids `/`, and is at most 80 characters.
 
@@ -74,7 +74,7 @@ Inline `--sec-*` values are literal by default. `@file` reads a named regular UT
 
 `check` accepts either both `--scope` and `--decision-key` or neither; a partial pair is `usage_invalid`. The exact pair yields `coverage:exact_slot`, always includes exact-slot and scope-overlap candidates, then adds only distinctive metadata matches. Omitting both yields lexical-only `coverage:discovery_only` plus the exact caveat `no-conflict cannot be concluded; re-run with exact scope/decision_key before preview`. It never opens arbitrary score-zero bodies. Comparison input is at most 24 KiB and the complete result at most 32 KiB. The agent returns `new|same|supporting|rationale_changed|conflict`; `new` is bounded to the returned set and discovery-only cannot establish no conflict.
 
-`spec-view --scope` selects exact/strict-ancestor/strict-descendant Current DEC metadata and materializes only `결정` and `취지`, ordered by `(created_at,id)`. It excludes History and `do_not_follow`. Complete JSON stdout including the final newline is at most 32 KiB; trailing entries are omitted whole and counted.
+`spec-view --scope` selects exact/strict-ancestor/strict-descendant Current DEC metadata and materializes only the canonical `Decision` and `Rationale` fields, ordered by `(created_at,id)`. Existing documents headed `결정` and `취지` are accepted as legacy read aliases and projected under the canonical English JSON keys; their stored headings are not silently rewritten. It excludes History and `do_not_follow`. Complete JSON stdout including the final newline is at most 32 KiB; trailing entries are omitted whole and counted.
 
 Init verifies a v2-capable release-pinned core and doctor, then passes the DEC area's exact legacy-compatible `context-owner-descriptor/v1` and empty DEC index seed to core bootstrap. One call may complete core root setup, DEC registration, and managed policy installation. The decision CLI itself writes none of those bytes.
 

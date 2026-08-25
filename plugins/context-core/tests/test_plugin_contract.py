@@ -73,24 +73,25 @@ class PluginContractTests(unittest.TestCase):
     def test_managed_policy_keeps_the_incremental_loop_call_free_and_ephemeral(self) -> None:
         policy = context_cli.POLICY_BODY
         for contract in (
-            "새 의미를 한 번 내부 audit",
-            "선택·전제·용어가 확정되는 순간",
-            "metadata-first",
-            "durable signal이 없으면",
-            "실제 본문·scope·rationale",
-            "primary 결론 전에",
-            "milestone당 한 번",
-            "완성된 렌더링 본문",
-            "직접적·명시적·무조건적 긍정",
-            "`알겠어` 단독",
-            "승인 뒤 재생성하지 않는다",
+            "explicit user language choice",
+            "host's preferred response language",
+            "established conversation language",
+            "OS locale is not authoritative",
+            "Code, filenames, quotations",
+            "machine-readable surfaces in canonical English",
+            "Audit each user turn's new meaning once",
+            "actual bodies, scope, and rationale",
+            "complete rendered body",
+            "direct, explicit, unconditional affirmative answer",
+            "generic acknowledgement, praise, condition, edit request, or topic change",
+            "never regenerate after approval",
         ):
             self.assertIn(contract, policy)
         policy_lines = [line for line in policy.splitlines() if line.startswith("- ")]
-        self.assertEqual(4, len(policy_lines))
+        self.assertEqual(6, len(policy_lines))
         for forbidden in ("approval_digest", "digest", "hash", "sha256", "fingerprint"):
             self.assertNotIn(forbidden, policy.casefold())
-        self.assertLessEqual(len(policy.encode("utf-8")), 2200)
+        self.assertLessEqual(len(policy.encode("utf-8")), 3000)
 
         rule = (PLUGIN / "rules/context-policy.md").read_text(encoding="utf-8")
         self.assertEqual(policy_lines, [line for line in rule.splitlines() if line.startswith("- ")])

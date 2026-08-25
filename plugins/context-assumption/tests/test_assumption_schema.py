@@ -25,7 +25,7 @@ class AssumptionSchemaTests(unittest.TestCase):
         frontmatter, sections = assumption_cli.parse_document(result["artifact_drafts"][0]["content"])
         self.assertEqual("context-assumption/v1", frontmatter["schema"])
         self.assertEqual("provisional", assumption_cli.assumption_capability()["authority"])
-        self.assertEqual(["가정", "근거", "확정 조건", "반증 조건"], list(sections))
+        self.assertEqual(["Assumption", "Basis", "Confirmation conditions", "Refutation conditions"], list(sections))
 
     def test_claim_requires_exact_candidate_digest_and_rfc6901_pointers(self) -> None:
         value = helpers.candidate()
@@ -87,7 +87,7 @@ class AssumptionSchemaTests(unittest.TestCase):
             manifest = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual("context-assumption", manifest["name"])
         template = (helpers.PLUGIN / "templates/assumption.md").read_text(encoding="utf-8")
-        for token in ("context-assumption/v1", "## 가정", "## 근거", "## 확정 조건", "## 반증 조건"):
+        for token in ("context-assumption/v1", "## Assumption", "## Basis", "## Confirmation conditions", "## Refutation conditions"):
             self.assertIn(token, template)
 
 

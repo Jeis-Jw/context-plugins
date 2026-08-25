@@ -80,7 +80,7 @@ class ProductFlowTests(unittest.TestCase):
             proposal = context_cli.finalize_owner_result(repo, owner_result, validation)
             before = tree_digest(repo)
             preview_text = proposal["approval_preview"]["artifacts"][0]["content"]
-            for section in ("## 결정", "## 취지", "## 반려대안"):
+            for section in ("## Decision", "## Rationale", "## Rejected alternatives"):
                 self.assertIn(section, preview_text)
             self.assertEqual(before, tree_digest(repo))
             context_cli.apply_bundle(repo, proposal["bundle"], proposal["approval_digest"])
@@ -91,9 +91,9 @@ class ProductFlowTests(unittest.TestCase):
             decision_id = owner_result["effects"][0]["id"]
             brief = decision_cli.brief_decisions(repo, identifiers=[decision_id])
             sections = brief["items"][0]["sections"]
-            self.assertIn("인증 세션은 BFF가 소유", sections["결정"])
-            self.assertIn("cookie 차이", sections["취지"])
-            self.assertIn("SPA token", sections["반려대안"])
+            self.assertIn("인증 세션은 BFF가 소유", sections["Decision"])
+            self.assertIn("cookie 차이", sections["Rationale"])
+            self.assertIn("SPA token", sections["Rejected alternatives"])
 
             successor = flow.choice("cand_987e6543e21b42d3a456426614174002")
             successor["claim"] = "인증 세션은 auth service가 소유한다."

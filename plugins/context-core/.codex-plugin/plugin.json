@@ -15,7 +15,7 @@
     "category": "Productivity",
     "capabilities": ["Read", "Write", "Validation"],
     "defaultPrompt": [
-      "Audit new meaning only; stay silent without durable signal. Recall metadata-first only when it can change the answer.",
+      "Use active language for user-facing text; keep machine fields English. Stay silent without durable signal.",
       "Report conflicts or rationale changes before the conclusion; preview complete text and ask once.",
       "Direct, explicit, unconditional yes: pass `approval_digest` unchanged; verify core SHA, repo, CAS, lock; never regenerate."
     ]

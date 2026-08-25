@@ -1,57 +1,49 @@
-# Context Plugins (한국어)
+# Context Plugins
 
-Coding agent가 세션이 바뀌어도 프로젝트의 **결정, 근거, 미검증 전제, 프로젝트 용어, 현재 상태와 작업 인계**를 이어가도록 돕는 Git/Markdown 기반 플러그인입니다.
+[English](./README.md)
 
-관련 맥락만 골라 실제 본문을 읽고, 기존 결정과 충돌하거나 취지가 달라졌다면 먼저 알려줍니다. 새 맥락은 사용자에게 기록 후보를 보여준 뒤 명시적으로 승인받은 경우에만 repository의 `context/`에 저장합니다.
+Context Plugins는 모든 대화를 몰래 영구 상태로 만들지 않으면서 coding agent에 repository 소유의 durable project context를 제공합니다. 지원 profile은 Git/Markdown context를 회수하고 안전하게 기록하는 `context-core`와, 세션이 바뀌어도 결정·취지·반려대안을 보존하는 `context-decision`을 함께 사용합니다. Agent는 오래 남길 가치가 있는 맥락만 제안하고 complete preview를 보여준 뒤 사용자가 직접 승인한 경우에만 기록합니다.
 
-> `0.6.0` developer preview release candidate가 준비됐습니다. `v0.6.0` tag는 아직 생성·push되지 않았고 marketplace publication도 미완료입니다. 공개 라이선스도 선택되지 않았으므로 실제 사용·복제·재배포 전에는 [현재 배포 상태](#현재-배포-상태)를 확인하세요.
+> **Developer preview:** `0.6.0`은 `main`에 준비되어 있지만 `v0.6.0` tag는 아직 생성·push되지 않았습니다. Marketplace publication도 미완료입니다. 아래 설치 명령은 의도적으로 immutable tag를 사용하며 tag가 공개된 뒤에만 동작합니다. Source 공개, test, host lifecycle 검증은 tag, GitHub Release, marketplace publication 또는 지속 사용 가치의 증거가 아닙니다.
 
-## 이런 문제를 해결합니다
+## 왜 필요한가요?
 
-- 새 session을 열 때마다 “왜 이 구조를 선택했는지” 다시 설명해야 합니다.
-- 이미 반려한 대안이 다음 작업에서 다시 제안됩니다.
-- 중요한 실험 결과와 운영상 주의점이 대화 기록에만 남아 재사용되지 않습니다.
-- agent가 맥락을 자동 저장하면 불필요하거나 잘못된 내용까지 장기 기억에 섞일 수 있습니다.
-- 작업을 중단한 뒤 다음 agent가 현재 상태와 다음 행동을 복원하기 어렵습니다.
+- 새 agent session이 현재 구조를 선택한 이유를 다시 물어보지 않아야 합니다.
+- 이미 반려한 대안이 다음 작업에서 새로운 제안처럼 돌아오지 않아야 합니다.
+- 유용한 운영 근거는 chat history 밖에서도 남되 자동으로 권위 있는 결정이 되어서는 안 됩니다.
+- 검증되지 않은 전제는 provisional 상태가 분명해야 합니다.
+- Durable write는 repository가 소유하는 review·rollback 가능한 Git 변경이어야 합니다.
 
-Context Plugins는 모든 대화를 보관하지 않습니다. 현재 판단에 필요한 repository-local context만 회수하고, 오래 남길 가치가 있는 내용만 승인형 기록 후보로 제안합니다.
+Context Plugins는 transcript를 보관하지 않습니다. Index와 metadata로 후보를 먼저 좁히고, 현재 답변에 영향을 줄 수 있을 때만 실제 artifact body를 읽습니다.
 
-## 제공하는 플러그인
+## 플러그인 구성
 
-| 플러그인 | 사용자에게 제공하는 기능 | 설치 관계 |
+| 플러그인 | 역할 | 상태 |
 |---|---|---|
-| `context-core` | 관련 맥락 recall, 작업 인계 `SNAP`, 재사용 가능한 근거 `OBS`, 승인 preview와 안전한 기록 | 기본 플러그인 |
-| `context-decision` | 기존 `DEC` 본문 비교, 충돌·취지 변경 알림, 반려 대안과 superseded history 보존 | `context-core@context-plugins` 필요 |
-| `context-assumption` | 미검증 전제 `ASM`, 확인·반증 조건, confirm/refute/supersede lifecycle | `context-core@context-plugins` 필요, 선택 설치 |
-| `context-term` | 프로젝트 전용 용어 `TERM`, canonical definition과 alias/deprecation lifecycle | `context-core@context-plugins` 필요, 선택 설치 |
+| `context-core` | Scope 기반 recall, `OBS` 근거, `SNAP` 인계, complete preview와 물리적 write 조정 | 필수 |
+| `context-decision` | `DEC` 결정·취지·반려대안, conflict와 rationale change 감지 | 지원 profile에서 필수 |
+| `context-assumption` | 명시적으로 검증되지 않은 전제와 confirm/refute lifecycle을 `ASM`으로 관리 | 선택, experimental |
+| `context-term` | 프로젝트 전용 canonical definition과 alias를 `TERM`으로 관리 | 선택, experimental |
 
-지원하는 developer-preview profile은 release checkout의 root installer를 한 번 실행해 `context-core`와 `context-decision`을 같은 version·scope의 독립 package로 설치한 뒤 `$context-decision:init`을 한 번 실행하는 구성입니다. bundle/meta-plugin은 없고 decision code를 core에 내장하지 않습니다. Profile manifest와 installer는 배포 도구일 뿐이며, 설치된 plugin이 다른 plugin을 자동 설치·활성화·update하지 않습니다. ASM과 TERM은 optional experimental surface입니다.
+Bundle이나 meta-plugin은 없습니다. Core와 decision은 독립 package이고, 어떤 plugin도 다른 plugin을 암묵적으로 install·enable·update·init하지 않습니다. Core와 semantic addon은 반드시 같은 immutable checkout에서 설치해야 하며, 혼합 설치나 일부 update는 `core_surface_mismatch`로 중단됩니다.
 
-core와 semantic addon은 반드시 같은 immutable release checkout에서 함께 설치·update해야 합니다. 각 addon이 exact core entrypoint bytes를 고정하므로 혼합 설치나 일부만 update한 상태는 `core_surface_mismatch`로 중단됩니다. 이때 core와 해당 addon을 같은 release로 함께 다시 설치·update하고 host reload 뒤 재시도합니다.
+## 요구사항과 지원 범위
 
-## 동작 방식
+| 항목 | 요구사항 또는 확인된 경계 |
+|---|---|
+| Python | Python 3.11 이상, runtime은 standard library 사용 |
+| Repository | macOS 또는 Linux의 Git repository. Write coordinator가 POSIX `fcntl` lock 사용 |
+| Codex | Plugin marketplace CLI. `0.149.0-alpha.4.1`에서 fresh install/cache lifecycle 확인 |
+| Claude Code | Plugin marketplace CLI. `2.1.89`에서 fresh install/cache lifecycle 확인, runtime UX는 experimental |
+| 지원 profile | `context-core@context-plugins` + `context-decision@context-plugins`, 모두 `0.6.0` |
+| 선택 기능 | `context-assumption`, `context-term`은 설치 가능하지만 experimental |
+| 언어 | Runtime과 문서의 canonical source는 영어입니다. 사용자 응답은 명시적 언어 선택, host의 preferred response language, 기존 대화 언어 순으로 따르고 판별할 수 없으면 영어를 사용합니다. 식별자와 machine-readable field는 영어로 유지합니다. |
 
-```text
-사용자 대화
-    ↓
-관련 Current context만 탐색
-    ↓
-선택된 실제 본문과 현재 요청 비교
-    ↓
-답변 또는 충돌·취지 변경 알림
-    ↓
-기록할 가치가 있을 때만 complete preview 제안
-    ↓
-사용자가 자연어 capture 질문에 한 번 답변
-    ↓
-context/*.md와 index를 하나의 transaction으로 갱신
-```
-
-평범한 대화에는 별도 audit 메시지를 표시하지 않습니다. 관련 결정이나 근거가 판단을 바꿀 때만 필요한 문서를 읽고, 기록할 내용이 충분히 성숙했을 때만 제안합니다.
+Windows는 현재 지원하지 않습니다. 위 host version은 검증 당시의 snapshot이며 영구적인 최소 version이나 호환성 보장은 아닙니다.
 
 ## 설치
 
-아래 명령은 owner가 `v0.6.0` tag push를 승인·완료한 뒤에만 사용할 수 있습니다. 먼저 mutable branch가 아닌 exact tag checkout을 만듭니다.
+지원 경로는 clean immutable release checkout 하나에서 시작합니다.
 
 ```bash
 git clone --branch v0.6.0 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.6.0
@@ -66,116 +58,165 @@ python3 scripts/install_profile.py --host codex
 
 ### Claude Code
 
+설치 scope를 명시합니다. 이 문서의 예시는 user scope입니다.
+
 ```bash
 python3 scripts/install_profile.py --host claude-code --scope user
 ```
 
-Installer는 release surface 정합성을 확인하고, 구형 provider가 enabled 상태이거나 같은 marketplace가 다른 checkout을 가리키면 host를 바꾸기 전에 중단합니다. 기존 설치 제거·migration·rollback은 자동 수행하지 않습니다. ASM/TERM이 필요하면 같은 checkout에서 각각 설치하되 experimental surface로 취급합니다. 설치된 plugin은 다른 plugin을 자동 설치·활성화·update하거나 host 설정을 임의로 바꾸지 않습니다.
+Installer는 release surface의 version 정합성을 확인하고, 필요하면 현재 checkout을 `context-plugins` marketplace로 등록한 뒤 core와 decision 순서로 설치합니다. Legacy provider, mixed version, disabled plugin 또는 다른 checkout을 가리키는 marketplace가 있으면 변경 전에 중단합니다. 기존 context를 migration하거나 부분 설치 실패를 자동 rollback하지 않습니다.
 
 설치 후 host를 reload하거나 새 session을 여세요.
 
-## 처음 한 번 초기화
+### 선택형 experimental owner
 
-지원 profile은 사용할 repository에서 `$context-decision:init`을 한 번만 실행합니다. 이 호출이 설치된 exact `context-core`를 확인한 뒤 core storage와 DEC area를 함께 준비하므로 `$context-core:init`을 먼저 실행할 필요가 없습니다. ASM/TERM을 experimental로 설치했다면 해당 addon init을 각각 한 번 실행합니다. 한 addon init이 다른 addon area를 자동 등록하지는 않습니다.
+실제로 필요한 lifecycle만 같은 checkout에서 설치합니다.
 
-초기화가 성공하면 응답에서 다음을 확인할 수 있습니다.
+```bash
+codex plugin add context-assumption@context-plugins
+codex plugin add context-term@context-plugins
 
-- `doctor.repository_state: ready`
-- Codex는 `AGENTS.md`, Claude Code는 `CLAUDE.md`에 설치된 managed policy target
-- 각 init phase의 `applied` 또는 `noop` 상태
+claude plugin install context-assumption@context-plugins --scope user
+claude plugin install context-term@context-plugins --scope user
+```
 
-초기화는 `context/`의 고정 scaffold와 현재 host의 managed policy block만 설치합니다. 이미 준비된 repository에서 다시 실행하면 안전한 `noop`입니다.
+## 프로젝트 초기화
 
-## 평소에는 자연어로 사용합니다
+Context를 소유할 Git repository에서 다음 selector를 한 번 실행합니다.
 
-초기화 이후 매 turn마다 별도 명령을 실행할 필요는 없습니다. 필요할 때 다음처럼 요청하면 됩니다.
+```text
+$context-decision:init
+```
 
-| 하고 싶은 일 | 요청 예시 |
+이 idempotent action 하나가 core storage를 초기화하고 DEC area를 등록하며, Codex에서는 `AGENTS.md`, Claude Code에서는 `CLAUDE.md`에 managed host policy를 설치합니다. 지원 profile에서는 `$context-core:init`을 따로 실행할 필요가 없습니다.
+
+선택 owner를 설치했다면 각각 초기화합니다.
+
+```text
+$context-assumption:init
+$context-term:init
+```
+
+## 몇 분 안에 첫 가치 확인하기
+
+초기화 뒤에는 평범한 자연어로 사용합니다. 매 turn마다 별도 명령을 실행하지 않습니다.
+
+1. 실제 프로젝트 결정을 agent에게 설명합니다.
+
+   > 브라우저 저장소는 injected script에 노출될 수 있어 session token을 HTTP-only cookie에 두기로 했다. 기존 프로젝트 결정과 비교하고 앞으로 작업을 안내할 가치가 있을 때만 durable decision으로 제안해줘.
+
+2. Complete preview의 scope, 결정, 취지와 반려대안을 검토합니다. 모두 정확할 때만 capture 질문에 직접 승인합니다.
+3. 다음 session에서 요청합니다.
+
+   > 인증 방식을 변경하기 전에 관련 프로젝트 결정을 회수하고 충돌이 있으면 알려줘.
+
+첫 durable write는 storage와 approval 경로가 동작한다는 증거입니다. Recall이 실제 작업을 개선하는지는 actual model과 반복 사용을 이용한 별도 가치검증으로 입증해야 합니다.
+
+## 평소 사용법
+
+| 목적 | 요청 예시 |
 |---|---|
-| 이전 맥락을 반영해 작업 재개 | “이 repository의 관련 결정과 관찰을 확인하고 이어서 설명해줘.” |
-| 새 선택의 충돌 확인 | “이 선택이 기존 결정과 충돌하는지 먼저 확인해줘.” |
-| scope의 현재 결정을 읽기용 명세로 보기 | “`project/auth`의 Current DEC를 spec view로 조립해줘.” |
-| 중요한 근거 보존 | “이번 운영 결과를 재사용 가능한 observation 후보로 만들어줘.” |
-| 미검증 전제 추적 | “외부 IdP 응답이 5초 이내라는 전제를 assumption 후보로 만들고 확인·반증 조건을 붙여줘.” |
-| 프로젝트 용어 확인 | “이 프로젝트에서 BFF가 뜻하는 정의와 alias를 term context에서 확인해줘.” |
-| 작업 인계 | “여기서 중단할 수 있게 현재 상태를 snapshot으로 정리해줘.” |
-| 결정 변경 | “기존 결정을 유지할지 supersede할지 실제 취지까지 비교해줘.” |
+| 이전 맥락을 반영해 재개 | “이 작업을 계속하기 전에 관련 결정과 observation을 확인해줘.” |
+| 충돌 확인 | “이 queue를 도입하기 전에 Current 결정과 비교하고 충돌을 설명해줘.” |
+| 근거 보존 | “이 운영 결과를 결정으로 취급하지 말고 재사용 가능한 observation으로 제안해줘.” |
+| 미완료 작업 인계 | “현재 상태, blocker와 다음 행동을 snapshot으로 준비해줘.” |
+| 결정 변경 | “새 취지를 Current 결정과 비교하고 supersede가 필요한지 알려줘.” |
+| 미검증 전제 추적 | “IdP가 5초 안에 응답한다는 전제를 확인·반증 조건과 함께 기록해줘.” |
+| 프로젝트 용어 정의 | “이 repository에서 BFF의 의미와 허용 alias를 기록해줘.” |
 
-플러그인은 관련 신호를 발견하면 먼저 기존 context를 비교하고, 답변을 마친 뒤 필요한 경우에만 grouped capture를 제안합니다. 제안이나 preview만으로는 파일이 바뀌지 않습니다.
+Managed policy는 새로 추가된 의미만 audit합니다. Durable signal이 없으면 조용히 있고, 이전 맥락이 답변을 바꿀 수 있을 때 metadata-first recall 뒤 선택된 실제 body를 비교합니다.
 
-## 무엇이 저장되나요?
+## 승인과 안전 경계
+
+```text
+대화의 새 의미
+  -> 관련 metadata-first recall
+  -> 선택한 실제 body 비교
+  -> conflict 또는 rationale change 알림
+  -> complete preview
+  -> 자연어 capture 질문 한 번
+  -> 직접적·명시적·무조건적 승인
+  -> context-core transaction 한 번
+```
+
+- Preview, 단순 acknowledgment, 칭찬, 수정 요청, 조건 또는 화제 전환은 승인이 아닙니다. `Okay`나 `알겠어`만으로는 write를 허가하지 않으며 모호한 응답은 한 번만 재확인합니다.
+- Capture 질문 전에 preview를 고정하고 승인 뒤 다시 생성하지 않습니다.
+- 내부 digest, receipt 위치, runtime path와 transport ID는 agent 내부에 둡니다.
+- Mutation 전에 repository identity, pinned runtime byte, compare-and-swap, lock ownership과 atomic write 조건을 다시 확인합니다.
+- 물리적 writer는 `context-core` 하나뿐입니다. Semantic owner는 검증된 의미만 반환하고 repository 파일을 직접 쓰지 않습니다.
+- Healthy index의 zero-match는 indexed artifact bodies를 열지 않습니다. Stale/missing index recovery는 recall당 최대 20 bodies를 엽니다.
+- Body materialization, selected output, owner input과 candidate envelope에는 hard bound가 있습니다. Directory enumeration, index scoring과 end-to-end model tokens가 O(1)이라고 보장하지 않습니다.
+- Semantic owner와 core는 `context-common/v2` runtime contract를 검증합니다. 이 handshake는 marketplace provenance나 host enabled state의 증명이 아닙니다.
+
+## 저장되는 내용
+
+모든 durable context는 대상 repository의 plain Markdown입니다.
 
 ```text
 context/
   context.index.md
-  decision/       # DEC: 현재 따를 결정과 superseded history
-  assumption/     # ASM: 아직 검증되지 않은 project-scoped 전제
-  term/           # TERM: 프로젝트 전용 용어와 canonical definition
-  observation/    # OBS: 판단을 뒷받침하는 비권위 근거와 발견
-  snapshot/       # SNAP: 다음 session을 위한 작업 인계
+  decision/       # DEC: authoritative Current 결정과 superseded history
+  observation/    # OBS: 재사용 가능하지만 non-authoritative인 근거
+  snapshot/       # SNAP: 임시 resume·handoff 상태
+  assumption/     # ASM: provisional premise (선택)
+  term/           # TERM: 프로젝트 전용 definition (선택)
 ```
 
-| 종류 | 의미 | 권위 |
-|---|---|---|
-| `DEC` | 무엇을 선택했고 왜 따르는지, 무엇을 반려했는지 | Current 문서는 authoritative |
-| `ASM` | 아직 검증되지 않았지만 후속 판단을 바꿀 수 있는 전제 | Current 문서는 provisional |
-| `TERM` | 프로젝트 안에서 사용할 용어와 canonical definition | Current 문서는 authoritative |
-| `OBS` | 재사용할 사실, 증거, 시행착오 | 판단을 돕는 evidence |
-| `SNAP` | 미완료 작업의 현재 상태와 다음 행동 | 재개용 staging |
+Artifact는 일반 Git diff, review, branch와 rollback 흐름을 그대로 사용합니다. 별도 database, vector store, SaaS account, background transcript collector 또는 Obsidian 설치가 필요하지 않습니다.
 
-모든 artifact는 Markdown이라 일반 Git diff, review, branch와 rollback을 그대로 사용할 수 있습니다. 별도 database, vector store, SaaS 계정이나 Obsidian이 필요하지 않습니다.
+## 제거와 rollback
 
-## 안전 경계
+선택 owner를 설치했다면 먼저 제거하고, decision을 core보다 먼저 제거합니다.
 
-- 일반 context 기록은 완성된 렌더링 본문을 보여준 capture 질문에 사용자가 직접적·명시적·무조건적으로 긍정한 뒤에만 적용합니다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니며 모호한 평가는 한 줄로 한 번만 재확인합니다.
-- Agent가 내부 transport 정보를 처리하므로 사용자는 digest, 임시 파일 위치, 내부 ID나 core 경로를 보거나 입력하지 않습니다.
-- Workflow는 질문 전에 complete preview를 고정하고 승인 뒤 재생성하지 않습니다. Repository identity, pinned runtime, CAS, lock, atomic-write 결박은 그대로이며 tampering과 clone·linked-worktree·same-path replay는 write 전에 실패합니다.
-- DEC·ASM·TERM은 release-pinned core runtime에서 schema, `context-common/v2` protocol, required features·commands와 doctor state를 handshake합니다. 이 검증은 marketplace provenance, catalog source 또는 host enabled state를 attest하지 않으며 low-level compatibility surface는 외부 orchestration용으로 유지됩니다.
-- hash, ID나 index metadata만으로 의미가 같다고 판단하지 않고 실제 body, scope와 rationale를 비교합니다.
-- metadata와 index로 후보를 먼저 좁힌 뒤 관련 있는 실제 문서만 읽습니다. Healthy index의 zero-match는 indexed body를 열지 않고, stale/missing index recovery의 body open은 호출당 합계 20개 이하입니다.
-- Hard bound는 artifact body materialization/open, selected output, candidate/envelope와 owner input에 적용됩니다. Index row scoring·directory enumeration과 end-to-end host/model token 사용량은 corpus 크기와 무관한 O(1)을 보장하지 않습니다.
-- common primary-claim protocol 상한은 2,000 codepoint입니다. Built-in SNAP `current_context`, OBS `observation`, DEC `decision`은 각각 owner-specific 1,200 codepoint 상한을 적용합니다.
-- background daemon처럼 대화를 수집하거나 transcript 전체를 자동 보관하지 않습니다.
-- 사용자가 명시적으로 실행한 root profile installer 외에는 plugin 설치·활성화와 host configuration을 변경하지 않습니다. `init`은 repository-local scaffold와 managed policy만 다룹니다.
-- release-pinned core runtime, schema·protocol·required features/commands 또는 operation별 doctor state가 요구 조건과 다르면 target write는 0입니다. 이 검증은 marketplace provenance, catalog source 또는 host enabled state를 attest하지 않습니다.
-- 기존 `wiki/`나 과거 distribution의 context를 자동 migration하지 않습니다.
+### Codex
 
-## 검증 근거
+```bash
+codex plugin remove context-decision@context-plugins --json
+codex plugin remove context-core@context-plugins --json
+codex plugin marketplace remove context-plugins --json
+```
+
+### Claude Code
+
+설치할 때 선택한 것과 같은 scope를 사용합니다.
+
+```bash
+claude plugin uninstall context-decision@context-plugins --scope user
+claude plugin uninstall context-core@context-plugins --scope user
+claude plugin marketplace remove context-plugins
+```
+
+Host uninstall은 대상 repository를 변경하지 않습니다. 기존 `context/` artifact와 managed policy block은 review 가능한 Git content로 남습니다. Corpus 삭제, managed-policy 제거, downgrade 또는 storage migration을 자동 수행하는 명령은 없습니다. 폐기나 rollback이 필요하면 명시적인 Git review 변경으로 처리합니다.
+
+기존 `context-core@jeis-ai-plugins`는 별도 distribution입니다. 이 profile이 기존 설치나 corpus를 자동 교체·migration하지 않습니다. 자세한 경계는 [MIGRATION.md](./MIGRATION.md)를 참고하세요.
+
+## 검증 상태와 제한사항
 
 | 근거 | 결과 | 경계 |
 |---|---|---|
 | Python 3.11 전체 suite, 2026-08-24 | 292 passed, 220 subtests | `python3.11 -m pytest -q` |
 | Python 3.13 전체 suite, 2026-08-24 | 292 passed, 220 subtests | `python3.13 -m pytest -q` |
-| 두 interpreter의 Phase 0 | 각각 15 passed | `PYTHONPATH=tests/context-v1/phase0 pythonX -m pytest -q tests/context-v1/phase0` |
-| Codex `0.149.0-alpha.4.1` | core+decision fresh install/cache lifecycle 통과 | actual model behavior 근거 아님 |
-| Claude Code `2.1.89` | core+decision fresh install/cache lifecycle 통과 | runtime UX는 experimental |
-| 두 host의 네 plugin | install/load 통과 | ASM/TERM은 optional experimental |
-| actual model/no-signal/token usage | 미확인 | end-to-end 측정 없음 |
+| 두 interpreter의 Phase 0 | 각각 15 passed | Filesystem과 host-inventory contract probe |
+| Codex `0.149.0-alpha.4.1` | core+decision fresh install/cache lifecycle 통과 | Host lifecycle 근거이며 model behavior 근거 아님 |
+| Claude Code `2.1.89` | core+decision fresh install/cache lifecycle 통과 | Runtime UX는 experimental |
+| Codex + Claude Code | 네 plugin 모두 install/load 통과 | ASM/TERM은 optional experimental surface |
+| Actual model behavior | 미확인 | No-signal 비율, capture 품질, task outcome, retained use, end-to-end token 측정 없음 |
 
 Codex prompt material은 3,147자에서 1,331자로 57.7% 감소했습니다. 문자 수 측정이며 token 절감률 주장이 아닙니다.
 
-## 현재 배포 상태
+준비된 manifest, local catalog, test, `main`의 source 또는 installer dry run은 `v0.6.0` tag, GitHub Release, marketplace publication이나 실제 사용자 채택의 증거가 아닙니다. Publication과 가치증명은 별도 gate로 남아 있습니다.
 
-| 항목 | 상태 |
-|---|---|
-| GitHub repository | [`Jeis-Jw/context-plugins`](https://github.com/Jeis-Jw/context-plugins) — release candidate source와 tag/publication 상태는 구분 |
-| 준비 중인 version | `0.6.0` — 네 plugin manifest·두 local catalog·runtime/tests/profile/docs parity |
-| immutable ref | `v0.6.0` 계획 — tag 미생성·미push, owner 승인 필요 |
-| Marketplace identity | `context-plugins` |
-| Storage protocol | `context-common/v2` |
-| Codex·Claude Code manifests | local release unit에 포함, publication evidence 아님 |
-| Fresh host lifecycle | Codex `0.149.0-alpha.4.1`, Claude Code `2.1.89` core+decision 통과 |
-| actual model/no-signal/token usage | 미확인 |
-| 중앙 marketplace catalog 배포 | 아직 미완료 |
-| 공개 라이선스 | 아직 미선택 — `LICENSE` 추가 전에는 사용·복제·재배포 권한이 자동 부여되지 않음 |
+## 라이선스
 
-기존 `context-core@jeis-ai-plugins`는 별도 distribution입니다. 새 `context-core@context-plugins` 설치로 자동 전환되지 않으며, storage 이동도 자동 수행하지 않습니다. 자세한 경계는 [MIGRATION.md](./MIGRATION.md)를 참고하세요.
+Context Plugins는 [Apache License 2.0](./LICENSE)으로 배포됩니다.
 
 ## 더 알아보기
 
-- [`context-core` 상세 동작](./plugins/context-core/README.md)
-- [`context-decision` 상세 동작과 오류 안내](./plugins/context-decision/README.md)
-- [`context-assumption` 전제와 lifecycle 계약](./plugins/context-assumption/README.md)
-- [`context-term` 용어 정본과 recall 계약](./plugins/context-term/README.md)
-- [기존 distribution에서의 migration 경계](./MIGRATION.md)
 - [English default](./README.md)
+- [`context-core`](./plugins/context-core/README.md)
+- [`context-decision`](./plugins/context-decision/README.md)
+- [`context-assumption`](./plugins/context-assumption/README.md)
+- [`context-term`](./plugins/context-term/README.md)
+- [Migration 경계](./MIGRATION.md)
+- [Release notes](./RELEASE_NOTES.md)
+- [개발과 검증](./DEVELOPMENT.md)

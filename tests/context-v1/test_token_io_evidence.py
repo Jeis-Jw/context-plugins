@@ -312,7 +312,7 @@ class TokenIOEvidenceTests(unittest.TestCase):
             self.corpus.root,
             query="probe0000",
             areas=["decision"],
-            sections=["취지"],
+            sections=["Rationale"],
             limit=20,
             metrics=section_metrics,
         )
@@ -320,7 +320,7 @@ class TokenIOEvidenceTests(unittest.TestCase):
         self.assertLessEqual(section_bytes, 8 * 1024)
         self.assertLessEqual(section_metrics.artifact_opens, section["returned"])
         self.assertTrue(section["items"][0]["section_truncated"])
-        self.assertTrue(section["items"][0]["sections"]["취지"].endswith("…"))
+        self.assertTrue(section["items"][0]["sections"]["Rationale"].endswith("…"))
         self.assertIn("--read", section["items"][0]["full_read_hint"])
         for item in section["items"]:
             self.assertLessEqual(encoded(item), 2 * 1024)

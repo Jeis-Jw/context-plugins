@@ -68,6 +68,6 @@ semantic plugin은 임의의 `--core-cli`를 실행하지 않습니다. `context
 
 ## License
 
-공개 라이선스는 아직 선택하지 않았습니다. 저장소가 public이더라도 `LICENSE`가 추가되기 전에는 사용·복제·재배포 권한이 자동으로 부여되지 않습니다.
+이 저장소에는 root [`LICENSE`](./LICENSE)의 Apache License 2.0이 적용됩니다.
 
-`v0.6.0` tag 생성·push, marketplace publication과 license 선택은 각각 owner gate입니다. 검증이나 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.
+라이선스 선택은 완료됐지만 `v0.6.0` tag 생성·push와 marketplace publication은 여전히 각각 별도 owner gate입니다. 라이선스 적용, 검증 또는 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.

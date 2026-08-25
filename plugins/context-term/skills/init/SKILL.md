@@ -1,15 +1,15 @@
 ---
 name: init
-description: 사용자가 context-term 초기화를 명시적으로 요청했을 때 exact context-core v2 handshake 뒤 TERM descriptor/index를 core bootstrap으로 등록한다.
+description: When explicitly requested, register the TERM descriptor and index through an exact context-core v2 handshake.
 ---
 
 # Context term init
 
-이 skill은 사용자가 `$context-term:init`을 명시했을 때만 실행한다. 자동 설치·활성화·update·downgrade·migration은 하지 않는다.
+Run only when the user explicitly invokes `$context-term:init`. Never install, enable, update, downgrade, or migrate automatically.
 
-1. `REQUIRED_PLUGIN`의 core entrypoint suffix/SHA-256을 supplied `--core-cli`에 대조하고 loaded catalog에서 sibling entrypoint를 해석한다.
-2. 일치한 core에서만 `context-core-schema/v1`, `context-common/v2`, `context-owner-descriptor/v2`, 필수 command와 doctor를 handshake한다.
-3. `term_init.py`가 descriptor v2와 fixed index seed를 core `bootstrap`에 전달하고 ready/profile/index/managed policy 결과를 확인한다.
+1. Compare the `REQUIRED_PLUGIN` core entrypoint suffix and SHA-256 with the supplied `--core-cli`, then resolve the sibling entrypoint from the loaded catalog.
+2. Only the matching core may handshake `context-core-schema/v1`, `context-common/v2`, `context-owner-descriptor/v2`, required commands, and doctor state.
+3. `term_init.py` sends descriptor v2 and its fixed index seed to core `bootstrap`, then checks ready, profile, index, and managed-policy results.
 
 ```bash
 INIT_SKILL_FILE="<loaded-skill-path>/SKILL.md"
@@ -19,6 +19,8 @@ python3 "${INIT_SKILL_FILE%/SKILL.md}/scripts/term_init.py" \
   --json
 ```
 
-TERM adapter는 temporary descriptor/seed 전달 외 write primitive가 없다. `absent|partial|invalid|ready`는 pinned core에 전달하며 mismatch는 subprocess, receipt와 repository write 0이다.
+The TERM adapter has no write primitive beyond temporary descriptor and seed transport. It passes `absent|partial|invalid|ready` to the pinned core; a mismatch produces zero subprocess, receipt, or repository writes.
 
-일반 durable capture는 별도다. 기록 제안 전에 preview를 실행하고 완성된 렌더링 본문과 함께 한 번만 묻는다. preview stdout의 `approval_digest`는 agent가 그대로 apply에 전달하되 digest·receipt 경로·내부 ID·core 경로를 사용자에게 보이거나 요구하지 않는다. capture 질문에 대한 직접적·명시적·무조건적 긍정만 승인이다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니며 승인 뒤 content·plan을 재생성하지 않는다.
+Follow context-core's active-language contract. An explicit user language choice wins; otherwise use the host preference, then established conversation language, then English. OS locale is not authoritative. Use the active language for user-facing setup guidance and explanatory errors; keep machine-readable surfaces in English.
+
+Ordinary durable capture is separate. Before suggesting it, run preview and ask once in the active language with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply, but never show or request it, a receipt path, an internal ID, or a core path. Only a direct, explicit, unconditional affirmative answer to that specific capture question is approval. A generic acknowledgement, condition, edit request, or topic change is not. Never regenerate content or plan after approval.

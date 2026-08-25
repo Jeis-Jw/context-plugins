@@ -74,9 +74,9 @@ class TermSecurityRegressionTests(unittest.TestCase):
             changed = term_cli.build_annotate_result(repo, "ctx_550e8400e29b41d4a716446655440000", summary="metadata annotation", updated_at="2026-08-22T02:00:00+09:00")
             draft = changed["artifact_drafts"][0]
             frontmatter, sections = term_cli.parse_document(draft["content"])
-            sections["정의"] = "annotation으로 몰래 바꾼 semantic claim"
+            sections["Definition"] = "annotation으로 몰래 바꾼 semantic claim"
             draft["content"] = term_cli.render_document(frontmatter, sections)
-            draft["semantic_projection"]["primary_claim"] = sections["정의"]
+            draft["semantic_projection"]["primary_claim"] = sections["Definition"]
             before = helpers.tree_digest(repo)
             payload = self._assert_rejected_noop(repo, self._public_validate(repo, preflight, root, changed, "semantic-annotate"), before)
             self.assertEqual("owner_result_rederivation_mismatch", payload["error"]["code"])

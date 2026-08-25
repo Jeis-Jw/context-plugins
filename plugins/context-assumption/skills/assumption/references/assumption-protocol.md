@@ -1,39 +1,41 @@
 # Assumption protocol
 
-## artifact
+## Artifact
 
-`context-assumption/v1`은 common frontmatter와 descriptor v2 profile을 따른다.
+`context-assumption/v1` follows common frontmatter and the descriptor v2 structural profile.
 
-| 위치 | 필드 | 계약 |
+| Location | Field | Contract |
 |---|---|---|
-| frontmatter | `scope` | required, 1..160 chars |
-| frontmatter | `impacted_decisions` | optional, 최대 12 context IDs |
-| H2 | `가정` | required primary claim |
-| H2 | `근거` | required basis |
-| H2 | `확정 조건` | optional |
-| H2 | `반증 조건` | optional |
+| frontmatter | `scope` | Required, 1..160 characters |
+| frontmatter | `impacted_decisions` | Optional, at most 12 context IDs |
+| H2 | `Assumption` | Required primary claim; legacy alias: `가정` |
+| H2 | `Basis` | Required basis; legacy alias: `근거` |
+| H2 | `Confirmation conditions` | Optional; legacy alias: `확정 조건` |
+| H2 | `Refutation conditions` | Optional; legacy alias: `반증 조건` |
 
-Current authority는 `provisional`이다. History에는 `retired_at`, `retired_reason`과 reason recipe가 요구하는 evidence/reference payload가 추가된다.
+Current authority is `provisional`. History adds `retired_at`, `retired_reason`, and the evidence or reference payload required by the selected reason recipe. New artifacts use English headings. Existing Korean-heading artifacts remain readable, and meaning-preserving mutation retains their original heading style.
 
-## claim boundary
+Artifact prose follows the user's active language and is never translated merely to match the English canonical structure.
 
-candidate transport ID나 artifact ID는 의미 근거가 아니다. semantic attestation은 candidate canonical digest와 exact RFC 6901 pointer에 결박된다. ASM은 다음을 decline한다.
+## Claim boundary
 
-- 이미 관찰된 사실 또는 증거 자체: OBS boundary
-- 받아들여 현재 따를 선택: DEC boundary
-- 단순 질문·아이디어·희망·선호
-- unverified 상태를 명시하지 않은 주장
+Candidate transport IDs and artifact IDs are not semantic evidence. Semantic attestation binds to the candidate's canonical digest and exact RFC 6901 pointers. ASM declines:
 
-## owner result and persistence
+- An already observed fact or evidence itself: OBS boundary.
+- An accepted choice to follow now: DEC boundary.
+- A question, idea, hope, or preference by itself.
+- A claim that is not explicitly marked unverified.
 
-ASM CLI는 `context-owner-result/v1`과 `context-owner-validation-receipt/v2`를 생성한다. receipt는 descriptor digest, capability digest, owner-result digest, physical area-index digest, same-area prior bundle 순서, generic topology와 semantic input digest를 결박한다.
+## Owner result and persistence
 
-receipt 발급 시 live source path/id/SHA, 실제 primary claim, exact candidate와 attestation, transition별 mutation request를 다시 읽는다. 그 입력에서 artifact drafts/effects/operations를 재생성한 결과가 제출 owner-result 전체와 같지 않으면 fail-closed한다. absolute path, `..`, `context/assumption` 밖 target과 symlink component는 receipt·search·read 전에 거부한다.
+The ASM CLI produces `context-owner-result/v1` and `context-owner-validation-receipt/v2`. The receipt binds descriptor, capability, owner-result, and physical area-index digests; same-area prior-bundle order; generic topology; and semantic-input digests.
 
-core는 target bytes를 descriptor로 다시 검증하고 preview/apply/lock 후 CAS를 수행한다. ASM은 repository/index 파일을 쓰지 않는다.
+Before issuing a receipt, ASM rereads live source path, ID, SHA, actual primary claim, exact candidate and attestation, and the transition-specific mutation request. It regenerates artifact drafts, effects, and operations from those inputs and fails closed unless the complete result matches the submitted owner result. It rejects absolute paths, `..`, targets outside `context/assumption`, and symlink components before receipt, search, or read.
 
-## init handshake
+Core revalidates target bytes against the descriptor and performs preview, apply, lock, and CAS checks. ASM never writes repository or index files.
 
-`schema`와 `capabilities`만 core 없이 호출할 수 있다. 저수준 compatibility operation은 exact host inventory와 core doctor receipt를 요구한다. 일반 operation은 ready만 허용하고, partial/invalid는 fail-closed한다. canonical init adapter는 caller-created inventory/doctor를 받지 않는다. semantic CLI의 release pin과 supplied core CLI의 absolute path suffix·SHA-256을 먼저 대조하고, 일치한 core의 schema·protocol·feature·필수 command·doctor state를 직접 handshake한다. bootstrap 뒤 public doctor와 registry/descriptor/index bytes를 사후 검증한다.
+## Init handshake
 
-common primary claim은 2,000 codepoint, ASM `assumption`은 1,200 codepoint다. canonical byte budget은 owner input 8 KiB, candidate 16 KiB, 실제 public output 32 KiB다. candidate batch는 최대 8개이며 `context-capture-batch/v1`의 schema·audit_count·candidates 전체 canonical UTF-8 envelope가 16 KiB 이하여야 한다.
+Only `schema` and `capabilities` run without core. Low-level compatibility operations require exact host inventory and a core doctor receipt. Ordinary operations require `ready`; `partial` and `invalid` fail closed. The canonical init adapter accepts no caller-created inventory or doctor data. It first verifies the semantic CLI release pin against the supplied core CLI's absolute path suffix and SHA-256, then directly handshakes schema, protocol, features, required commands, and doctor state on that exact core. After bootstrap it verifies public doctor and registry, descriptor, and index bytes.
+
+The common primary claim limit is 2,000 codepoints and ASM `assumption` is limited to 1,200 codepoints. Canonical byte limits are 8 KiB for owner input, 16 KiB for a candidate, and 32 KiB for actual public output. A candidate batch contains at most eight items, and the complete canonical UTF-8 `context-capture-batch/v1` envelope must not exceed 16 KiB.

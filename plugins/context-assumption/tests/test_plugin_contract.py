@@ -56,7 +56,7 @@ class AssumptionPluginContractTests(unittest.TestCase):
             self.assertEqual(1, json.loads(search.stdout)["result"]["returned"])
             read = helpers.run_cli(repo, "read", "--signal", "assumption-relevant", "--id", "ctx_550e8400e29b41d4a716446655440000", *preflight, "--json")
             self.assertEqual(0, read.returncode, read.stdout + read.stderr)
-            self.assertIn("가정", json.loads(read.stdout)["result"]["sections"])
+            self.assertIn("Assumption", json.loads(read.stdout)["result"]["sections"])
             blocked = helpers.run_cli(repo, "search", "--signal", "always", "--query", "IdP", *preflight, "--json")
             self.assertEqual(5, blocked.returncode)
             self.assertEqual("signal_required", json.loads(blocked.stdout)["error"]["code"])

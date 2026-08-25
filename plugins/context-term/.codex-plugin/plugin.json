@@ -17,7 +17,7 @@
     "defaultPrompt": [
       "Before core runs, verify pinned context_cli.py suffix + SHA-256; handshake schema, protocol, commands, features, doctor.",
       "No marketplace provenance/source/enabled attestation; caller inventory is low-level compatibility input only.",
-      "Accept only project-specific terms and definitions; decline generic meanings and non-TERM candidates."
+      "Use active language for user-facing text; keep machine fields English. Claim only project-specific definitions."
     ]
   }
 }

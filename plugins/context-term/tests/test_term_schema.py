@@ -33,8 +33,8 @@ class TermSchemaTests(unittest.TestCase):
         self.assertEqual("context-term/v1", frontmatter["schema"])
         self.assertEqual("bff", frontmatter["term_key"])
         self.assertEqual("authoritative", term_cli.term_capability()["authority"])
-        self.assertEqual(["정의"], list(sections))
-        self.assertEqual(value["claim"], sections["정의"])
+        self.assertEqual(["Definition"], list(sections))
+        self.assertEqual(value["claim"], sections["Definition"])
 
     def test_term_key_is_unicode_case_space_and_punctuation_deterministic(self) -> None:
         nfc = "Café API"
@@ -135,7 +135,7 @@ class TermSchemaTests(unittest.TestCase):
         for path in required[:2]:
             self.assertEqual("context-term", json.loads(path.read_text(encoding="utf-8"))["name"])
         template = (helpers.PLUGIN / "templates/term.md").read_text(encoding="utf-8")
-        for token in ("context-term/v1", "term_key", "aliases", "deprecated_terms", "related", "## 정의"):
+        for token in ("context-term/v1", "term_key", "aliases", "deprecated_terms", "related", "## Definition"):
             self.assertIn(token, template)
 
 

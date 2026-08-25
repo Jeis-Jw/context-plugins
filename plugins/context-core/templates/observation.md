@@ -1,28 +1,28 @@
 ---
 schema: "context-observation/v1"
 id: "ctx_00000000000040008000000000000000"
-title: "관찰 제목"
-summary: "재사용할 수 있는 발견과 근거의 요약"
+title: "Observation title"
+summary: "Summary of the reusable finding and its evidence"
 created_at: "2000-01-01T00:00:00+00:00"
 captured_from: "manual"
 ---
 
-## 관찰
+## Observation
 
-나중에 조사하거나 판단할 때 재사용할 수 있는 구체적 claim을 기록한다.
+Record a concrete claim that can be reused in later investigation or judgment.
 
-## 근거
+## Evidence
 
-- claim을 뒷받침하는 재현 결과, 파일, 로그 또는 원자료
+- Reproduction result, file, log, or primary source supporting the claim
 
-## 영향
+## Impact
 
-이 관찰이 판단이나 구현에 미치는 영향을 기록한다.
+Record how this observation affects judgment or implementation.
 
-## 현재 처리
+## Current handling
 
-현재 적용 중인 우회나 대응을 기록한다.
+Record any workaround or response currently in use.
 
-## 후속 조건
+## Follow-up conditions
 
-- 재검증하거나 다시 조사할 조건
+- Condition that should trigger revalidation or further investigation

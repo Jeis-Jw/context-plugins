@@ -13,6 +13,6 @@ deprecated_terms: {{deprecated_terms}}
 related: {{related}}
 ---
 
-## 정의
+## Definition
 
 {{definition}}

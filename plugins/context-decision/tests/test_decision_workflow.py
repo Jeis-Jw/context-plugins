@@ -328,7 +328,7 @@ class DecisionWorkflowTests(unittest.TestCase):
             self.assertEqual(5, denied.returncode, denied.stdout + denied.stderr)
             denied_error = json.loads(denied.stdout)["error"]
             self.assertEqual("core_surface_mismatch", denied_error["code"])
-            self.assertEqual("plugin 버전 불일치 — 재설치 후 새 세션", denied_error["message"])
+            self.assertEqual("Plugin version mismatch; reinstall and start a new session.", denied_error["message"])
             self.assertFalse(marker.exists())
             self.assertFalse(receipt_path.exists())
             self.assertEqual(before, digest_tree(repo))
@@ -1215,7 +1215,7 @@ class DecisionWorkflowTests(unittest.TestCase):
             self.assertEqual(5, stale_explicit.returncode, stale_explicit.stdout + stale_explicit.stderr)
             error = json.loads(stale_explicit.stdout)["error"]
             self.assertEqual("precondition_changed", error["code"])
-            self.assertEqual("저장 전 상태가 바뀌어 다시 미리보기 필요", error["message"])
+            self.assertEqual("State changed before storage; create a new preview.", error["message"])
             self.assertEqual(before, digest_tree(repo))
 
     def test_cleanup_failure_and_kept_receipt_do_not_reenter_canonical_apply(self) -> None:

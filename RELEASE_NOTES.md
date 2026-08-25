@@ -50,4 +50,4 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ## Release boundary
 
-This repository is preparing a developer preview. Source integration does not imply a tag or marketplace publication. Creation and push of `v0.6.0` remain owner-gated. A public license has not been selected; an owner must choose one before public reuse or redistribution is invited.
+This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration or license application does not imply a tag or marketplace publication. Creation and push of `v0.6.0` remain owner-gated.

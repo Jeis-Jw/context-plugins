@@ -974,7 +974,7 @@ class CrossPluginFlowTests(unittest.TestCase):
                 "--json",
             ))
             self.assertEqual("provisional", read["authority"])
-            self.assertEqual(candidate["claim"], read["sections"]["가정"])
+            self.assertEqual(candidate["claim"], read["sections"]["Assumption"])
             self.assertEqual("ready", public_result(run_cli(repo, CORE_CLI, "doctor", "--json"))["repository_state"])
 
     def test_acceptance_61_assumption_receipt_spoof_rejected(self) -> None:
@@ -1330,7 +1330,7 @@ class CrossPluginFlowTests(unittest.TestCase):
                 "--json",
             ))
             self.assertEqual("authoritative", read["authority"])
-            self.assertEqual(candidate["claim"], read["sections"]["정의"])
+            self.assertEqual(candidate["claim"], read["sections"]["Definition"])
             self.assertEqual("ready", public_result(run_cli(repo, CORE_CLI, "doctor", "--json"))["repository_state"])
 
     def test_acceptance_65_term_receipt_spoof_rejected(self) -> None:

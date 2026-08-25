@@ -17,7 +17,7 @@
     "defaultPrompt": [
       "Compare relevant Current DEC bodies for a forming choice; hashes, IDs, and metadata are not semantic evidence.",
       "Verify pinned core SHA/handshake; preserve frozen receipt, repository identity, CAS, lock; never regenerate.",
-      "Ask once with complete DEC; direct, explicit, unconditional yes: pass `approval_digest` unchanged; hide transport."
+      "Use active language for user-facing text; keep machine fields English. Approval must bind the frozen preview."
     ]
   }
 }

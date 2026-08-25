@@ -451,7 +451,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             repo = Path(temp)
             self._init(repo)
             self.assertEqual(
-                "sha256:20cbc25bb116a736a1a3ab8934cd53ecbd86dac5e7cc0f24d4690967c4a8d380",
+                "sha256:4fb39ffff8cf0ef5460c7118e51c8d026a7d4055761d4c5cbde20208fd284a68",
                 context_cli.sha256_bytes((repo / context_cli.ROOT_INDEX).read_bytes()),
             )
             descriptor = {
@@ -476,7 +476,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             self._register(repo, descriptor, seed, "v1")
             root_text = (repo / context_cli.ROOT_INDEX).read_text(encoding="utf-8")
             self.assertEqual(
-                "sha256:d39249341502db0b76166a0d5bcfea64ada5c03c7d0495ef46d15ebf18501bd3",
+                "sha256:b4d6ae89d09441a8fd46cc14ec8863c64e258965f30712b52e7aa322acaec732",
                 context_cli.sha256_bytes(root_text.encode("utf-8")),
             )
             self.assertNotIn("CONTEXT GENERATED:owner-profiles", root_text)

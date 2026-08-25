@@ -31,9 +31,17 @@ MAX_PRIMARY_CLAIM_CODEPOINTS = 2000
 ID_RE = re.compile(r"^ctx_[0-9a-f]{32}$")
 LOCAL_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
 ENTRY_RE = re.compile(r"^.*<!-- context-entry (\{.*\}) -->$")
-SECTIONS = ("가정", "근거", "확정 조건", "반증 조건")
-REQUIRED_SECTIONS = ("가정", "근거")
-PLACEHOLDERS = {"...", "TODO", "TBD", "해당 없음"}
+SECTIONS = ("Assumption", "Basis", "Confirmation conditions", "Refutation conditions")
+REQUIRED_SECTIONS = ("Assumption", "Basis")
+LEGACY_SECTION_ALIASES = {
+    "가정": "Assumption",
+    "근거": "Basis",
+    "확정 조건": "Confirmation conditions",
+    "반증 조건": "Refutation conditions",
+}
+LEGACY_SECTIONS = tuple(LEGACY_SECTION_ALIASES)
+LEGACY_REQUIRED_SECTIONS = LEGACY_SECTIONS[:2]
+PLACEHOLDERS = {"...", "TODO", "TBD", "N/A", "해당 없음"}
 CANDIDATE_FIELDS = {
     "schema", "candidate_id", "title", "claim", "summary", "captured_from", "requested_kind",
     "specialized_kinds", "fallback_kind", "owner_inputs", "scope_hint", "evidence", "tags",
@@ -48,7 +56,7 @@ REQUIRED_PLUGIN = {
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
     "entrypoint": "skills/context/scripts/context_cli.py",
-    "entrypoint_sha256": "sha256:9a776e7e964c10495cc7b14f5f3b44d4c8faf13b34d30343af9520dd0360a900",
+    "entrypoint_sha256": "sha256:8ac5891a4e14ff30461a0c9fd8c105cda046c3e9da67993c03141d2ba137b7f3",
 }
 
 
@@ -62,6 +70,21 @@ class AssumptionError(Exception):
 
     def envelope(self) -> dict[str, Any]:
         return {"ok": False, "error": {"code": self.code, "message": self.message, "details": self.details}}
+
+
+def _canonical_section_name(name: str) -> str:
+    return LEGACY_SECTION_ALIASES.get(name, name)
+
+
+def _legacy_section_name(canonical: str) -> str | None:
+    return next((legacy for legacy, target in LEGACY_SECTION_ALIASES.items() if target == canonical), None)
+
+
+def _section_value(sections: dict[str, str], canonical: str) -> str:
+    if canonical in sections:
+        return sections[canonical]
+    legacy = _legacy_section_name(canonical)
+    return sections.get(legacy, "") if legacy is not None else ""
 
 
 def nfc(value: str) -> str:
@@ -273,7 +296,9 @@ def owner_descriptor() -> dict[str, Any]:
                 "superseded_by": {"type": "context_id", "required": False},
                 "supersedes": {"type": "context_id_list", "required": False, "min_items": 0, "max_items": 12},
             },
-            "sections": {"ordered": list(SECTIONS), "required": list(REQUIRED_SECTIONS), "primary": "가정"},
+            # Keep the registered v2 descriptor byte-compatible with existing repositories.
+            # Core treats these names as legacy aliases while new artifacts use English headings.
+            "sections": {"ordered": list(LEGACY_SECTIONS), "required": list(LEGACY_REQUIRED_SECTIONS), "primary": "가정"},
             "index_projection": ["scope"],
             "lifecycle": {
                 "allowed_topologies": ["create_current", "replace_same_state", "retire_current", "supersede_current"],
@@ -318,12 +343,12 @@ def assumption_capability() -> dict[str, Any]:
         "authority": "provisional",
         "descriptor_digest": canonical_digest(descriptor),
         "claim_surface": {"type": "agent_skill", "name": "context-assumption:assumption", "operation": "claim"},
-        "claim_rule": "검증되지 않았음을 명시한 project-scoped 전제가 후속 판단을 바꿀 수 있다",
+        "claim_rule": "An explicitly unverified, project-scoped premise can change later judgment",
         "claim_assertions": ["assumption_present", "unverified_ok"],
         "lifecycle_operations": {
             "same_claim": {
                 "surface": {"type": "agent_skill", "name": "context-assumption:assumption", "operation": "same_claim"},
-                "rule": "두 실제 가정 본문이 같은 primary claim을 뜻한다",
+                "rule": "Both actual Assumption bodies express the same primary claim",
                 "assertions": ["same_semantic_claim"],
             }
         },
@@ -403,11 +428,21 @@ def render_document(frontmatter: dict[str, Any], sections: dict[str, str]) -> st
             raise AssumptionError("lifecycle_invalid", "superseded requires only its successor edge")
     elif any(field in frontmatter for field in ("evidence_refs", "refutation_reason", "superseded_by")):
         raise AssumptionError("lifecycle_invalid", "current artifact contains retired-only fields")
-    if set(sections) - set(SECTIONS) or any(name not in sections for name in REQUIRED_SECTIONS):
+    canonical_to_actual: dict[str, str] = {}
+    styles: set[str] = set()
+    for name in sections:
+        canonical = _canonical_section_name(name)
+        if canonical in canonical_to_actual:
+            raise AssumptionError("schema_invalid", "canonical and legacy aliases cannot both be rendered")
+        canonical_to_actual[canonical] = name
+        styles.add("legacy" if name in LEGACY_SECTION_ALIASES else "canonical")
+    if len(styles) > 1:
+        raise AssumptionError("schema_invalid", "canonical and legacy section headings cannot be mixed")
+    if set(canonical_to_actual) - set(SECTIONS) or any(name not in canonical_to_actual for name in REQUIRED_SECTIONS):
         raise AssumptionError("schema_invalid", "assumption sections are missing or unknown")
-    ordered = [name for name in SECTIONS if name in sections]
+    ordered = [canonical_to_actual[name] for name in SECTIONS if name in canonical_to_actual]
     for name in ordered:
-        _substantive(sections[name], maximum=4000, field=name)
+        _substantive(sections[name], maximum=4000, field=_canonical_section_name(name))
     lines = ["---"]
     for key, value in frontmatter.items():
         lines.append(f"{key}: {json.dumps(value, ensure_ascii=False, separators=(',', ':'))}")
@@ -637,11 +672,11 @@ def _semantic_input(operation: str, value: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sections_from_input(owner_input: dict[str, Any]) -> dict[str, str]:
-    sections = {"가정": owner_input["assumption"], "근거": "\n".join(f"- {item}" for item in owner_input["basis"])}
+    sections = {"Assumption": owner_input["assumption"], "Basis": "\n".join(f"- {item}" for item in owner_input["basis"])}
     if owner_input["confirm_conditions"]:
-        sections["확정 조건"] = "\n".join(f"- {item}" for item in owner_input["confirm_conditions"])
+        sections["Confirmation conditions"] = "\n".join(f"- {item}" for item in owner_input["confirm_conditions"])
     if owner_input["refute_conditions"]:
-        sections["반증 조건"] = "\n".join(f"- {item}" for item in owner_input["refute_conditions"])
+        sections["Refutation conditions"] = "\n".join(f"- {item}" for item in owner_input["refute_conditions"])
     return sections
 
 
@@ -696,7 +731,7 @@ def build_claim_result(
             "effect_id": effect_id,
             "path": path,
             "content": content,
-            "semantic_projection": {"kind": "assumption", "primary_claim": sections["가정"], "supporting_context": [sections["근거"]]},
+            "semantic_projection": {"kind": "assumption", "primary_claim": sections["Assumption"], "supporting_context": [sections["Basis"]]},
         }]
         effects = [{"effect_id": effect_id, "action": "create", "area": "assumption", "id": identifier, "state": "current"}]
         operations = [{"op": "create", "effect_id": effect_id, "area": "assumption", "path": path}]
@@ -745,7 +780,7 @@ def _validate_projection(draft: dict[str, Any]) -> tuple[dict[str, Any], dict[st
     projection = draft.get("semantic_projection")
     if not isinstance(projection, dict) or set(projection) != {"kind", "primary_claim", "supporting_context"}:
         raise AssumptionError("owner_result_invalid", "semantic projection is invalid", exit_code=EXIT_CONFLICT)
-    if projection.get("kind") != "assumption" or projection.get("primary_claim") != sections["가정"] or not isinstance(projection.get("supporting_context"), list) or len(projection["supporting_context"]) > 4:
+    if projection.get("kind") != "assumption" or projection.get("primary_claim") != _section_value(sections, "Assumption") or not isinstance(projection.get("supporting_context"), list) or len(projection["supporting_context"]) > 4:
         raise AssumptionError("owner_result_invalid", "semantic projection differs from actual assumption body", exit_code=EXIT_CONFLICT)
     return frontmatter, sections
 
@@ -836,8 +871,8 @@ area: "assumption"
 owner: "context-assumption"
 artifact_schema: "context-assumption/v1"
 authority: "provisional"
-summary: "검증되지 않은 project-scoped 전제와 검증 조건을 관리한다."
-search_terms: ["assumption","가정","전제"]
+summary: "Manage unverified project-scoped premises and their validation conditions."
+search_terms: ["assumption","premise","validation"]
 projection_fields: ["scope"]
 ---
 
@@ -1146,7 +1181,7 @@ def _single_mutation_result(record: dict[str, Any], transition: str, frontmatter
         "schema": "context-owner-result/v1", "result_type": "mutation", "transition": transition,
         "owner": "context-assumption", "target_kind": "assumption", "capability_digest": canonical_digest(assumption_capability()),
         "semantic_inputs": [_semantic_input("mutation_request", request)], "semantic_attestations": [],
-        "artifact_drafts": [{"effect_id": effect_id, "path": path, "content": content, "semantic_projection": {"kind": "assumption", "primary_claim": sections["가정"], "supporting_context": [sections["근거"]]} }],
+        "artifact_drafts": [{"effect_id": effect_id, "path": path, "content": content, "semantic_projection": {"kind": "assumption", "primary_claim": _section_value(sections, "Assumption"), "supporting_context": [_section_value(sections, "Basis")]} }],
         "effects": [{"effect_id": effect_id, "action": "retire" if retire else "replace", "area": "assumption", "id": frontmatter["id"], "state": "history" if retire else "current"}],
         "proposed_plan": {"schema": "context-owner-plan/v1", "transition": transition, "read_preconditions": [{"id": frontmatter["id"], "path": record["path"], "sha256": record["sha256"]}], "operations": [{"op": "move" if retire else "replace", "effect_id": effect_id, "area": "assumption", "from_path": record["path"], "to_path": path} if retire else {"op": "replace", "effect_id": effect_id, "area": "assumption", "path": path}]},
     }
@@ -1181,7 +1216,7 @@ def prepare_same_claim_input(repo: pathlib.Path, identifier: str, successor_cand
     successor, _ = validate_assumption_candidate(successor_candidate)
     return {
         "schema": "context-assumption-same-claim-input/v1",
-        "predecessor": {"id": identifier, "path": record["path"], "sha256": record["sha256"], "primary_claim": record["sections"]["가정"]},
+        "predecessor": {"id": identifier, "path": record["path"], "sha256": record["sha256"], "primary_claim": _section_value(record["sections"], "Assumption")},
         "successor": {"candidate_id": successor_candidate["candidate_id"], "primary_claim": successor["assumption"]},
     }
 
@@ -1228,8 +1263,8 @@ def build_supersede_result(
         "semantic_inputs": [_semantic_input("claim", successor_candidate), _semantic_input("same_claim", same_claim_input), _semantic_input("mutation_request", request)],
         "semantic_attestations": [claim_attestation, same_claim_attestation],
         "artifact_drafts": [
-            {"effect_id": old_effect, "path": old_path, "content": old_content, "semantic_projection": {"kind": "assumption", "primary_claim": record["sections"]["가정"], "supporting_context": [record["sections"]["근거"]]}},
-            {"effect_id": new_effect, "path": new_path, "content": new_content, "semantic_projection": {"kind": "assumption", "primary_claim": new_sections["가정"], "supporting_context": [new_sections["근거"]]}},
+            {"effect_id": old_effect, "path": old_path, "content": old_content, "semantic_projection": {"kind": "assumption", "primary_claim": _section_value(record["sections"], "Assumption"), "supporting_context": [_section_value(record["sections"], "Basis")]}},
+            {"effect_id": new_effect, "path": new_path, "content": new_content, "semantic_projection": {"kind": "assumption", "primary_claim": new_sections["Assumption"], "supporting_context": [new_sections["Basis"]]}},
         ],
         "effects": [
             {"effect_id": old_effect, "action": "retire", "area": "assumption", "id": identifier, "state": "history"},
@@ -1295,7 +1330,8 @@ def read_assumption(repo: pathlib.Path, *, signal: str, identifier: str) -> dict
     if len(rows) != 1:
         raise AssumptionError("artifact_not_found", "assumption id was not found exactly once", {"id": identifier}, EXIT_NOT_FOUND)
     record = _record(repo, rows[0])
-    return {"schema": "context-assumption-read/v1", "id": identifier, "path": record["path"], "state": record["state"], "authority": "provisional" if record["state"] == "current" else "historical", "do_not_follow": record["state"] == "history", "frontmatter": record["frontmatter"], "sections": record["sections"], "sha256": record["sha256"], "signal": signal, "physical_write": False}
+    sections = {_canonical_section_name(name): value for name, value in record["sections"].items()}
+    return {"schema": "context-assumption-read/v1", "id": identifier, "path": record["path"], "state": record["state"], "authority": "provisional" if record["state"] == "current" else "historical", "do_not_follow": record["state"] == "history", "frontmatter": record["frontmatter"], "sections": sections, "sha256": record["sha256"], "signal": signal, "physical_write": False}
 
 
 def _input_map(result: dict[str, Any]) -> dict[str, dict[str, Any]]:

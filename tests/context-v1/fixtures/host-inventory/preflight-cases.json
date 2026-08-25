@@ -17,11 +17,11 @@
       "expected_rendered": {
         "code": "core_missing",
         "host": "codex",
-        "message": "exact context-core가 현재 host inventory에 없다.",
+        "message": "The exact context-core is absent from the current host inventory.",
         "manual_actions": [
-          "provider marketplace context-plugins (source Jeis-Jw/context-plugins)에서 context-core@context-plugins를 사용자가 직접 설치한다.",
-          "설치 scope는 사용자가 직접 선택한다.",
-          "host reload 또는 새 session 뒤 context-decision:init을 다시 실행한다."
+          "Install context-core@context-plugins explicitly from provider marketplace context-plugins (source Jeis-Jw/context-plugins).",
+          "Choose the installation scope explicitly.",
+          "Reload the host or start a new session, then run context-decision:init again."
         ]
       }
     },
@@ -56,11 +56,11 @@
       "expected_rendered": {
         "code": "core_source_mismatch",
         "host": "claude-code",
-        "message": "동명 core의 marketplace 또는 source가 요구 좌표와 다르다.",
+        "message": "A same-named core has a different marketplace or source coordinate.",
         "manual_actions": [
-          "source Jeis-Jw/context-plugins의 exact context-core@context-plugins 좌표를 사용자가 직접 설치한다.",
-          "다른 marketplace의 동명 plugin은 충족으로 간주하지 않는다.",
-          "host reload 또는 새 session 뒤 context-decision:init을 다시 실행한다."
+          "Install the exact context-core@context-plugins coordinate from source Jeis-Jw/context-plugins explicitly.",
+          "A same-named plugin from another marketplace does not satisfy the requirement.",
+          "Reload the host or start a new session, then run context-decision:init again."
         ]
       }
     },
@@ -95,10 +95,10 @@
       "expected_rendered": {
         "code": "core_disabled",
         "host": "codex",
-        "message": "exact context-core가 현재 scope에서 비활성이다.",
+        "message": "The exact context-core is disabled in the current scope.",
         "manual_actions": [
-          "exact context-core@context-plugins를 사용자가 선택한 올바른 scope에서 직접 활성화한다.",
-          "host reload 또는 새 session 뒤 context-decision:init을 다시 실행한다."
+          "Enable the exact context-core@context-plugins explicitly in the intended scope.",
+          "Reload the host or start a new session, then run context-decision:init again."
         ]
       }
     },
@@ -133,10 +133,10 @@
       "expected_rendered": {
         "code": "core_incompatible",
         "host": "claude-code",
-        "message": "exact context-core가 context-common/v2 handshake를 통과하지 못했다.",
+        "message": "The exact context-core failed the context-common/v2 handshake.",
         "manual_actions": [
-          "exact context-core@context-plugins를 context-common/v2 호환 버전으로 사용자가 직접 업데이트한다.",
-          "host reload 또는 새 session 뒤 context-decision:init을 다시 실행한다."
+          "Update the exact context-core@context-plugins explicitly to a context-common/v2-compatible version.",
+          "Reload the host or start a new session, then run context-decision:init again."
         ]
       }
     },
@@ -171,10 +171,10 @@
       "expected_rendered": {
         "code": "core_uninitialized",
         "host": "codex",
-        "message": "exact core는 준비됐고 repository bootstrap이 필요하다.",
+        "message": "The exact core is ready but the repository requires bootstrap.",
         "manual_actions": [
-          "context-decision:init이 installed context-core public bootstrap surface를 호출한다.",
-          "같은 명시적 호출에서 core init 뒤 decision area 등록을 계속한다."
+          "context-decision:init calls the installed context-core public bootstrap surface.",
+          "The same explicit invocation continues with decision-area registration after core init."
         ]
       }
     },
@@ -210,7 +210,7 @@
       "expected_rendered": {
         "code": "ready",
         "host": "claude-code",
-        "message": "exact context-core가 준비됐다. repository 진단은 작업 대상과 겹칠 때만 차단한다.",
+        "message": "The exact context-core is ready; repository diagnostics block only when they overlap the target.",
         "manual_actions": [],
         "warnings": [{"repository_state": "partial", "code": "index_missing", "path": "context/decision/decision.index.md"}]
       }
@@ -246,7 +246,7 @@
       "expected_rendered": {
         "code": "ready",
         "host": "codex",
-        "message": "exact context-core가 준비됐다. repository 진단은 작업 대상과 겹칠 때만 차단한다.",
+        "message": "The exact context-core is ready; repository diagnostics block only when they overlap the target.",
         "manual_actions": []
       }
     }

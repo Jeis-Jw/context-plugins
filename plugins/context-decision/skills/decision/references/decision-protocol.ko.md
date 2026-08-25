@@ -26,7 +26,7 @@ idea, question, fact, preference와 미합의 제안은 `decline` 또는 `needs_
 
 ## DEC schema와 slot
 
-필수 section은 `결정`, `취지`, `반려대안`이다. 세 section의 누락, 빈 값과 literal `...|TODO|TBD|해당 없음`은 실패한다. 실제 검토한 대안이 없으면 `검토하지 않음: <이유>`를 쓴다. 선택 section은 `근거와 제약`, `트레이드오프`, `재평가 조건`이다. `verified_at`과 공통 `status`는 금지한다.
+canonical 필수 section은 `Decision`, `Rationale`, `Rejected alternatives`다. 세 section의 누락, 빈 값과 placeholder는 실패한다. 실제 검토한 대안이 없으면 `Not reviewed: <reason>`처럼 이유를 명시한다. 선택 canonical section은 `Evidence and constraints`, `Trade-offs`, `Revisit conditions`다. 한국어 `결정`, `취지`, `반려대안`, `근거와 제약`, `트레이드오프`, `재평가 조건`은 기존 artifact를 읽고 기존 heading 그대로 round-trip하기 위한 legacy alias일 뿐이며 신규 artifact에는 canonical 영어 heading을 쓴다. `verified_at`과 공통 `status`는 금지한다.
 
 `scope`는 trim → NFKC+casefold → leading/trailing slash 제거 → segment별 non-alnum run을 `-`로 변환한다. empty segment, `.`/`..`, segment 40자 초과, 8 segment 초과와 전체 160자 초과는 실패한다. `decision_key`는 같은 변환을 사용하고 `/`, empty와 80자 초과를 거부한다. ancestor는 canonical segment 배열의 strict prefix이며 문자열 prefix나 equality가 아니다.
 
@@ -73,9 +73,9 @@ inline `--sec-*`는 plain literal을 기본으로 하고 explicit `@file`과 lea
 
 ## Recall과 init
 
-`search`는 `decision.index.md` metadata만 읽는다. `read`와 `brief`는 선택된 DEC만 연다. brief는 `결정`, `취지`, `반려대안`만 포함하고 최대 8 KiB다. 낮은 순위 item을 통째로 제외하며 section 중간 절단은 하지 않는다. History에는 항상 `do_not_follow:true`와 lifecycle reason을 붙인다.
+`search`는 `decision.index.md` metadata만 읽는다. `read`와 `brief`는 선택된 DEC만 연다. brief는 canonical `Decision`, `Rationale`, `Rejected alternatives`만 포함하고 최대 8 KiB다. legacy 한국어 heading도 읽지만 결과 key는 canonical 영어로 반환한다. 낮은 순위 item을 통째로 제외하며 section 중간 절단은 하지 않는다. History에는 항상 `do_not_follow:true`와 lifecycle reason을 붙인다.
 
-`spec-view --scope <scope>`는 Stage 1의 Current metadata에서 canonical scope가 exact이거나 strict ancestor·descendant인 DEC만 선별한다. 문자열 prefix는 scope 관계가 아니다. 선택된 실제 본문의 `결정`·`취지`만 `(created_at,id)` 오름차순으로 반환하고 History와 `do_not_follow`는 제외한다. JSON envelope와 마지막 newline을 포함한 실제 CLI stdout UTF-8는 최대 32 KiB이며 상한을 넘으면 같은 deterministic 순서의 뒤쪽 DEC를 항목 전체로 생략하고 exact `omitted_count`를 반환한다. section 중간 절단, approval, 저장과 write는 없고 매 호출 index와 실제 본문에서 재생성한다.
+`spec-view --scope <scope>`는 Stage 1의 Current metadata에서 canonical scope가 exact이거나 strict ancestor·descendant인 DEC만 선별한다. 문자열 prefix는 scope 관계가 아니다. 선택된 실제 본문의 canonical `Decision`·`Rationale`만 `(created_at,id)` 오름차순으로 반환한다. 기존 `결정`·`취지` heading은 legacy read alias로 받아 canonical 영어 key로 projection하며 저장된 heading을 자동 변경하지 않는다. History와 `do_not_follow`는 제외한다. JSON envelope와 마지막 newline을 포함한 실제 CLI stdout UTF-8는 최대 32 KiB이며 상한을 넘으면 같은 deterministic 순서의 뒤쪽 DEC를 항목 전체로 생략하고 exact `omitted_count`를 반환한다. section 중간 절단, approval, 저장과 write는 없고 매 호출 index와 실제 본문에서 재생성한다.
 
 `check`는 `--scope`와 `--decision-key`를 둘 다 주거나 둘 다 생략한다. 하나만 주면 `usage_invalid`다. exact pair는 `coverage:exact_slot`이고 exact slot과 scope overlap을 반드시 포함한다. 둘 다 생략하면 lexical-only `coverage:discovery_only`와 exact caveat `no-conflict cannot be concluded; re-run with exact scope/decision_key before preview`를 반환한다. 그 밖의 후보는 statement·rationale·query와 title·summary·search terms의 distinctive metadata match만 선택하며 score 0의 임의 body는 열지 않는다. comparison input은 24 KiB, 전체 result는 32 KiB다. agent는 `new|same|supporting|rationale_changed|conflict` 중 하나와 근거·관련 ID를 제시하되 discovery-only에서 무충돌을 확정하지 않는다. 이 operation은 read-only이고 지문·문장 유사도로 의미를 확정하지 않는다.
 

@@ -129,7 +129,7 @@ class PluginContractTests(unittest.TestCase):
             self.assertEqual("core_missing", rendered["code"])
             self.assertEqual("context-core@context-plugins", rendered["required_plugin"]["selector"])
             self.assertEqual("Jeis-Jw/context-plugins", rendered["required_plugin"]["source"])
-            self.assertIn("사용자가 직접 설치", " ".join(rendered["manual_actions"]))
+            self.assertIn("Install", " ".join(rendered["manual_actions"]))
             self.assertEqual({"repository": "none", "host_configuration": "none"}, rendered["write_policy"])
             self.assertEqual(before, (digest_tree(repo), digest_tree(host)))
 
