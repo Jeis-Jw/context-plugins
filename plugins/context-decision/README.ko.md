@@ -6,7 +6,7 @@
 
 요구 좌표는 marketplace `context-plugins`, plugin `context-core`, selector `context-core@context-plugins`, source `Jeis-Jw/context-plugins`, protocol `context-common/v2`입니다. 동명 plugin이나 다른 marketplace source는 대체하지 못합니다.
 
-1. 지원 profile은 immutable `v0.6.0` checkout의 root installer를 사용자가 한 번 실행해 exact core와 decision을 같은 version·scope의 독립 package로 설치합니다.
+1. 지원 profile은 immutable `v0.7.0` checkout의 root installer를 사용자가 한 번 실행해 exact core와 decision을 같은 version·scope의 독립 package로 설치합니다.
 2. host를 reload하거나 새 session을 엽니다.
 3. `$context-decision:init`을 한 번 호출합니다.
 4. installed core public bootstrap이 필요한 core seed와 decision area를 적용하고, 현재 host의 `AGENTS.md` 또는 `CLAUDE.md`에 context 운영지침 managed block을 설치합니다. ready 재호출은 모두 noop입니다.
@@ -68,4 +68,4 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 
 0.5.1은 frozen receipt golden path, repository/core identity 결박, release-pinned core handshake, bounded recall recovery와 actual semantic input limit을 추가한 developer-preview patch입니다.
 
-0.6.0은 자연어 승인 질문, discovery-only read, supersede/withdraw golden path와 deterministic receipt lifecycle을 통합합니다. Core와 decision의 semantic ownership 및 package 경계는 유지하며 root profile installer만 설치 동작을 묶습니다. `v0.6.0` tag와 publication은 아직 완료되지 않았습니다.
+0.7.0은 자연어 승인 질문, discovery-only read, supersede/withdraw golden path와 deterministic receipt lifecycle을 통합합니다. Core와 decision의 semantic ownership 및 package 경계는 유지하며 root profile installer만 설치 동작을 묶습니다. `v0.7.0` tag와 publication은 아직 완료되지 않았습니다.

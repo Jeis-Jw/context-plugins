@@ -1,6 +1,6 @@
 {
   "name": "context-core",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Proactive scoped recall and approval-gated context capture with coordinated writes.",
   "author": {
     "name": "Jinwuk-Lee",

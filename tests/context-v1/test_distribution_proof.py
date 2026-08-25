@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PHASE0 = ROOT / "tests/context-v1/phase0/phase0_contract.py"
 PLUGIN_NAMES = ("context-core", "context-decision", "context-assumption", "context-term")
-RELEASE_VERSION = "0.6.0"
+RELEASE_VERSION = "0.7.0"
 OWNER_SKILLS = {
     "context-core": "context",
     "context-decision": "decision",
@@ -55,10 +55,10 @@ FORBIDDEN_KEYS = {
 }
 BASELINE_SKILL_BYTES = 40_715
 UNCHANGED_EXPERIMENTAL_MANIFESTS = {
-    "plugins/context-assumption/.claude-plugin/plugin.json": "618fa51cb2d27fde7ff4e1922a94fd2ccb341ba9aca09263af30f272b60fb25a",
-    "plugins/context-assumption/.codex-plugin/plugin.json": "b5c3b01bbbffd87f065dd0bcfe6a92adce35c73fd74cd29553d030037173f4b4",
-    "plugins/context-term/.claude-plugin/plugin.json": "2ba85238da40290000746e4a16f6ef27a5d4752174bd67b6f3b3256c879b9cdc",
-    "plugins/context-term/.codex-plugin/plugin.json": "55170848ee4501a8ab75411d513960d3e334f8ffa5f1292b16804cd8039ae246",
+    "plugins/context-assumption/.claude-plugin/plugin.json": "8c081f8b923ba847e0059edeb8990d84b3a693336c6984c7588ae575c3d20cb7",
+    "plugins/context-assumption/.codex-plugin/plugin.json": "2b6c6633ebb7319aeb7dd0a6fb605307dd591f06c8ad0e2e485e278223056d45",
+    "plugins/context-term/.claude-plugin/plugin.json": "1f86f13b3f83e32d0713ad27d1646b447ef28a607f7a7b78e04e0760f1a0c875",
+    "plugins/context-term/.codex-plugin/plugin.json": "ba1d5903c8ba908d09e21e3b559bf3e17a50877a6a6308ea12b8d928790f415c",
 }
 
 
@@ -359,8 +359,8 @@ class DistributionProofTests(unittest.TestCase):
             "Apache License 2.0",
         ):
             self.assertIn(token, readme)
-        self.assertIn("v0.6.0", readme)
-        self.assertIn("--branch v0.6.0", readme)
+        self.assertIn("v0.7.0", readme)
+        self.assertIn("--branch v0.7.0", readme)
         self.assertIn("scripts/install_profile.py --host codex", readme)
         self.assertIn("scripts/install_profile.py --host claude-code --scope user", readme)
         self.assertNotIn("--ref main", readme)
@@ -608,10 +608,10 @@ class DistributionProofTests(unittest.TestCase):
         for token in ("W1-W3", "context-common/v2", "linked worktree", "@file", "@@literal"):
             self.assertIn(token, migration)
         for token in (
-            "2026-08-24",
-            "292 passed, 220 subtests",
+            "2026-08-26",
+            "299 passed, 242 subtests",
             "Phase 0",
-            "15 passed each",
+            "15 passed, 27 subtests each",
             "0.149.0-alpha.4.1",
             "Claude Code `2.1.89`",
             "All four plugins installed and loaded",
@@ -645,8 +645,8 @@ class DistributionProofTests(unittest.TestCase):
         )
         for token in ("complete preview", "직접적·명시적·무조건적", "`알겠어`", "context-common/v2"):
             self.assertIn(token, korean_readme)
-        self.assertIn("`0.6.0`은 `main`에 준비되어 있지만", korean_readme)
-        self.assertIn("`v0.6.0` tag는 아직 생성·push되지 않았습니다", korean_readme)
+        self.assertIn("`0.7.0`은 `main`에 준비되어 있지만", korean_readme)
+        self.assertIn("`v0.7.0` tag는 아직 생성·push되지 않았습니다", korean_readme)
         self.assertIn("독립 package", korean_readme)
         self.assertIn("scripts/install_profile.py --host codex", korean_readme)
         self.assertNotIn("tag와 release commit은 아직 생성·push되지 않았", korean_readme)

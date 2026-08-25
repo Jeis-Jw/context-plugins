@@ -12,25 +12,25 @@
       "name": "context-core",
       "source": "./plugins/context-core",
       "description": "Shared-context runtime for proactive scoped recall, approval-gated capture suggestions, handoffs, evidence, and coordinated writes.",
-      "version": "0.6.0"
+      "version": "0.7.0"
     },
     {
       "name": "context-decision",
       "source": "./plugins/context-decision",
       "description": "Decision continuity with pre-decision body comparison, rationale-change and conflict notices, and approval-gated capture.",
-      "version": "0.6.0"
+      "version": "0.7.0"
     },
     {
       "name": "context-assumption",
       "source": "./plugins/context-assumption",
       "description": "Provisional project assumptions with evidence-bound confirmation, refutation, and supersession.",
-      "version": "0.6.0"
+      "version": "0.7.0"
     },
     {
       "name": "context-term",
       "source": "./plugins/context-term",
       "description": "Authoritative project terminology with scoped canonical slots and signal-gated recall.",
-      "version": "0.6.0"
+      "version": "0.7.0"
     }
   ]
 }

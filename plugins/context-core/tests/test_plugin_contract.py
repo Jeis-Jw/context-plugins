@@ -54,7 +54,7 @@ class PluginContractTests(unittest.TestCase):
                     doctor = context_cli.doctor_repository(repo)
                     self.assertEqual(expected_fields, set(doctor))
                     self.assertEqual(expected_state, doctor["repository_state"])
-                    self.assertEqual("0.6.0", doctor["plugin_version"])
+                    self.assertEqual("0.7.0", doctor["plugin_version"])
                     self.assertEqual(str(CLI_PATH.resolve()), doctor["entrypoint"])
                     self.assertEqual(context_cli.PROTOCOL, doctor["protocol"])
                     self.assertEqual([context_cli.PROTOCOL], doctor["supported_protocols"])

@@ -53,4 +53,4 @@ Structured claim and decline inputs use the explicit `--candidate @file` surface
 
 Runtime responses, questions, previews, and explanatory guidance follow the active language. Schema IDs, JSON keys, CLI options, error codes, filenames, and metadata fields remain English.
 
-Version `0.6.0` keeps ASM as an optional semantic-owner package outside the `core-decision` installation profile. The `v0.6.0` tag and marketplace publication are still pending.
+Version `0.7.0` keeps ASM as an optional semantic-owner package outside the `core-decision` installation profile. The `v0.7.0` tag and marketplace publication are still pending.
