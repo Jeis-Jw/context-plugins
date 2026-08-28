@@ -34,15 +34,15 @@ Agent는 기록 제안 전에 complete preview의 완성된 렌더링 본문을 
 
 ## Product flow
 
-context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하고, 선택의 형성·변경 신호가 있을 때만 context-decision을 부릅니다. 같은 scope·anchor와 `{id,sha256}`의 본문이 session context에 남아 있을 때만 재사용하며, 본문이 없거나 관련 anchor가 바뀌면 `check`가 metadata로 후보를 줄이고 Current DEC의 canonical `Decision`, `Rationale`, `Rejected alternatives`를 제공합니다. 기존 `결정`, `취지`, `반려대안`은 read/round-trip용 legacy alias이며 신규 artifact의 canonical heading이 아닙니다. Healthy index zero-match는 indexed body open 0이고 stale/missing recovery body open은 호출당 합계 20개 이하입니다. Hard bound는 body materialization/open, selected output, candidate/envelope와 owner input에 한정되며 index scoring·directory enumeration 및 end-to-end model token 사용량의 O(1)을 보장하지 않습니다.
+context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하고 선택의 형성·변경 신호가 있을 때만 context-decision을 부릅니다. 같은 scope·anchor와 `{id,sha256}`의 실제 본문이 session context에 남아 있을 때만 재사용합니다. 본문이 없거나 anchor가 바뀌면 알려진 scope/key로 exact `check`를 한 번 실행해 Current DEC의 실제 `Decision`, `Rationale`, `Rejected alternatives`와 비어 있지 않은 `Revisit conditions`를 `sections` 아래 받고, 같은 turn에는 다른 context read 없이 재사용합니다. 기존 한국어 heading은 legacy read/round-trip alias입니다. Healthy index zero-match는 indexed body open 0이고 stale/missing recovery body open은 호출당 20개 이하입니다. Hard bound는 body materialization/open, selected output, candidate/envelope와 owner input에 한정되며 index scoring·directory enumeration 및 end-to-end model token 사용량의 O(1)을 보장하지 않습니다.
 
 - `same`: 기존 결정을 재사용하고 중복 기록하지 않음
 - `supporting`: 기존 결정을 유지하고 재사용 가치가 있는 새 근거만 OBS 후보로 제안
-- `rationale_changed`: 결론 전에 취지 변화와 영향을 알리고 유지·변경 의도를 확인
-- `conflict`: 양립하지 않는 내용을 결론 전에 알리고 유지·supersede 의도를 확인
+- `rationale_changed`: 결론 전에 반환된 비어 있지 않은 실제 section을 모두 원문으로 인용하고 행동을 보류한 뒤, keep이면 수행하지 않고 supersede면 그 명시적 선택 뒤에만 진행하는 두 선택지를 묻는 명시적 양자 질문을 함
+- `conflict`: 결론 전에 반환된 비어 있지 않은 실제 Decision·Rationale·Rejected alternatives·Revisit conditions를 모두 원문으로 인용하고 선택한 token을 `satisfied|no evidence|ambiguous` 중 하나로 user response에 그대로 쓴 뒤 같은 명시적 양자 질문을 함. keep이면 수행하지 않고 supersede면 그 명시적 선택 뒤에만 진행함. `satisfied`는 사용자가 저장된 조건을 직접 성립시키는 현재 사실을 제공한 경우에만 쓰며 요청된 충돌 행동 자체는 근거가 아님. 사실이 없거나 저장 조건이 아닌 다른 쟁점에 관한 사실이면 `no evidence`이고, 관련 조건 사실이 불완전하거나 충돌할 때만 `ambiguous`임
 - `new`: 조회된 범위 안에서 관련 기존 결정을 찾지 못함
 
-이 비교는 실제 본문을 대상으로 하며 문자열 hash, ID나 metadata를 의미 동일성의 근거로 사용하지 않습니다. 충돌·취지 변경은 결론 전에 알리고, 그 외의 성숙한 결정은 원래 답 뒤 grouped proposal에 한 번 포함합니다. dismissed·deferred 후보는 새 evidence 전까지 반복하지 않으며 승인된 final bundle만 `context-core` coordinator가 적용합니다. 이후 brief는 세 핵심 section을 함께 복원하고, 새 결정이 같은 slot을 supersede하면 이전 DEC를 history로 이동해 더는 따르지 않도록 표시합니다.
+이 비교는 실제 본문을 대상으로 하며 문자열 hash, ID나 metadata를 의미 동일성의 근거로 사용하지 않습니다. 충족된 재평가 조건은 재평가 권한이지 구현 권한이 아니며 durable capture 승인은 별도입니다. 그 외의 성숙한 결정은 원래 답 뒤 grouped proposal에 한 번 포함합니다. dismissed·deferred 후보는 새 evidence 전까지 반복하지 않으며 승인된 final bundle만 `context-core` coordinator가 적용합니다. 이후 brief는 세 핵심 section을 함께 복원하고, 새 결정이 같은 slot을 supersede하면 이전 DEC를 history로 이동해 더는 따르지 않도록 표시합니다.
 
 ## Read-only spec view
 

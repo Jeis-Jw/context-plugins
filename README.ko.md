@@ -202,7 +202,7 @@ Host uninstall은 대상 repository를 변경하지 않습니다. 기존 `contex
 | Codex + Claude Code | 네 plugin 모두 install/load 통과 | ASM/TERM은 optional experimental surface |
 | Actual model behavior | 미확인 | No-signal 비율, capture 품질, task outcome, retained use, end-to-end token 측정 없음 |
 
-Codex prompt material은 3,147자에서 1,331자로 57.7% 감소했습니다. 문자 수 측정이며 token 절감률 주장이 아닙니다.
+Codex prompt material은 3,147자에서 1,333자로 57.6% 감소했습니다. 문자 수 측정이며 token 절감률 주장이 아닙니다.
 
 준비된 manifest, local catalog, test, `main`의 source 또는 installer dry run은 `v0.7.0` tag, GitHub Release, marketplace publication이나 실제 사용자 채택의 증거가 아닙니다. Publication과 가치증명은 별도 gate로 남아 있습니다.
 

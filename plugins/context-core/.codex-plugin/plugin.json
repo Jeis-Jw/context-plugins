@@ -15,9 +15,9 @@
     "category": "Productivity",
     "capabilities": ["Read", "Write", "Validation"],
     "defaultPrompt": [
-      "Use active language for user-facing text; keep machine fields English. Stay silent without durable signal.",
-      "Report conflicts or rationale changes before the conclusion; preview complete text and ask once.",
-      "Direct, explicit, unconditional yes: pass `approval_digest` unchanged; verify core SHA, repo, CAS, lock; never regenerate."
+      "Mechanical pathless: search one inferred subtree; no root/hidden/AGENTS/`context/`; unsafe→ask; calls/reads/mentions=0.",
+      "Use active language; machine fields English. Conflict first; hold: keep=not done; supersede only after explicit choice",
+      "Approval: pass approval_digest unchanged; verify SHA/repo/CAS/lock; never regenerate. Recall index→body→mention→question"
     ]
   }
 }

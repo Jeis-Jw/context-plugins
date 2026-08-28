@@ -108,6 +108,104 @@ class DecisionConflictTests(unittest.TestCase):
             self.assertEqual("context-decision-check/v1", cli_result["schema"])
             self.assertEqual(check["comparison_input"]["current"][0]["id"], cli_result["comparison_input"]["current"][0]["id"])
 
+    def test_check_conditionally_includes_actual_revisit_body_and_follows_changes(self) -> None:
+        with helpers.git_repo() as temp:
+            repo = helpers.Path(temp)
+            initial_value = helpers.candidate()
+            initial_value["owner_inputs"]["decision"]["revisit_when"] = [
+                "오프라인 요구가 사라지면 재평가한다."
+            ]
+            initial = helpers.claim_result(initial_value)
+            helpers.write_decision_area(repo, current=[draft_pair(initial)])
+            before = helpers.tree_digest(repo)
+
+            first = decision_cli.prepare_decision_check(
+                repo,
+                statement="인증 세션 소유권을 API gateway로 바꾼다.",
+                scope="project/auth",
+                decision_key="session-owner",
+            )
+
+            first_item = first["comparison_input"]["current"][0]
+            self.assertEqual(
+                "- 오프라인 요구가 사라지면 재평가한다.",
+                first_item["sections"]["Revisit conditions"],
+            )
+            self.assertNotIn("revisit_when", first_item)
+            revisit_contract = first["assessment_contract"]["conflict_revisit"]
+            self.assertEqual(
+                ["satisfied", "no evidence", "ambiguous"],
+                revisit_contract["classifications"],
+            )
+            self.assertEqual(
+                ["revisit_conditions", "revisit_assessment"],
+                revisit_contract["required_fields"],
+            )
+            self.assertIn("Revisit conditions", first["assessment_contract"]["actions"]["conflict"])
+            self.assertIn("keep = not performed", first["assessment_contract"]["actions"]["conflict"])
+            self.assertIn("not implementation", first["assessment_contract"]["actions"]["conflict"])
+            self.assertIn("Do not invent evidence", revisit_contract["rule"])
+            self.assertIn("user-supplied present facts", revisit_contract["rule"])
+            self.assertIn("requested conflicting action itself is not evidence", revisit_contract["rule"])
+            self.assertIn("facts are absent or concern something other than the stored condition", revisit_contract["rule"])
+            self.assertNotIn("offline-status", revisit_contract["rule"])
+            self.assertNotIn("growth priority", revisit_contract["rule"])
+            self.assertIn("Use ambiguous only when", revisit_contract["rule"])
+            self.assertIn("state the selected classification token verbatim", revisit_contract["rule"])
+            self.assertIn("one explicit binary question", first["assessment_contract"]["rule"])
+            self.assertEqual(before, helpers.tree_digest(repo))
+
+            changed_value = helpers.candidate()
+            changed_value["owner_inputs"]["decision"]["revisit_when"] = [
+                "규제기관이 중앙 세션 저장을 요구하면 재평가한다."
+            ]
+            changed = helpers.claim_result(changed_value)
+            helpers.write_decision_area(repo, current=[draft_pair(changed)])
+            before_changed_check = helpers.tree_digest(repo)
+
+            second = decision_cli.prepare_decision_check(
+                repo,
+                statement="인증 세션 소유권을 API gateway로 바꾼다.",
+                scope="project/auth",
+                decision_key="session-owner",
+            )
+
+            second_item = second["comparison_input"]["current"][0]
+            self.assertEqual(
+                "- 규제기관이 중앙 세션 저장을 요구하면 재평가한다.",
+                second_item["sections"]["Revisit conditions"],
+            )
+            self.assertNotEqual(first["input_digest"], second["input_digest"])
+            self.assertNotEqual(first_item["sha256"], second_item["sha256"])
+            self.assertEqual(before_changed_check, helpers.tree_digest(repo))
+            self.assertLessEqual(
+                len(decision_cli.canonical_json(second).encode("utf-8")),
+                decision_cli.MAX_CHECK_RESULT_BYTES,
+            )
+
+    def test_check_does_not_invent_revisit_section_when_absent(self) -> None:
+        with helpers.git_repo() as temp:
+            repo = helpers.Path(temp)
+            existing = helpers.claim_result()
+            helpers.write_decision_area(repo, current=[draft_pair(existing)])
+
+            check = decision_cli.prepare_decision_check(
+                repo,
+                statement="인증 세션 소유권을 API gateway로 바꾼다.",
+                scope="project/auth",
+                decision_key="session-owner",
+            )
+
+            item = check["comparison_input"]["current"][0]
+            self.assertEqual(list(decision_cli.CORE_SECTIONS), list(item["sections"]))
+            self.assertNotIn("revisit_when", item)
+            self.assertNotIn("Revisit conditions", item["sections"])
+            self.assertNotIn("conflict_revisit", check["assessment_contract"])
+            self.assertEqual(
+                ("Decision", "Rationale", "Rejected alternatives"),
+                decision_cli.CORE_SECTIONS,
+            )
+
     def test_discovery_only_check_is_lexical_and_cannot_conclude_no_conflict(self) -> None:
         with helpers.git_repo() as temp:
             repo = helpers.Path(temp)

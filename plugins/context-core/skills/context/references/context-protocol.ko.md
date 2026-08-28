@@ -28,10 +28,10 @@ recall·capture의 artifact body materialization, bounded output과 model·owner
 
 ## 대화 관찰 경계
 
-- 관리형 policy는 각 user turn의 새 의미를 같은 model response pass에서 한 번 audit한다. 이는 background daemon, 별도 model call 또는 per-turn CLI hook이 아니다. 신호가 없으면 tool call과 user-visible status가 모두 0이다.
+- 관리형 policy는 각 user turn의 새 의미를 같은 model response pass에서 한 번 audit한다. 이는 background daemon, 별도 model call 또는 per-turn CLI hook이 아니다. 신호가 없으면 tool call과 user-visible status가 모두 0이다. 행동·계약을 바꾸지 않는 기계적 편집은 AGENTS/guidance 탐색을 생략하고 `context/`를 제외한다. 요청에 path가 있으면 그 target만 확인한다. 없으면 요청의 task noun으로 conventional subtree 하나를 정하고 그곳을 한 번만 탐색한 뒤 exact file만 사용한다. `.`, `--hidden`, repository-wide glob, repository root는 쓰지 않으며 안전한 subtree를 정할 수 없으면 범위를 넓히지 말고 path를 묻는다. context tool call, `context/` artifact read와 context 언급은 모두 0이다.
 - host/model session에는 scope·anchor, 읽은 `{id,sha256}`, pending·dismissed 참조만 bounded ephemeral ledger로 둔다. 실제 artifact body와 candidate 전체를 복제하지 않으며 repository나 index에 쓰지 않는다.
-- 신호가 있을 때 Stage 1 metadata를 먼저 읽고 선택된 body만 materialize한다. body가 session context에 남아 있고 scope·evidence·anchor·index와 artifact SHA가 그대로일 때만 재사용한다.
-- conflict·rationale change 알림은 primary 결론 전, 일반 capture proposal은 성숙한 milestone 뒤다. dismissed·deferred 후보는 새 evidence가 생기기 전에는 다시 제안하지 않는다.
+- 신호가 있을 때 Stage 1 metadata를 먼저 읽고 선택된 body만 materialize한다. body가 session context에 남아 있고 scope·evidence·anchor·index와 artifact SHA가 그대로일 때만 재사용한다. 조용한 index 확인 → match의 선택 body read → 행동을 바꿀 발견의 사용자 언급 → 답이 필요할 때의 질문 순서로 필요한 단계까지만 개입한다.
+- conflict·rationale change는 primary 결론 전에 알리고 답이 올 때까지 영향받는 행동을 보류한다. keep이면 수행하지 않고 supersede면 그 명시적 선택 뒤에만 진행한다. 충족된 재평가 조건은 재평가 권한이지 구현 권한이 아니며 durable capture 승인은 별도다. 일반 capture proposal은 성숙한 milestone 뒤이며 dismissed·deferred 후보는 새 evidence 전에는 재제안하지 않는다.
 
 ## Write 경계
 

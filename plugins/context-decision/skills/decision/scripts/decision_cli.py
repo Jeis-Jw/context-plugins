@@ -56,8 +56,8 @@ RELATION_ACTIONS = {
     "new": "Ask about capture after the decision becomes explicit.",
     "same": "Cite the existing DEC without creating another one.",
     "supporting": "If the evidence is durable, consider OBS without changing the decision.",
-    "rationale_changed": "Ask whether to retain the existing rationale or create a successor DEC.",
-    "conflict": "Report the conflicting Current DEC first and ask whether to keep, revise, or supersede it.",
+    "rationale_changed": "Quote every returned non-empty actual section; hold action and ask both choices: keep = not performed; supersede only after explicit choice.",
+    "conflict": "Quote every returned non-empty actual section, including Revisit conditions; classify revisit only from user-supplied present facts, never the requested conflicting action; hold and ask both choices: keep = not performed; supersede only after explicit choice. Revisit permits reassessment, not implementation.",
 }
 REQUIRED_PLUGIN = {
     "marketplace": "context-plugins",
@@ -67,7 +67,7 @@ REQUIRED_PLUGIN = {
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
     "entrypoint": "skills/context/scripts/context_cli.py",
-    "entrypoint_sha256": "sha256:8ac5891a4e14ff30461a0c9fd8c105cda046c3e9da67993c03141d2ba137b7f3",
+    "entrypoint_sha256": "sha256:7ad7fa86eec05f6cc1f7897366b11548199cf138c4cddd877106a308c60606e3",
 }
 OBSERVED_PLUGIN_FIELDS = ("marketplace", "plugin", "source", "enabled", "protocol", "repository_state")
 PREFLIGHT_MESSAGES = {
@@ -2091,6 +2091,10 @@ def prepare_decision_check(
     current: list[dict[str, Any]] = []
     for _, reasons, row in selected:
         record = _record(repo, row)
+        sections = {name: _section_value(record["sections"], name) for name in CORE_SECTIONS}
+        revisit_conditions = _section_value(record["sections"], "Revisit conditions")
+        if revisit_conditions:
+            sections["Revisit conditions"] = revisit_conditions
         item = {
             "id": record["id"],
             "path": record["path"],
@@ -2099,7 +2103,7 @@ def prepare_decision_check(
             "summary": record["frontmatter"]["summary"],
             "scope": record["frontmatter"]["scope"],
             "decision_key": record["frontmatter"]["decision_key"],
-            "sections": {name: _section_value(record["sections"], name) for name in CORE_SECTIONS},
+            "sections": sections,
             "retrieval_reasons": reasons,
         }
         candidate_input = {"schema": "context-decision-comparison-input/v1", "proposal": proposal, "current": [*current, item]}
@@ -2140,6 +2144,19 @@ def prepare_decision_check(
     omitted_id_sample = [
         row["id"] for _, _, row in ranked if row["id"] not in selected_ids
     ][:MAX_OMITTED_ID_SAMPLE]
+    assessment_contract = {
+        "relations": list(SEMANTIC_RELATIONS),
+        "required_fields": ["relation", "related_ids", "reason"],
+        "actions": dict(RELATION_ACTIONS),
+        "rule": "Judge returned actual sections, not hashes or similarity. For rationale_changed/conflict, quote every returned non-empty actual section, hold action, and ask one explicit binary question: keep = not performed; supersede only after explicit choice. Revisit permits reassessment, not implementation; durable capture needs separate approval.",
+    }
+    if any("Revisit conditions" in item["sections"] for item in current):
+        assessment_contract["conflict_revisit"] = {
+            "required_when": "relation=conflict and a related Current DEC has non-empty Revisit conditions",
+            "required_fields": ["revisit_conditions", "revisit_assessment"],
+            "classifications": ["satisfied", "no evidence", "ambiguous"],
+            "rule": "Surface each relevant stored Revisit condition from comparison_input.sections and state the selected classification token verbatim in the user response. Do not invent evidence. Use satisfied only when user-supplied present facts directly establish it; the requested conflicting action itself is not evidence. Use no evidence when facts are absent or concern something other than the stored condition. Use ambiguous only when user-supplied condition facts are relevant but incomplete or conflicting.",
+        }
     result = {
         "schema": "context-decision-check/v1",
         "coverage": coverage,
@@ -2149,12 +2166,7 @@ def prepare_decision_check(
             "exact_slot": [{key: item[key] for key in ("id", "path", "sha256")} for item in exact],
             "scope_overlap": [{key: item[key] for key in ("id", "path", "sha256")} for item in overlap],
         },
-        "assessment_contract": {
-            "relations": list(SEMANTIC_RELATIONS),
-            "required_fields": ["relation", "related_ids", "reason"],
-            "actions": dict(RELATION_ACTIONS),
-            "rule": "Compare each Current DEC's actual Decision, Rationale, and Rejected alternatives with the proposal; sentence similarity and hashes are not semantic judgment.",
-        },
+        "assessment_contract": assessment_contract,
         "retrieval": {
             "total_current": len(current_rows),
             "metadata_matches": len(eligible),

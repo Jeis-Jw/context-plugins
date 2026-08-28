@@ -28,15 +28,15 @@ The low-level inventory preflight may report `core_missing`, `core_source_mismat
 
 ## Decision flow
 
-Core audits each conversation delta once and routes here only when a choice is forming or changing. `check` narrows candidates from index metadata and returns the selected Current DEC bodies. The agent compares the actual decision, rationale, rejected alternatives, and scope; hashes, IDs, fingerprints, and index metadata are not semantic evidence.
+Core audits each conversation delta once and routes here only when a choice is forming or changing. With known scope/key, one exact `check` narrows candidates from index metadata and returns the selected Current DEC's actual `Decision`, `Rationale`, `Rejected alternatives`, and non-empty `Revisit conditions` under `sections`. Reuse that result in the turn without another context read. Hashes, IDs, fingerprints, and index metadata are not semantic evidence.
 
 - `same`: reuse the Current DEC without duplicate capture.
 - `supporting`: keep the DEC and consider durable new evidence as OBS.
-- `rationale_changed`: report the changed rationale before the primary conclusion.
-- `conflict`: report the incompatible choices before the primary conclusion.
+- `rationale_changed`: quote every returned non-empty actual section before the primary conclusion, then hold and ask an explicit binary question: keep means the action is not performed; supersede permits it only after that explicit choice.
+- `conflict`: quote every returned non-empty actual Decision, Rationale, Rejected alternatives, and Revisit conditions section before the primary conclusion; state the selected condition token verbatim as `satisfied|no evidence|ambiguous` without inventing evidence, then hold and ask the same explicit binary question: keep means the action is not performed; supersede permits it only after that explicit choice. `satisfied` requires user-supplied present facts that directly establish the stored condition; the requested conflicting action itself is not evidence. Facts that are absent or concern something other than the stored condition mean `no evidence`; `ambiguous` requires relevant but incomplete or conflicting condition facts.
 - `new`: no related DEC was found in the returned candidate set; this is not a global proof.
 
-Only an explicit choice with canonical scope and commitment evidence may become a DEC candidate. Dismissed or deferred candidates are not proposed again without new evidence.
+Only an explicit choice with canonical scope and commitment evidence may become a DEC candidate. A satisfied revisit condition authorizes reassessment, not implementation, and durable capture still needs separate approval. Dismissed or deferred candidates are not proposed again without new evidence.
 
 ## Golden capture workflow
 

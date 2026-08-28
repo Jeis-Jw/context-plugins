@@ -1,24 +1,24 @@
 ---
 name: context
-description: Audit only the new conversation delta; recall durable context when it can change the answer and route mature candidates to their semantic owner.
+description: Audit the new conversation delta; recall only answer-changing context and route mature candidates to their semantic owner.
 ---
 
 # Context
 
-Audit the current turn's new meaning once in the same response pass. With no durable signal, continue silently: do not show audit status, call context tools, or ask a capture question. Keep only a session-local ledger of scope and anchor, Current bodies still present in context, and short pending, dismissed, or deferred references. Never persist that ledger or re-propose a candidate without new evidence.
+Audit turn delta once. No durable signal means zero context tool calls or visible audit/capture question. A behavior/contract-neutral mechanical local edit skips AGENTS/guidance discovery and excludes `context/`. Named path: inspect it only. Otherwise infer one task subtree, search once, then use the exact file. Never use `.`, `--hidden`, repo-wide globs or root; if unsafe, ask for the path instead of widening. Keep `context/` reads and context mentions at zero. Session-only ledger: scope/anchor, Current `{id,sha256}` whose actual bodies remain in context, and short pending/dismissed/deferred refs. Never persist or re-propose without new evidence.
 
 ## Active language
 
-Follow [the active-language contract](references/active-language.md). Runtime instructions are English source, not a forced response language. Use the active language for every user-facing response, question, preview, and explanatory error. Keep machine-readable surfaces in canonical English and preserve artifact prose without semantic translation.
+Follow [the active-language contract](references/active-language.md): active language for user-facing text, English for machine surfaces, and no semantic translation of artifact prose.
 
 ## Workflow
 
-1. Recall metadata only when prior context can change the judgment. Open only selected actual bodies; a healthy miss never triggers arbitrary body reads.
-2. Let the discovered semantic owner compare actual claims, sections, scope, and rationale. Hashes, IDs, and metadata are not semantic evidence. Report conflicts or rationale changes before the primary conclusion.
-3. Otherwise finish the request first and propose only mature context, once per milestone. Route through host-discovered capabilities; do not scan caches, start owner processes, or substitute runtimes.
-4. Keep the existing limits: eight candidates, 2,000-codepoint common claims, 8 KiB owner input, and a 16 KiB canonical batch envelope.
-5. Context-core validates owner results, overlays, structural profiles, lifecycle, indexes, target bytes, repository identity, CAS, lock, and atomic write before applying the frozen bundle. It remains the only physical writer.
+1. Recall metadata only if prior context can change the judgment. Escalate only as needed: silent index check; selected body reads on a real match; user mention only if a finding changes the action; question only when an answer is required. A healthy miss causes no body read.
+2. Let the semantic owner compare actual claims, sections, scope, and rationale. Hashes, IDs, and metadata are not semantic evidence. Report conflict or rationale change before the primary conclusion, then hold the affected action until the user answers: keep means it is not performed; supersede permits it only after that explicit choice. A satisfied revisit condition authorizes reassessment, not implementation; durable capture has separate approval.
+3. Finish the request first; propose mature context once per milestone. Use loaded capabilities and documented sibling entrypoints. Never scan caches, start owner processes, substitute runtimes, or read their implementation; inspect implementation source only after an unexplained interface failure.
+4. Preserve the limits: eight candidates, 2,000-codepoint common claims, 8 KiB owner input, and a 16 KiB batch envelope.
+5. Core alone writes after validating owner results, lifecycle, indexes, target bytes, repository identity, CAS, lock, and the frozen bundle.
 
-Before suggesting capture, run preview and ask once in the active language with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply; never show or request a digest, receipt path, internal ID, or core path. Approval is semantic and language-independent: only a direct, explicit, unconditional affirmative answer to that specific capture question qualifies. A generic acknowledgement, praise, condition, edit request, or topic change does not. Confirm ambiguity once in the active language. Never regenerate the candidate, timestamp, content, or plan after approval.
+Before capture, preview and ask once in the active language with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply; never expose or request its receipt path or other transport details. Only a direct, explicit, unconditional affirmative answer to that specific capture question is approval; acknowledgement, praise, a condition, edit request, or topic change is not. Confirm ambiguity once. Never regenerate after approval.
 
-Audit, recall, route, claim, draft, validation, preview, and a denied apply change no repository or host-policy bytes.
+Audit, recall, routing, claiming, drafting, validation, preview, and denied apply change no repository or host-policy bytes.

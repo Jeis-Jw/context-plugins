@@ -28,7 +28,7 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ### W1 — lower prompt and recall overhead
 
-- Codex default-prompt material was reduced from 3,147 to 1,331 characters, a 57.7% character reduction. This is not a token-savings measurement.
+- Codex default-prompt material was reduced from 3,147 to 1,333 characters, a 57.6% character reduction. This is not a token-savings measurement.
 - The DEC golden path now builds one inline preview and stores the frozen bundle in a transient, mode-`0600` receipt outside the repository.
 - Healthy metadata misses open zero indexed artifact bodies; stale or missing index recovery opens at most 20 bodies per recall.
 

@@ -1,34 +1,41 @@
 ---
 name: decision
-description: When the incremental audit detects a forming or changing choice, compare Current DEC bodies and prepare only explicit approved choices.
+description: On a choice signal, compare Current DEC bodies and prepare only explicit approved choices.
 ---
 
 # Decision
 
-Use this semantic owner only with a separately installed context-core. It does not audit the whole conversation again and never writes repository bytes. Read-only operations need no host inventory. Canonical init and capture verify the release-pinned core executable and handshake its schema and doctor directly; low-level calls retain caller inventory arguments only for compatibility.
+Use only with installed context-core. This owner neither re-audits nor writes; core alone writes. Read-only commands need no host inventory. Canonical init/capture verify pinned core and perform their own schema/doctor handshake; caller inventory arguments are low-level compatibility only.
 
-1. Run only when core's incremental audit detects a choice forming or changing. Reuse a Current `{id,sha256}` only while the same scope, anchor, and actual body remain in session context. Otherwise run `check --statement ...`; its result is `coverage:discovery_only` until exact `--scope` and `--decision-key` are known. Never infer global absence of conflict from discovery-only, and repeat the exact-slot check before preview.
-2. Compare actual Decision, Rationale, and Rejected alternatives. Classify `new|same|supporting|rationale_changed|conflict`; sentence similarity, hashes, IDs, and metadata are not semantic evidence.
-3. Reuse `same` silently. Keep the DEC for `supporting` and consider durable new evidence as OBS. Report `rationale_changed|conflict` before the primary conclusion and ask whether to keep or supersede. `new` applies only to the returned set.
-4. Claim only a caller-provided explicit choice that governs present or future action and has canonical scope plus commitment evidence. Never invent meaning or evidence. Finish the user's request before one grouped mature proposal. Do not re-propose dismissed or deferred candidates without new evidence.
-5. For a normal capture, call sibling `scripts/decision_workflow.py preview --inline`. Supply semantic fields and all three `--attest-*` judgments. Candidate ID and `captured_from:conversation` are automatic; the CLI invents no semantic field, evidence, or judgment.
-6. Use the loaded core skill's sibling `scripts/context_cli.py` for `--core-cli`. Canonical preview creates one private frozen receipt below `tempdir/context-decision`; never expose its path, candidate ID, or digest.
-7. Before suggesting capture, run preview and ask once in the active language with the complete rendered body. Retain preview stdout's `approval_digest` in session-local agent state; never show or request it, a receipt path, internal ID, or core path. Approval is semantic and language-independent: only a direct, explicit, unconditional affirmative answer to that specific capture question qualifies. A generic acknowledgement, praise, condition, edit request, or topic change does not. Confirm ambiguity once in the active language. Apply the unchanged digest and never regenerate the capture, IDs, timestamps, plan, or content after approval.
-8. For a changed slot, use `preview --supersede <current-id>`. Use `preview --withdraw <current-id> --reason <text>` to retire without a successor. History remains `do_not_follow`.
-9. Use locator-free `reject --core-cli ...` to discard the current pending receipt without repository writes. Explicit receipt controls remain low-level compatibility surfaces, not canonical user inputs.
-10. Use low-level `batch validate` for ordered prior-bundle composition. Core alone owns the complete final bundle, index rebuild, approval-binding gate, CAS and lock, and physical write.
-11. Use `spec-view --scope ...` for a read-only projection of actual Decision and Rationale sections from exact, ancestor, and descendant Current DEC entries. Exclude History and `do_not_follow`.
+## Recall and decide
 
-Follow context-core's active-language contract. An explicit user language choice wins; otherwise use the host's preferred response language or applicable system instruction, then the established conversation language, then English. OS locale is not authoritative. Code, identifiers, filenames, quotations, and an isolated foreign term do not switch language. Use the active language for every user-facing response, question, preview, and explanatory error. Keep schema IDs, JSON keys, commands, options, error codes, filenames, and metadata in English. Preserve artifact prose without semantic translation.
+1. Run only on core's choice signal. Reuse Current `{id,sha256}` only while its scope, anchor, and actual body remain in context. When exact `--scope` and `--decision-key` are known, run one exact-slot `decision_cli.py check`; use discovery only when either value is unknown. `coverage:discovery_only` cannot prove global absence, so check the exact slot before preview.
+2. Reuse sections returned by `check` in the same turn; do not call `read`, `spec-view`, or another context read unless a section is absent or the body changed. Compare actual `Decision`, `Rationale`, `Rejected alternatives`, and non-empty `Revisit conditions`. Classify `new|same|supporting|rationale_changed|conflict`; similarity, hashes, IDs, and metadata are not evidence.
+3. Reuse `same` silently; for `supporting`, keep the DEC and consider durable new evidence as OBS. Before the primary conclusion, report `rationale_changed|conflict` by quoting every returned non-empty actual section: Decision, Rationale, Rejected alternatives, and Revisit conditions. State the selected revisit token verbatim as `satisfied|no evidence|ambiguous` without invention. `satisfied` needs facts establishing the condition; the requested conflicting action is not evidence. `no evidence`: no facts or facts about another concern; `ambiguous`: relevant facts incomplete/conflicting.
+4. Hold the affected action: make no code, file, or command change that performs or advances it until the user answers. Ask one explicit binary question offering both choices. Keep means the action is not performed; supersede permits it only after that explicit choice. A satisfied revisit authorizes reassessment, not implementation; durable capture requires separate approval. `new` covers returned results only.
+5. Claim only a caller-provided explicit choice governing action, with canonical scope and commitment evidence. Finish the request before one grouped mature proposal; re-propose dismissed/deferred candidates only with new evidence.
+
+## Capture
+
+For normal capture, call sibling `scripts/decision_workflow.py preview --inline` with semantic fields and three `--attest-*` judgments. Candidate ID and `captured_from:conversation` are automatic. Use loaded core's sibling `scripts/context_cli.py`; never scan caches. Do not pre-run host inventory or core doctor: preview handshakes them. Call documented entrypoints; inspect script source only after an unexplained interface failure.
+
+Preview creates one private frozen receipt. Ask once in the active language with the complete rendered body. Keep preview stdout's `approval_digest` in session and pass it unchanged; never expose or request the digest, receipt path, internal ID, core path, or other transport details. Approval is semantic and language-independent: only a direct, explicit, unconditional affirmative to that specific capture question qualifies. Acknowledgement, praise, a condition, edit request, or topic change does not. Confirm ambiguity once; never regenerate after approval.
+
+Replace with `preview --supersede <current-id>`, retire with `preview --withdraw <current-id> --reason <text>`, and discard with locator-free `reject --core-cli ...`. History stays `do_not_follow`. `batch validate` composes prior bundles; Core alone owns final validation and writes. Use `spec-view --scope ...` only for a requested Decision/Rationale projection.
+
+Follow core's active-language contract: active language for user text, English for machine surfaces, and no semantic translation of artifact prose.
 
 ```bash
+python3 /loaded/context-decision/skills/decision/scripts/decision_cli.py check \
+  --statement '<forming or changing choice>' \
+  --scope '<scope>' --decision-key '<key>' --json
+
 python3 /loaded/context-decision/skills/decision/scripts/decision_workflow.py preview \
   --host <codex|claude-code> \
   --core-cli /loaded/context-core/skills/context/scripts/context_cli.py \
   --inline \
   --title '<title>' --summary '<summary>' --scope '<scope>' \
-  --decision-key '<key>' \
-  --commitment-evidence '<caller-provided evidence>' \
+  --decision-key '<key>' --commitment-evidence '<evidence>' \
   --sec-decision '<decision>' --sec-rationale '<rationale>' \
   --sec-alternatives '<rejected alternative>' \
   --attest-explicit-choice --attest-scope-identified --attest-commitment-present \
@@ -36,8 +43,7 @@ python3 /loaded/context-decision/skills/decision/scripts/decision_workflow.py pr
 
 python3 /loaded/context-decision/skills/decision/scripts/decision_workflow.py apply \
   --core-cli /loaded/context-core/skills/context/scripts/context_cli.py \
-  --approved-digest '<agent-retained preview stdout result.approval_digest>' \
-  --json
+  --approved-digest '<agent-retained preview stdout result.approval_digest>' --json
 ```
 
-Inline `--sec-*` values are literal by default. `@file` reads one named regular UTF-8 file and `@@literal` preserves one leading `@`. Missing, symlinked, or oversized files fail before receipt or repository writes. Limits are 1,200 codepoints for the DEC decision, 2,000 for a common primary claim, 8 KiB for canonical owner input, and 16 KiB for the full candidate envelope.
+Inline `--sec-*` is literal; `@file` reads UTF-8 and `@@literal` preserves `@`. Invalid or oversized files fail before writes. Limits: decision 1,200 codepoints, claim 2,000, input 8 KiB, envelope 16 KiB.

@@ -375,6 +375,7 @@ class PluginContractTests(unittest.TestCase):
     def test_public_skill_documents_preflight_and_two_phase_capture(self) -> None:
         decision = (ROOT / "plugins/context-decision/skills/decision/SKILL.md").read_text(encoding="utf-8")
         decision_ko = (ROOT / "plugins/context-decision/skills/decision/SKILL.ko.md").read_text(encoding="utf-8")
+        decision_policy = (ROOT / "plugins/context-decision/rules/decision-policy.md").read_text(encoding="utf-8")
         init = (ROOT / "plugins/context-decision/skills/init/SKILL.md").read_text(encoding="utf-8")
         protocol = (ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.md").read_text(encoding="utf-8")
         combined = "\n".join((decision, init, protocol))
@@ -423,6 +424,35 @@ class PluginContractTests(unittest.TestCase):
             self.assertIn("--supersede", skill)
             self.assertIn("--withdraw", skill)
             self.assertIn("reject --core-cli", skill)
+        for public_contract in (decision_policy, decision, decision_ko):
+            for marker in ("Revisit conditions", "satisfied", "no evidence", "ambiguous", "conflict"):
+                self.assertIn(marker, public_contract)
+        for public_contract in (decision_policy, decision):
+            self.assertIn("verbatim", public_contract)
+        self.assertIn("user response에 그대로", decision_ko)
+        for contract in (
+            "When exact `--scope` and `--decision-key` are known, run one exact-slot `decision_cli.py check`",
+            "Reuse sections returned by `check` in the same turn",
+            "do not call `read`, `spec-view`, or another context read",
+            "Do not pre-run host inventory or core doctor",
+            "inspect script source only after an unexplained interface failure",
+            "never expose or request",
+            "Keep means the action is not performed",
+        ):
+            self.assertIn(contract, decision)
+        for contract in (
+            "정확한 `--scope`와 `--decision-key`를 알면 exact-slot `decision_cli.py check`를 한 번만 실행한다",
+            "같은 턴에서는 `check`가 반환한 section을 재사용한다",
+            "다른 context read를 다시 호출하지 않는다",
+            "Host inventory나 core doctor를 미리 실행하지 않는다",
+            "설명되지 않는 interface failure 뒤에만 script source를 읽는다",
+            "transport detail은 노출하거나 요구하지 않는다",
+            "keep이면 수행하지 않고 supersede면 그 명시적 선택 뒤에만 진행한다",
+        ):
+            self.assertIn(contract, decision_ko)
+        self.assertLessEqual(len(decision.encode("utf-8")), 5200)
+        self.assertLessEqual(len(decision_ko.encode("utf-8")), 6200)
+        self.assertLessEqual(len(decision_policy.encode("utf-8")), 2050)
         self.assertTrue(WORKFLOW_PATH.is_file())
 
 

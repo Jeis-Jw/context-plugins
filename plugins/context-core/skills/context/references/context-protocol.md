@@ -35,10 +35,10 @@ The managed policy requires one audit per conversation delta, silence when there
 
 ## Conversation boundary
 
-- Audit only the new user-turn meaning in the same response pass; it is not a background daemon, extra model call, or per-turn CLI hook.
+- Audit only the new user-turn meaning in the same response pass; it is not a background daemon, extra model call, or per-turn CLI hook. For a behavior/contract-neutral mechanical edit, skip AGENTS/guidance discovery and exclude `context/`. Inspect a named path only. Without one, infer one conventional task subtree from the request and search it once, then use the exact file. Never use `.`, `--hidden`, repository-wide globs, or the repository root; if no safe subtree follows from the request, ask for the path instead of widening. Keep context tool calls, `context/` artifact reads, and context mentions at zero.
 - Keep only scope/anchor, already read `{id,sha256}`, and pending/dismissed references in a bounded session-local ledger. Do not copy bodies or candidates into repository state.
-- Recall metadata first and materialize selected bodies only. Reuse a body only while scope, evidence, anchor, indexes, SHA, and its session presence remain unchanged.
-- Report conflict or rationale change before the primary conclusion. Propose ordinary capture only after a mature milestone, and do not repeat dismissed/deferred candidates without new evidence.
+- Recall metadata first and materialize selected bodies only. Reuse a body only while scope, evidence, anchor, indexes, SHA, and its session presence remain unchanged. Escalate only through the needed steps: silent index check, selected body read on a match, user mention for an action-changing finding, then a question only when an answer is required.
+- Report conflict or rationale change before the primary conclusion, then hold the affected action until the user answers: keep means it is not performed; supersede permits it only after that explicit choice. A satisfied revisit condition authorizes reassessment, not implementation, and durable capture has separate approval. Propose ordinary capture only after a mature milestone, and do not repeat dismissed/deferred candidates without new evidence.
 
 ## Write and approval boundary
 

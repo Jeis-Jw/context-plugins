@@ -109,6 +109,44 @@ class PluginContractTests(unittest.TestCase):
         ):
             self.assertIn(contract, protocol)
 
+    def test_runtime_skills_keep_the_zero_path_and_bounded_prompt_surface(self) -> None:
+        skill = (PLUGIN / "skills/context/SKILL.md").read_text(encoding="utf-8")
+        skill_ko = (PLUGIN / "skills/context/SKILL.ko.md").read_text(encoding="utf-8")
+        for contract in (
+            "No durable signal means zero context tool calls",
+            "skips AGENTS/guidance discovery",
+            "excludes `context/`",
+            "Named path",
+            "infer one task subtree",
+            "search once, then use the exact file",
+            "Never use `.`, `--hidden`, repo-wide globs or root",
+            "ask for the path instead of widening",
+            "`context/` reads",
+            "Session-only ledger",
+            "actual bodies remain in context",
+            "silent index check",
+            "inspect implementation source only after an unexplained interface failure",
+            "routing, claiming, drafting, validation",
+        ):
+            self.assertIn(contract, skill)
+        for contract in (
+            "context tool call 0",
+            "`context/` artifact read 0",
+            "AGENTS/guidance 탐색을 생략",
+            "요청에 path가 있으면 그 target만 확인한다",
+            "요청의 task noun으로 subtree 하나",
+            "정해 한 번만 탐색",
+            "`--hidden`",
+            "범위를 넓히지 말고 path를 묻는다",
+            "exact file만 쓴다",
+            "repository root는 쓰지 않는다",
+            "조용한 index 확인",
+            "설명되지 않는 interface failure 뒤에만 구현을 읽는다",
+        ):
+            self.assertIn(contract, skill_ko)
+        self.assertLessEqual(len(skill.encode("utf-8")), 3000)
+        self.assertLessEqual(len(skill_ko.encode("utf-8")), 3000)
+
     def test_explicit_init_installs_active_host_policy_and_preserves_external_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)

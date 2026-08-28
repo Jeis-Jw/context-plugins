@@ -202,7 +202,7 @@ The earlier `context-core@jeis-ai-plugins` coordinate is a separate distribution
 | Codex + Claude Code | All four plugins installed and loaded | ASM/TERM remain optional experimental surfaces |
 | Actual model behavior | Unverified | No confirmed no-signal rate, capture quality, task outcome, retained use, or end-to-end token measurement |
 
-Codex prompt material was reduced from 3,147 to 1,331 characters, a 57.7% character reduction. This is not a token-savings claim.
+Codex prompt material was reduced from 3,147 to 1,333 characters, a 57.6% character reduction. This is not a token-savings claim.
 
 Prepared manifests, local catalogs, tests, source on `main`, or an installer dry run are not evidence of a `v0.7.0` tag, GitHub Release, marketplace publication, or real-user adoption. Those remain separate publication and value gates.
 
