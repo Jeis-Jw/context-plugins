@@ -356,7 +356,7 @@ class AssumptionSecurityRegressionTests(unittest.TestCase):
                 "root": "context/",
                 "issues": [],
                 "warnings": [],
-                "plugin_version": "0.7.0",
+                "plugin_version": "0.7.1",
                 "entrypoint": str(helpers.CORE_CLI_PATH.resolve()),
                 "protocol": "context-common/v2",
             }

@@ -51,4 +51,4 @@ python3 skills/assumption/scripts/assumption_cli.py search \
 
 runtime 응답, 질문, preview와 설명형 안내는 active language를 따릅니다. schema ID, JSON key, CLI option, error code, filename과 metadata field는 영어로 유지합니다.
 
-`0.7.0`에서 ASM은 `core-decision` 설치 profile 밖의 optional semantic-owner package입니다. `v0.7.0` tag와 marketplace publication은 아직 완료되지 않았습니다.
+`0.7.1`에서 ASM은 `core-decision` 설치 profile 밖의 optional semantic-owner package입니다. `v0.7.1` tag와 marketplace publication은 아직 완료되지 않았습니다.

@@ -1,6 +1,6 @@
 # Release notes
 
-## 0.7.0 (developer preview; tag not published)
+## 0.7.1 (developer preview; tag not published)
 
 - Canonical runtime instructions, managed policies, manifests, and default prompts are authored in English. User-facing prose follows the explicit user language, host preference, established conversation language, then English fallback.
 - New durable artifacts use canonical English section headings while legacy Korean-heading artifacts remain readable and preserve their original headings on round-trip updates.
@@ -54,4 +54,4 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ## Release boundary
 
-This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.7.0` remain owner-gated.
+This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.7.1` remain owner-gated.

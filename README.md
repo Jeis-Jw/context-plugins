@@ -4,7 +4,7 @@
 
 Context Plugins gives coding agents durable, repository-owned project memory without silently turning every conversation into permanent state. The supported profile combines `context-core`, which recalls and safely writes Git/Markdown context, with `context-decision`, which preserves decisions, rationale, and rejected alternatives across sessions. The agent proposes only context worth keeping, shows the complete preview, and writes only after direct user approval.
 
-> **Developer preview:** version `0.7.0` is prepared on `main`. The `v0.7.0` tag has not been created or pushed, and marketplace publication is also pending. The installation commands below intentionally target that immutable tag and will work only after it is published. Source availability, tests, and host lifecycle checks do not imply a tag, GitHub Release, marketplace publication, or retained user value.
+> **Developer preview:** version `0.7.1` is prepared on `main`. The `v0.7.1` tag has not been created or pushed, and marketplace publication is also pending. The installation commands below intentionally target that immutable tag and will work only after it is published. Source availability, tests, and host lifecycle checks do not imply a tag, GitHub Release, marketplace publication, or retained user value.
 
 ## Why Context Plugins?
 
@@ -35,7 +35,7 @@ There is no bundle or meta-plugin. Core and decision remain separate packages, a
 | Repository | A Git repository on macOS or Linux; the write coordinator uses POSIX `fcntl` locking |
 | Codex | Plugin marketplace CLI; fresh install and cache lifecycle verified on `0.149.0-alpha.4.1` |
 | Claude Code | Plugin marketplace CLI; fresh install and cache lifecycle verified on `2.1.89`; runtime UX remains experimental |
-| Supported profile | `context-core@context-plugins` + `context-decision@context-plugins`, both version `0.7.0` |
+| Supported profile | `context-core@context-plugins` + `context-decision@context-plugins`, both version `0.7.1` |
 | Optional surface | `context-assumption` and `context-term` are installable but experimental |
 | Language | English is the canonical runtime and documentation language. User-facing responses follow an explicit user choice, then the host's preferred response language, then the established conversation language; unresolved cases fall back to English. Identifiers and machine-readable fields remain English. |
 
@@ -46,8 +46,8 @@ Windows is not currently supported. Exact versions above are evidence snapshots,
 The supported path starts from one clean, immutable release checkout:
 
 ```bash
-git clone --branch v0.7.0 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.7.0
-cd context-plugins-v0.7.0
+git clone --branch v0.7.1 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.7.1
+cd context-plugins-v0.7.1
 ```
 
 ### Codex
@@ -204,7 +204,7 @@ The earlier `context-core@jeis-ai-plugins` coordinate is a separate distribution
 
 Codex prompt material was reduced from 3,147 to 1,333 characters, a 57.6% character reduction. This is not a token-savings claim.
 
-Prepared manifests, local catalogs, tests, source on `main`, or an installer dry run are not evidence of a `v0.7.0` tag, GitHub Release, marketplace publication, or real-user adoption. Those remain separate publication and value gates.
+Prepared manifests, local catalogs, tests, source on `main`, or an installer dry run are not evidence of a `v0.7.1` tag, GitHub Release, marketplace publication, or real-user adoption. Those remain separate publication and value gates.
 
 ## License
 

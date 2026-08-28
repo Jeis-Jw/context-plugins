@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PHASE0 = ROOT / "tests/context-v1/phase0/phase0_contract.py"
 PLUGIN_NAMES = ("context-core", "context-decision", "context-assumption", "context-term")
-RELEASE_VERSION = "0.7.0"
+RELEASE_VERSION = "0.7.1"
 OWNER_SKILLS = {
     "context-core": "context",
     "context-decision": "decision",
@@ -359,8 +359,8 @@ class DistributionProofTests(unittest.TestCase):
             "Apache License 2.0",
         ):
             self.assertIn(token, readme)
-        self.assertIn("v0.7.0", readme)
-        self.assertIn("--branch v0.7.0", readme)
+        self.assertIn("v0.7.1", readme)
+        self.assertIn("--branch v0.7.1", readme)
         self.assertIn("scripts/install_profile.py --host codex", readme)
         self.assertIn("scripts/install_profile.py --host claude-code --scope user", readme)
         self.assertNotIn("--ref main", readme)
@@ -645,8 +645,8 @@ class DistributionProofTests(unittest.TestCase):
         )
         for token in ("complete preview", "직접적·명시적·무조건적", "`알겠어`", "context-common/v2"):
             self.assertIn(token, korean_readme)
-        self.assertIn("`0.7.0`은 `main`에 준비되어 있지만", korean_readme)
-        self.assertIn("`v0.7.0` tag는 아직 생성·push되지 않았습니다", korean_readme)
+        self.assertIn("`0.7.1`은 `main`에 준비되어 있지만", korean_readme)
+        self.assertIn("`v0.7.1` tag는 아직 생성·push되지 않았습니다", korean_readme)
         self.assertIn("독립 package", korean_readme)
         self.assertIn("scripts/install_profile.py --host codex", korean_readme)
         self.assertNotIn("tag와 release commit은 아직 생성·push되지 않았", korean_readme)

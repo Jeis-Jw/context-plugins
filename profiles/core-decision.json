@@ -1,7 +1,7 @@
 {
   "schema": "context-plugin-profile/v1",
   "name": "core-decision",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "marketplace": "context-plugins",
   "plugins": [
     "context-core@context-plugins",

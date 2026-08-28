@@ -4,7 +4,7 @@
 
 Context Plugins는 모든 대화를 몰래 영구 상태로 만들지 않으면서 coding agent에 repository 소유의 durable project context를 제공합니다. 지원 profile은 Git/Markdown context를 회수하고 안전하게 기록하는 `context-core`와, 세션이 바뀌어도 결정·취지·반려대안을 보존하는 `context-decision`을 함께 사용합니다. Agent는 오래 남길 가치가 있는 맥락만 제안하고 complete preview를 보여준 뒤 사용자가 직접 승인한 경우에만 기록합니다.
 
-> **Developer preview:** `0.7.0`은 `main`에 준비되어 있지만 `v0.7.0` tag는 아직 생성·push되지 않았습니다. Marketplace publication도 미완료입니다. 아래 설치 명령은 의도적으로 immutable tag를 사용하며 tag가 공개된 뒤에만 동작합니다. Source 공개, test, host lifecycle 검증은 tag, GitHub Release, marketplace publication 또는 지속 사용 가치의 증거가 아닙니다.
+> **Developer preview:** `0.7.1`은 `main`에 준비되어 있지만 `v0.7.1` tag는 아직 생성·push되지 않았습니다. Marketplace publication도 미완료입니다. 아래 설치 명령은 의도적으로 immutable tag를 사용하며 tag가 공개된 뒤에만 동작합니다. Source 공개, test, host lifecycle 검증은 tag, GitHub Release, marketplace publication 또는 지속 사용 가치의 증거가 아닙니다.
 
 ## 왜 필요한가요?
 
@@ -35,7 +35,7 @@ Bundle이나 meta-plugin은 없습니다. Core와 decision은 독립 package이�
 | Repository | macOS 또는 Linux의 Git repository. Write coordinator가 POSIX `fcntl` lock 사용 |
 | Codex | Plugin marketplace CLI. `0.149.0-alpha.4.1`에서 fresh install/cache lifecycle 확인 |
 | Claude Code | Plugin marketplace CLI. `2.1.89`에서 fresh install/cache lifecycle 확인, runtime UX는 experimental |
-| 지원 profile | `context-core@context-plugins` + `context-decision@context-plugins`, 모두 `0.7.0` |
+| 지원 profile | `context-core@context-plugins` + `context-decision@context-plugins`, 모두 `0.7.1` |
 | 선택 기능 | `context-assumption`, `context-term`은 설치 가능하지만 experimental |
 | 언어 | Runtime과 문서의 canonical source는 영어입니다. 사용자 응답은 명시적 언어 선택, host의 preferred response language, 기존 대화 언어 순으로 따르고 판별할 수 없으면 영어를 사용합니다. 식별자와 machine-readable field는 영어로 유지합니다. |
 
@@ -46,8 +46,8 @@ Windows는 현재 지원하지 않습니다. 위 host version은 검증 당시�
 지원 경로는 clean immutable release checkout 하나에서 시작합니다.
 
 ```bash
-git clone --branch v0.7.0 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.7.0
-cd context-plugins-v0.7.0
+git clone --branch v0.7.1 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.7.1
+cd context-plugins-v0.7.1
 ```
 
 ### Codex
@@ -204,7 +204,7 @@ Host uninstall은 대상 repository를 변경하지 않습니다. 기존 `contex
 
 Codex prompt material은 3,147자에서 1,333자로 57.6% 감소했습니다. 문자 수 측정이며 token 절감률 주장이 아닙니다.
 
-준비된 manifest, local catalog, test, `main`의 source 또는 installer dry run은 `v0.7.0` tag, GitHub Release, marketplace publication이나 실제 사용자 채택의 증거가 아닙니다. Publication과 가치증명은 별도 gate로 남아 있습니다.
+준비된 manifest, local catalog, test, `main`의 source 또는 installer dry run은 `v0.7.1` tag, GitHub Release, marketplace publication이나 실제 사용자 채택의 증거가 아닙니다. Publication과 가치증명은 별도 gate로 남아 있습니다.
 
 ## 라이선스
 
