@@ -34,7 +34,7 @@ TERM CLI는 artifact draft, lifecycle owner result와 `context-owner-validation-
 
 `batch validate`는 live Current source와 index를 다시 읽고 candidate·attestation·mutation request에서 transition을 재생성합니다. exact owner result가 일치할 때만 receipt를 발급하며 source path에는 canonical `context/term` containment와 symlink-free component가 필요합니다.
 
-명시적 `$context-term:init`은 release pin과 entrypoint suffix·SHA-256이 일치하는 absolute core CLI만 사용합니다. core schema, protocol, 필수 command, `context-owner-descriptor/v2`, doctor state를 직접 확인한 뒤 descriptor와 seed를 core bootstrap에 전달합니다. marketplace provenance나 설치 scope를 attestation하지 않으며 plugin install, update, downgrade, migration을 자동 수행하지 않습니다.
+명시적 `$context-term:init`은 expected entrypoint suffix, 인접한 Claude/Codex manifest의 name·version, 같은 major를 만족하는 absolute core CLI만 사용합니다. 실제 entrypoint SHA-256을 계산해 operation 동안 고정하고 core schema, protocol, 필수 command, `context-owner-descriptor/v2`, doctor state를 직접 확인한 뒤 descriptor와 seed를 core bootstrap에 전달합니다. marketplace provenance나 설치 scope를 attestation하지 않으며 plugin install, update, downgrade, migration을 자동 수행하지 않습니다.
 
 common primary claim과 TERM `definition`은 2,000 codepoint입니다. candidate와 batch envelope는 canonical UTF-8 16 KiB, owner input은 8 KiB, public output은 32 KiB입니다. lifecycle timestamp는 source `created_at`보다 빠를 수 없습니다. 일반 operation은 exact `repository_state=ready`에서만 동작하고 명시적 init은 `partial`만 수리할 수 있으며 `invalid`는 항상 fail-closed입니다.
 
@@ -52,4 +52,4 @@ python3 skills/term/scripts/term_cli.py search \
 
 runtime 응답, 질문, preview와 설명형 안내는 active language를 따릅니다. schema ID, JSON key, CLI option, error code, filename과 metadata field는 영어로 유지합니다.
 
-`0.7.1`에서 TERM은 `core-decision` 설치 profile 밖의 optional semantic-owner package입니다. `v0.7.1` tag와 marketplace publication은 아직 완료되지 않았습니다.
+`0.8.0`에서 TERM은 `core-decision` 설치 profile 밖의 optional semantic-owner package이며 same-major core 호환성을 사용합니다. `v0.8.0` tag와 marketplace publication은 아직 완료되지 않았습니다.

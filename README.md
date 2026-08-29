@@ -4,7 +4,7 @@
 
 Context Plugins gives coding agents durable, repository-owned project memory without silently turning every conversation into permanent state. The supported profile combines `context-core`, which recalls and safely writes Git/Markdown context, with `context-decision`, which preserves decisions, rationale, and rejected alternatives across sessions. The agent proposes only context worth keeping, shows the complete preview, and writes only after direct user approval.
 
-> **Developer preview:** version `0.7.1` is prepared on `main`. The `v0.7.1` tag has not been created or pushed, and marketplace publication is also pending. The installation commands below intentionally target that immutable tag and will work only after it is published. Source availability, tests, and host lifecycle checks do not imply a tag, GitHub Release, marketplace publication, or retained user value.
+> **Developer preview:** version `0.8.0` is prepared on `main`. The `v0.8.0` tag has not been created or pushed, and marketplace publication is also pending. The installation commands below intentionally target that immutable tag and will work only after it is published. Source availability, tests, and host lifecycle checks do not imply a tag, GitHub Release, marketplace publication, or retained user value.
 
 ## Why Context Plugins?
 
@@ -25,7 +25,7 @@ Context Plugins stores selected project context, not transcripts. It first narro
 | `context-assumption` | `ASM` records for explicitly unverified premises and their confirm/refute lifecycle | Optional, experimental |
 | `context-term` | `TERM` records for project-specific canonical definitions and aliases | Optional, experimental |
 
-There is no bundle or meta-plugin. Core and decision remain separate packages, and no plugin installs, enables, updates, or initializes another plugin implicitly. Install core and every semantic addon from the same immutable checkout; mixed or partial updates fail closed with `core_surface_mismatch`.
+There is no bundle or meta-plugin. Core and decision remain separate packages, and no plugin installs, enables, updates, or initializes another plugin implicitly. Package-version compatibility is major-based: an enabled addon may use an enabled core with the same major version, while the runtime protocol, capability, command, and doctor handshakes remain the authoritative compatibility check.
 
 ## Requirements and support
 
@@ -35,19 +35,21 @@ There is no bundle or meta-plugin. Core and decision remain separate packages, a
 | Repository | A Git repository on macOS or Linux; the write coordinator uses POSIX `fcntl` locking |
 | Codex | Plugin marketplace CLI; fresh install and cache lifecycle verified on `0.149.0-alpha.4.1` |
 | Claude Code | Plugin marketplace CLI; fresh install and cache lifecycle verified on `2.1.89`; runtime UX remains experimental |
-| Supported profile | `context-core@context-plugins` + `context-decision@context-plugins`, both version `0.7.1` |
+| Supported profile | `context-core@context-plugins` + `context-decision@context-plugins`; current release `0.8.0`, compatible across the same major |
 | Optional surface | `context-assumption` and `context-term` are installable but experimental |
 | Language | English is the canonical runtime and documentation language. User-facing responses follow an explicit user choice, then the host's preferred response language, then the established conversation language; unresolved cases fall back to English. Identifiers and machine-readable fields remain English. |
 
 Windows is not currently supported. Exact versions above are evidence snapshots, not permanent minimum or compatibility guarantees.
+
+Package versions use three roles: a **major** change marks a compatibility boundary, a **minor** change adds or changes functionality, and a **patch** change contains small fixes. This rule also applies before `1.0`: every `0.*` package is version-compatible at the package gate. A same-major version is not trusted by version alone; incompatible protocol, capability, command, manifest, or doctor surfaces still fail closed at runtime.
 
 ## Install
 
 The supported path starts from one clean, immutable release checkout:
 
 ```bash
-git clone --branch v0.7.1 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.7.1
-cd context-plugins-v0.7.1
+git clone --branch v0.8.0 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.8.0
+cd context-plugins-v0.8.0
 ```
 
 ### Codex
@@ -64,7 +66,7 @@ Choose the installation scope explicitly. The examples in this guide use user sc
 python3 scripts/install_profile.py --host claude-code --scope user
 ```
 
-The installer validates release parity, registers this checkout as the `context-plugins` marketplace if needed, and installs core before decision. It stops on legacy-provider, mixed-version, disabled-plugin, or marketplace-path conflicts. It does not migrate existing context or automatically roll back a partially completed host installation.
+The installer validates each package against both host manifests and catalogs, registers this checkout as the `context-plugins` marketplace if needed, and installs only missing profile plugins in core-before-decision order. An enabled same-major installation is accepted without an update. A disabled plugin, different major, legacy provider, or marketplace-path conflict stops before mutation. The installer does not initialize or migrate repository context, update already compatible plugins, or automatically roll back a partially completed host installation.
 
 Reload the host or start a new session after installation.
 
@@ -202,9 +204,9 @@ The earlier `context-core@jeis-ai-plugins` coordinate is a separate distribution
 | Codex + Claude Code | All four plugins installed and loaded | ASM/TERM remain optional experimental surfaces |
 | Actual model behavior | Unverified | No confirmed no-signal rate, capture quality, task outcome, retained use, or end-to-end token measurement |
 
-Codex prompt material was reduced from 3,147 to 1,333 characters, a 57.6% character reduction. This is not a token-savings claim.
+Codex prompt material was reduced from 3,147 to 1,339 characters, a 57.5% character reduction. This is not a token-savings claim.
 
-Prepared manifests, local catalogs, tests, source on `main`, or an installer dry run are not evidence of a `v0.7.1` tag, GitHub Release, marketplace publication, or real-user adoption. Those remain separate publication and value gates.
+Prepared manifests, local catalogs, tests, source on `main`, or an installer dry run are not evidence of a `v0.8.0` tag, GitHub Release, marketplace publication, or real-user adoption. Those remain separate publication and value gates.
 
 ## License
 

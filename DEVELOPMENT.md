@@ -38,20 +38,21 @@ PYTHONPATH=tests/context-v1/phase0 python3 -m pytest -q tests/context-v1/phase0
 
 ### Core+decision profile installer
 
-`profiles/core-decision.json`은 core와 decision을 같은 release로 설치하는 배포 profile이며 두 plugin package나 semantic ownership을 합치지 않습니다. `scripts/install_profile.py`는 사용자가 immutable release checkout에서 명시적으로 실행할 때만 host marketplace와 두 plugin 설치 명령을 순서대로 호출합니다. Plugin runtime에서는 host inventory 탐색이나 install/enable/update를 수행하지 않습니다.
+`profiles/core-decision.json`은 core와 decision의 설치 좌표와 compatible major를 선언하는 배포 profile이며 두 plugin package나 semantic ownership을 합치지 않습니다. `scripts/install_profile.py`는 사용자가 immutable release checkout에서 명시적으로 실행할 때만 host marketplace를 등록하고 빠진 plugin 설치 명령만 순서대로 호출합니다. 이미 활성화된 같은-major plugin은 update하지 않습니다. Plugin runtime에서는 host inventory 탐색이나 install/enable/update를 수행하지 않습니다.
 
-Release tag 전 local 검증에만 `--allow-unreleased-checkout --dry-run`을 사용할 수 있습니다. 실제 설치는 clean checkout의 exact `v<version>` tag를 요구하며, old provider·다른 checkout·mixed version은 자동 정리하지 않고 중단합니다.
+Release tag 전 local 검증에만 `--allow-unreleased-checkout --dry-run`을 사용할 수 있습니다. 실제 설치는 clean checkout의 exact `v<profile-version>` tag를 요구하며, old provider·다른 checkout·disabled plugin·different major는 자동 정리하지 않고 중단합니다.
 
-### Exact core pin 갱신
+### Core compatibility boundary
 
-semantic plugin은 임의의 `--core-cli`를 실행하지 않습니다. `context-core`의 `skills/context/scripts/context_cli.py`가 바뀌면 같은 commit에서 다음 절차를 완료합니다.
+Package version은 major를 호환성 경계, minor를 기능 추가·변경, patch를 작은 수정에 사용합니다. 이 규칙은 `0.x`에도 적용되어 `0.*`끼리는 package gate를 통과합니다. Semantic plugin은 version만 믿거나 임의의 `--core-cli`를 실행하지 않고 다음 경계를 모두 확인합니다.
 
-1. `shasum -a 256 plugins/context-core/skills/context/scripts/context_cli.py`로 새 byte digest를 계산하고 `sha256:<hex>` 형식으로 기록합니다.
-2. `plugins/context-decision/skills/decision/scripts/decision_cli.py`, `plugins/context-assumption/skills/assumption/scripts/assumption_cli.py`, `plugins/context-term/skills/term/scripts/term_cli.py`의 파생 `REQUIRED_PLUGIN.entrypoint_sha256`와 `tests/context-v1/fixtures/host-inventory/required-plugin.json`을 같은 값으로 갱신합니다. Init/workflow에는 digest를 복제하지 않고 semantic CLI 상수를 재사용합니다.
-3. `python3 -m pytest -q tests/context-v1/test_distribution_proof.py::DistributionProofTests::test_semantic_plugins_pin_the_distributed_core_entrypoint`로 실제 core bytes와 네 pin의 parity를 확인합니다.
-4. 이어서 위의 네 plugin suite와 cross-plugin, semantic input, token/I/O suite를 실행합니다.
+1. absolute path와 canonical core entrypoint suffix를 확인합니다.
+2. 인접한 Claude/Codex manifest가 모두 `context-core`이고 서로 같은 version인지 확인한 뒤 semantic plugin과 major가 같은지 확인합니다.
+3. 실제 `context_cli.py` digest를 계산해 init operation 또는 frozen preview/apply receipt 동안 변하지 않게 결박합니다.
+4. `context-core-schema/v1`, `context-common/v2`, required command, `context-owner-descriptor/v2`와 doctor shape/state를 직접 handshake합니다.
+5. `python3 -m pytest -q tests/context-v1/test_distribution_proof.py::DistributionProofTests::test_semantic_plugins_accept_same_major_core_and_reject_other_major`와 각 plugin suite를 실행합니다.
 
-`schema=context-core-schema/v1`, `protocol=context-common/v2`, required commands, `context-owner-descriptor/v2` feature와 doctor shape/state는 pin 일치 뒤 직접 handshake합니다. 이 실행 파일 계약은 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 low-level compatibility mode의 입력일 뿐 canonical init/workflow의 신뢰 근거가 아닙니다.
+이 실행 파일 계약은 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 low-level compatibility mode의 입력일 뿐 canonical init/workflow의 신뢰 근거가 아닙니다.
 
 ## Distribution identity
 
@@ -59,8 +60,8 @@ semantic plugin은 임의의 `--core-cli`를 실행하지 않습니다. `context
 - Core selector: `context-core@context-plugins`
 - Source: `Jeis-Jw/context-plugins`
 - Protocol: `context-common/v2`
-- Current repository version: `0.7.1`
-- Immutable install ref: `v0.7.1` (not created or pushed; owner approval required)
+- Current repository version: `0.8.0`
+- Immutable install ref: `v0.8.0` (not created or pushed; owner approval required)
 
 ## Provenance
 
@@ -70,4 +71,4 @@ semantic plugin은 임의의 `--core-cli`를 실행하지 않습니다. `context
 
 이 저장소에는 root [`LICENSE`](./LICENSE)의 Apache License 2.0이 적용됩니다.
 
-라이선스 선택은 완료됐지만 `v0.7.1` tag 생성·push와 marketplace publication은 여전히 각각 별도 owner gate입니다. 라이선스 적용, 검증 또는 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.
+라이선스 선택은 완료됐지만 `v0.8.0` tag 생성·push와 marketplace publication은 여전히 각각 별도 owner gate입니다. 라이선스 적용, 검증 또는 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.

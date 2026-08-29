@@ -16,7 +16,7 @@ from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROFILE_PATH = ROOT / "profiles/core-decision.json"
-PROFILE_SCHEMA = "context-plugin-profile/v1"
+PROFILE_SCHEMA = "context-plugin-profile/v2"
 EXPECTED_PLUGINS = (
     "context-core@context-plugins",
     "context-decision@context-plugins",
@@ -27,6 +27,19 @@ CLAUDE_SCOPES = ("user", "project", "local")
 
 class InstallProfileError(RuntimeError):
     pass
+
+
+def _version_parts(value: Any) -> tuple[int, int, int]:
+    if not isinstance(value, str):
+        raise InstallProfileError("Plugin versions must use MAJOR.MINOR.PATCH.")
+    match = re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", value)
+    if match is None:
+        raise InstallProfileError(f"Invalid plugin version: {value!r}.")
+    return tuple(int(part) for part in match.groups())
+
+
+def _same_major(left: str, right: str) -> bool:
+    return _version_parts(left)[0] == _version_parts(right)[0]
 
 
 def _read_json(path: pathlib.Path) -> Any:
@@ -40,13 +53,15 @@ def load_profile(path: pathlib.Path = PROFILE_PATH) -> dict[str, Any]:
     profile = _read_json(path)
     if not isinstance(profile, dict):
         raise InstallProfileError("The install profile must be a JSON object.")
-    expected_keys = {"schema", "name", "version", "marketplace", "plugins", "init"}
+    expected_keys = {"schema", "name", "version", "compatibility", "marketplace", "plugins", "init"}
     if set(profile) != expected_keys:
-        raise InstallProfileError("The install profile fields do not match context-plugin-profile/v1.")
+        raise InstallProfileError("The install profile fields do not match context-plugin-profile/v2.")
     if profile["schema"] != PROFILE_SCHEMA or profile["name"] != "core-decision":
         raise InstallProfileError("The install profile identity is invalid.")
     if profile["marketplace"] != "context-plugins":
         raise InstallProfileError("The install profile marketplace is invalid.")
+    if profile["compatibility"] != "same-major":
+        raise InstallProfileError("The install profile compatibility policy is invalid.")
     plugins = profile["plugins"]
     if not isinstance(plugins, list) or not all(isinstance(selector, str) for selector in plugins):
         raise InstallProfileError("The install profile plugin list is invalid.")
@@ -54,22 +69,34 @@ def load_profile(path: pathlib.Path = PROFILE_PATH) -> dict[str, Any]:
         raise InstallProfileError("The supported profile must keep core and decision as separate plugins.")
     if profile["init"] != "$context-decision:init":
         raise InstallProfileError("The install profile init selector is invalid.")
-    if not isinstance(profile["version"], str) or not re.fullmatch(r"\d+\.\d+\.\d+", profile["version"]):
-        raise InstallProfileError("The install profile version is invalid.")
+    _version_parts(profile["version"])
     return profile
 
 
 def validate_release_surface(profile: dict[str, Any], root: pathlib.Path = ROOT) -> None:
-    version = profile["version"]
+    profile_version = profile["version"]
     marketplace = profile["marketplace"]
+    plugin_versions: dict[str, str] = {}
     for selector in profile["plugins"]:
         name, selector_marketplace = selector.split("@", 1)
         if selector_marketplace != marketplace:
             raise InstallProfileError(f"{selector} uses a different marketplace.")
+        versions: set[str] = set()
         for host_manifest in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
             manifest = _read_json(root / "plugins" / name / host_manifest)
-            if not isinstance(manifest, dict) or manifest.get("name") != name or manifest.get("version") != version:
-                raise InstallProfileError(f"{name} is not aligned to profile version {version}.")
+            version = manifest.get("version") if isinstance(manifest, dict) else None
+            if not isinstance(manifest, dict) or manifest.get("name") != name or not isinstance(version, str):
+                raise InstallProfileError(f"{name} has an invalid host manifest.")
+            _version_parts(version)
+            versions.add(version)
+        if len(versions) != 1:
+            raise InstallProfileError(f"{name} host manifests use different versions.")
+        version = versions.pop()
+        if not _same_major(profile_version, version):
+            raise InstallProfileError(
+                f"{name} major version {version} is incompatible with profile {profile_version}."
+            )
+        plugin_versions[name] = version
 
     for catalog_path in (".claude-plugin/marketplace.json", ".agents/plugins/marketplace.json"):
         catalog = _read_json(root / catalog_path)
@@ -79,8 +106,8 @@ def validate_release_surface(profile: dict[str, Any], root: pathlib.Path = ROOT)
         by_name = {entry.get("name"): entry for entry in entries if isinstance(entry, dict)}
         for selector in profile["plugins"]:
             name = selector.split("@", 1)[0]
-            if by_name.get(name, {}).get("version") != version:
-                raise InstallProfileError(f"{catalog_path} is not aligned to profile version {version}.")
+            if by_name.get(name, {}).get("version") != plugin_versions[name]:
+                raise InstallProfileError(f"{catalog_path} is not aligned to {name} version {plugin_versions[name]}.")
 
 
 def verify_immutable_checkout(
@@ -241,9 +268,18 @@ def build_install_plan(
     for selector in profile["plugins"]:
         current = by_selector.get(selector)
         if current is not None:
-            if current.get("version") != version or current.get("enabled", True) is False:
+            current_version = current.get("version")
+            if current.get("enabled", True) is False:
                 raise InstallProfileError(
-                    f"{selector} is installed with a different version or disabled. Update or remove both profile plugins explicitly, then retry."
+                    f"{selector} is disabled. Enable it explicitly, then retry."
+                )
+            try:
+                compatible = _same_major(version, current_version)
+            except InstallProfileError as error:
+                raise InstallProfileError(f"{selector} reports an invalid installed version.") from error
+            if not compatible:
+                raise InstallProfileError(
+                    f"{selector} version {current_version} has an incompatible major version; this profile requires major {_version_parts(version)[0]}."
                 )
             continue
         command = [binary, "plugin", "add" if host == "codex" else "install", selector]
@@ -270,7 +306,7 @@ def run_plan(commands: Sequence[Sequence[str]], *, dry_run: bool = False) -> Non
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Install the separate context-core and context-decision plugins as one explicit profile action."
+        description="Install missing core-decision plugins and accept enabled same-major versions."
     )
     parser.add_argument("--host", choices=HOSTS, required=True)
     parser.add_argument("--scope", default="user", help="Claude Code scope: user, project, or local. Codex uses user.")
@@ -301,7 +337,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             print(f"Installed the {profile['name']} profile. Reload the host, then run {profile['init']} once.")
     else:
-        print(f"The {profile['name']} profile is already installed at {profile['version']}.")
+        print(
+            f"The {profile['name']} profile is already installed with compatible major "
+            f"{_version_parts(profile['version'])[0]}."
+        )
     return 0
 
 

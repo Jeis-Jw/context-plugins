@@ -1,6 +1,6 @@
 {
   "name": "context-decision",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Decision continuity with pre-decision body comparison, rationale-change and conflict notices, and approval-gated capture.",
   "author": {
     "name": "Jinwuk-Lee",

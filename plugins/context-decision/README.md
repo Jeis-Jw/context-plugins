@@ -4,17 +4,17 @@
 
 ## Supported developer-preview path
 
-1. From the immutable `v0.7.1` checkout, run the root `core-decision` profile installer once. It installs `context-core@context-plugins` and `context-decision@context-plugins` as separate packages.
+1. From the immutable `v0.8.0` checkout, run the root `core-decision` profile installer once. It installs missing profile plugins and accepts enabled same-major installations as compatible.
 2. Reload the host or open a new session.
 3. Run `$context-decision:init` once in the target Git repository.
 
-There is no bundle or meta-plugin, and decision code is not embedded in core. The root installer is explicit distribution tooling; this plugin never changes host installation state. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.7.1` tag is not published yet; tag creation and publication remain owner-gated.
+There is no bundle or meta-plugin, and decision code is not embedded in core. The root installer is explicit distribution tooling; this plugin never changes host installation state. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.8.0` tag is not published yet; tag creation and publication remain owner-gated.
 
-Core and decision must come from the same immutable release checkout. Decision pins the exact core entrypoint bytes, so a mixed or partially updated install fails with `core_surface_mismatch`; update or reinstall both together, reload the host, and retry.
+Core and decision package versions are compatible when their major versions match. Minor versions add or change functionality and patch versions contain small fixes; for the current `0.x` line, any `0.*` pair passes the package-version gate. The runtime handshake below still rejects a same-major implementation whose actual surface is incompatible.
 
 ## Executable trust boundary
 
-Before any core subprocess, canonical init and workflow verify the release-pinned core runtime. Only then do they handshake:
+Before any core subprocess, canonical init and workflow verify the absolute entrypoint suffix, matching adjacent Claude/Codex core manifests, and the compatible major. They compute the actual entrypoint SHA-256 and hold it constant through the operation. Only then do they handshake:
 
 - `schema=context-core-schema/v1`
 - `protocol=context-common/v2`
@@ -22,7 +22,7 @@ Before any core subprocess, canonical init and workflow verify the release-pinne
 - `context-owner-descriptor/v2`
 - the exact doctor field shape and current repository state
 
-This verifies the executable release contract. It does **not** attest marketplace provenance, catalog source, installation scope, or host enabled state. Inventory and doctor files remain available only for low-level compatibility operations; canonical init and the DEC workflow do not ask users to provide them.
+This verifies the executable compatibility contract. It does **not** attest marketplace provenance, catalog source, installation scope, or host enabled state. Inventory and doctor files remain available only for low-level compatibility operations; canonical init and the DEC workflow do not ask users to provide them.
 
 The low-level inventory preflight may report `core_missing`, `core_source_mismatch`, `core_disabled`, `core_incompatible`, `core_uninitialized`, or `ready`. For the first four, install or correct `context-core@context-plugins` from `Jeis-Jw/context-plugins` in the intended scope, reload or open a new session, and retry `context-decision:init`. `core_uninitialized` is not an install failure: the same init call invokes core bootstrap for both core and DEC.
 
@@ -63,5 +63,7 @@ A healthy index miss opens zero indexed bodies; missing or stale index recovery 
 `spec-view --scope <scope>` selects exact, strict-ancestor, and strict-descendant Current DEC entries from metadata, then materializes only their `Decision` and `Rationale` semantic sections in deterministic `(created_at,id)` order. History and `do_not_follow` entries are excluded. The complete JSON stdout, including its final newline, is at most 32 KiB; overflowing trailing entries are omitted whole and reported by count.
 
 Existing DEC bytes and `context-common/v2` remain compatible. ASM and TERM are optional experimental owners and are not installed, enabled, initialized, or migrated automatically.
+
+Version `0.8.0` introduces the major-based package compatibility policy and keeps protocol/capability handshakes plus operation-bound actual runtime digests as the fail-closed execution boundary.
 
 See the [owner protocol](./skills/decision/references/decision-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).

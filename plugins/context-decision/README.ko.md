@@ -6,14 +6,14 @@
 
 요구 좌표는 marketplace `context-plugins`, plugin `context-core`, selector `context-core@context-plugins`, source `Jeis-Jw/context-plugins`, protocol `context-common/v2`입니다. 동명 plugin이나 다른 marketplace source는 대체하지 못합니다.
 
-1. 지원 profile은 immutable `v0.7.1` checkout의 root installer를 사용자가 한 번 실행해 exact core와 decision을 같은 version·scope의 독립 package로 설치합니다.
+1. 지원 profile은 immutable `v0.8.0` checkout의 root installer를 사용자가 한 번 실행해 빠진 profile plugin을 설치하고, 이미 활성화된 같은-major 설치는 호환으로 인정합니다.
 2. host를 reload하거나 새 session을 엽니다.
 3. `$context-decision:init`을 한 번 호출합니다.
 4. installed core public bootstrap이 필요한 core seed와 decision area를 적용하고, 현재 host의 `AGENTS.md` 또는 `CLAUDE.md`에 context 운영지침 managed block을 설치합니다. ready 재호출은 모두 noop입니다.
 
-Root installer는 명시적으로 실행하는 배포 도구일 뿐 bundle/meta-plugin이 아닙니다. `context-decision` 자체는 marketplace add, install, enable, update 또는 host configuration 변경을 자동 실행하지 않습니다. Manifest에도 dependency나 implicit/default install metadata가 없고 core 구현을 내장하지 않습니다. Canonical init과 workflow는 subprocess 전에 release-pinned core runtime을 확인하고, 일치한 executable에서 `context-core-schema/v1`, `context-common/v2`, required doctor/transaction/bootstrap command, `context-owner-descriptor/v2` feature와 doctor state를 직접 handshake합니다. 이 검사는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 저수준 compatibility mode의 입력일 뿐 canonical 경로의 신뢰 근거가 아닙니다.
+Root installer는 명시적으로 실행하는 배포 도구일 뿐 bundle/meta-plugin이 아닙니다. `context-decision` 자체는 marketplace add, install, enable, update 또는 host configuration 변경을 자동 실행하지 않습니다. Manifest에도 dependency나 implicit/default install metadata가 없고 core 구현을 내장하지 않습니다. Canonical init과 workflow는 subprocess 전에 absolute entrypoint suffix, 인접한 Claude/Codex core manifest의 name·version 일치와 같은 major를 확인하고 실제 entrypoint SHA-256을 해당 operation 동안 고정합니다. 이어서 `context-core-schema/v1`, `context-common/v2`, required doctor/transaction/bootstrap command, `context-owner-descriptor/v2` feature와 doctor state를 직접 handshake합니다. 이 검사는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 저수준 compatibility mode의 입력일 뿐 canonical 경로의 신뢰 근거가 아닙니다.
 
-core와 decision은 같은 immutable release checkout에서 함께 설치·update해야 합니다. Decision이 exact core entrypoint bytes를 고정하므로 혼합 설치나 일부만 update한 상태는 `core_surface_mismatch`로 중단됩니다. core와 decision을 같은 release로 맞추고 host reload 뒤 재시도합니다.
+Core와 decision package는 major version이 같으면 version-compatible합니다. Minor는 기능 추가·변경, patch는 작은 수정이며 현재 `0.x`에서는 모든 `0.*` 조합이 package-version gate를 통과합니다. 단, 실제 runtime surface가 맞지 않으면 아래 handshake가 같은-major 구현도 계속 차단합니다.
 
 ## Exact failure UX
 
@@ -24,7 +24,7 @@ core와 decision은 같은 immutable release checkout에서 함께 설치·updat
 - `core_uninitialized`: plugin 설치 문제가 아닙니다. installed `context-core` public `bootstrap` surface가 같은 호출에서 core seed와 decision area를 순서대로 적용합니다. 별도 core init 호출은 필요하지 않습니다.
 이 failure UX는 host inventory와 doctor receipt를 caller가 제공하는 저수준 compatibility mode에 적용됩니다. missing/source mismatch/disabled/incompatible 실패는 exact source와 manual action을 표시하며 repository와 host configuration bytes를 바꾸지 않습니다. Storage-level `context_root_missing`은 core read surface의 별도 오류이며 addon preflight에서는 installed core의 bootstrap-required `core_uninitialized`로 분류합니다. doctor의 partial/invalid `issues|warnings`는 성공 preflight의 diagnostics로 전달합니다.
 
-Host는 `schema`/`capabilities`를 제외한 모든 저수준 compatibility CLI 호출에 `--host`, `--core-inventory @file`, `--core-doctor @file`을 전달합니다. canonical init과 일반 `decision_workflow.py preview --inline`은 caller-created inventory/doctor 대신 release-pinned core CLI의 schema와 doctor를 직접 handshake합니다. workflow는 caller가 명시한 semantic field와 세 attestation을 exact input에 결박해 approval preview를 만들며 evidence나 판단을 발명하지 않습니다. 고급 lifecycle·decline에는 `candidate prepare`와 `capture`를 사용하며 fact/idea는 draft 없이 종료합니다.
+Host는 `schema`/`capabilities`를 제외한 모든 저수준 compatibility CLI 호출에 `--host`, `--core-inventory @file`, `--core-doctor @file`을 전달합니다. canonical init과 일반 `decision_workflow.py preview --inline`은 caller-created inventory/doctor 대신 same-major core CLI의 schema와 doctor를 직접 handshake하고 actual digest를 operation에 결박합니다. workflow는 caller가 명시한 semantic field와 세 attestation을 exact input에 결박해 approval preview를 만들며 evidence나 판단을 발명하지 않습니다. 고급 lifecycle·decline에는 `candidate prepare`와 `capture`를 사용하며 fact/idea는 draft 없이 종료합니다.
 
 inline `--sec-*`는 plain text가 기본이며 explicit `@file`과 leading `@` literal용 `@@literal`을 지원합니다. 일반 path-like text는 file로 추측하지 않습니다. common primary-claim protocol 상한은 2,000 codepoint이고 built-in SNAP `current_context`, OBS `observation`, DEC `decision`은 각각 owner-specific 1,200 codepoint입니다. owner input은 canonical UTF-8 8 KiB, candidate envelope는 16 KiB입니다. missing·symlink·oversized body file과 limit 초과는 receipt/repository write 전에 실제 크기 진단과 함께 실패합니다.
 
@@ -69,3 +69,5 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 0.5.1은 frozen receipt golden path, repository/core identity 결박, release-pinned core handshake, bounded recall recovery와 actual semantic input limit을 추가한 developer-preview patch입니다.
 
 0.7.1은 자연어 승인 질문, discovery-only read, supersede/withdraw golden path와 deterministic receipt lifecycle을 통합합니다. Core와 decision의 semantic ownership 및 package 경계는 유지하며 root profile installer만 설치 동작을 묶습니다. `v0.7.1` tag와 publication은 아직 완료되지 않았습니다.
+
+0.8.0은 package version 호환성을 major 기준으로 바꾸고, protocol·capability handshake와 operation-bound actual runtime digest를 fail-closed 실행 경계로 유지합니다. `v0.8.0` tag와 publication은 아직 완료되지 않았습니다.

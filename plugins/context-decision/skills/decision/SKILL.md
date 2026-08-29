@@ -5,7 +5,7 @@ description: On a choice signal, compare Current DEC bodies and prepare only exp
 
 # Decision
 
-Use only with installed context-core. This owner neither re-audits nor writes; core alone writes. Read-only commands need no host inventory. Canonical init/capture verify pinned core and perform their own schema/doctor handshake; caller inventory arguments are low-level compatibility only.
+Use only with same-major context-core. This owner neither re-audits nor writes; core alone writes. Read-only commands need no host inventory. Canonical init/capture verify adjacent manifests, bind the actual core digest for the operation, and perform their own schema/doctor handshake; caller inventory arguments are low-level compatibility only.
 
 ## Recall and decide
 

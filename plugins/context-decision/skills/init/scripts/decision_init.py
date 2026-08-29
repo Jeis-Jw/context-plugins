@@ -50,8 +50,13 @@ def _load_decision_cli():
     return module
 
 
-def _run_core(module, core_cli: pathlib.Path, *arguments: str) -> subprocess.CompletedProcess[str]:
-    module.required_core_surface(str(core_cli))
+def _run_core(
+    module,
+    core_cli: pathlib.Path,
+    *arguments: str,
+    expected_sha256: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    module.required_core_surface(str(core_cli), expected_sha256=expected_sha256)
     return _run([sys.executable, str(core_cli), *arguments, "--json"])
 
 
@@ -68,14 +73,13 @@ def _result(completed: subprocess.CompletedProcess[str], code: str, message: str
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="decision_init.py",
-        description="Initialize context-core storage and the DEC owner with the release-pinned core CLI.",
+        description="Initialize context-core storage and the DEC owner with a same-major compatible core CLI.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""core trust:
-  Before subprocess execution, --core-cli must match the release-pinned
-  skills/context/scripts/context_cli.py path suffix and SHA-256. The adapter then
-  handshakes schema, context-common/v2, required commands, owner-descriptor feature,
-  and doctor state. This does not attest marketplace provenance, source, or enabled
-  state. Caller-created inventory/doctor files are low-level compatibility inputs only.
+  Before subprocess execution, --core-cli must have the public entrypoint suffix and
+  same-major context-core manifests. The adapter then handshakes schema,
+  context-common/v2, required commands, owner-descriptor feature, and doctor state.
+  The actual core digest is held constant for the whole init operation.
 
 capture contract (not consumed by init):
   Semantic body values support literal text, @file, and @@literal. DEC decision is
@@ -97,12 +101,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     decision_cli = _load_decision_cli()
     try:
         core_cli = decision_cli.required_core_surface(args.core_cli)
-        schema_command = _run_core(decision_cli, core_cli, "schema")
+        core_cli_sha256 = decision_cli.bytes_digest(core_cli.read_bytes())
+        schema_command = _run_core(decision_cli, core_cli, "schema", expected_sha256=core_cli_sha256)
         if schema_command.returncode != 0:
             return _forward(schema_command)
         schema = _result(schema_command, "core_handshake_invalid", "context-core schema output is invalid")
         decision_cli.validate_core_schema_handshake(schema)
-        doctor_command = _run_core(decision_cli, core_cli, "doctor")
+        doctor_command = _run_core(decision_cli, core_cli, "doctor", expected_sha256=core_cli_sha256)
         if doctor_command.returncode != 0:
             return _forward(doctor_command)
         doctor = _result(doctor_command, "core_handshake_invalid", "context-core doctor output is invalid")
@@ -113,7 +118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "observed": {
                     "repository_state": doctor["repository_state"],
                     "entrypoint": str(core_cli),
-                    "entrypoint_sha256": decision_cli.REQUIRED_PLUGIN["entrypoint_sha256"],
+                    "entrypoint_sha256": core_cli_sha256,
                 },
             }
         )
@@ -153,6 +158,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"@{seed}",
             "--host",
             args.host,
+            expected_sha256=core_cli_sha256,
         )
     if completed.returncode != 0:
         return _forward(completed)

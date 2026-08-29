@@ -126,7 +126,7 @@ def write_preflight(root: Path, state: str = "ready", *, entrypoint: Path | None
     inventory = root / "inventory.json"
     doctor = root / "doctor.json"
     inventory.write_text(json.dumps({"plugins": [{"marketplace": "context-plugins", "plugin": "context-core", "source": "Jeis-Jw/context-plugins", "enabled": True, "protocols": ["context-common/v2"], "entrypoint": str((entrypoint or CORE_CLI_PATH).resolve())}]}), encoding="utf-8")
-    doctor.write_text(json.dumps({"schema": "context-core-doctor/v1", "owner": "context-core", "supported_protocols": ["context-common/v2"], "repository_state": state, "root": "context/", "issues": [], "warnings": [], "plugin_version": "0.7.1", "entrypoint": str((entrypoint or CORE_CLI_PATH).resolve()), "protocol": "context-common/v2"}), encoding="utf-8")
+    doctor.write_text(json.dumps({"schema": "context-core-doctor/v1", "owner": "context-core", "supported_protocols": ["context-common/v2"], "repository_state": state, "root": "context/", "issues": [], "warnings": [], "plugin_version": "0.8.0", "entrypoint": str((entrypoint or CORE_CLI_PATH).resolve()), "protocol": "context-common/v2"}), encoding="utf-8")
     return inventory, doctor
 
 

@@ -28,7 +28,7 @@ RECEIPT_TTL_SECONDS = 24 * 60 * 60
 CANDIDATE_ID_RE = re.compile(r"^cand_[0-9a-f]{32}$")
 DEFAULT_RECEIPT_NAME_RE = re.compile(r"^(cand_[0-9a-f]{32})\.json$")
 REPREVIEW_MESSAGE = "State changed before storage; create a new preview."
-CORE_MISMATCH_MESSAGE = "Plugin version mismatch; reinstall and start a new session."
+CORE_MISMATCH_MESSAGE = "The installed core is not same-major compatible; install a compatible core and start a new session."
 
 
 class WorkflowError(Exception):
@@ -80,8 +80,13 @@ def _file_digest(path: pathlib.Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _run_core(core_cli: pathlib.Path, repo: pathlib.Path, *arguments: str) -> dict[str, Any]:
-    decision_cli.required_core_surface(str(core_cli))
+def _run_core(
+    core_cli: pathlib.Path,
+    repo: pathlib.Path,
+    *arguments: str,
+    expected_sha256: str | None = None,
+) -> dict[str, Any]:
+    decision_cli.required_core_surface(str(core_cli), expected_sha256=expected_sha256)
     completed = subprocess.run(
         [sys.executable, str(core_cli), *arguments, "--json"],
         cwd=repo,
@@ -736,9 +741,9 @@ def preview(args: argparse.Namespace) -> dict[str, Any]:
         receipt_path = explicit_receipt_path
     core_cli = _core_cli(args.core_cli)
     core_cli_sha256 = _file_digest(core_cli)
-    schema = _run_core(core_cli, repo, "schema")
+    schema = _run_core(core_cli, repo, "schema", expected_sha256=core_cli_sha256)
     decision_cli.validate_core_schema_handshake(schema)
-    doctor = _run_core(core_cli, repo, "doctor")
+    doctor = _run_core(core_cli, repo, "doctor", expected_sha256=core_cli_sha256)
     preflight = _require_ready_core(args.host, core_cli, doctor)
     if operation == "capture":
         assert candidate is not None and attestation is not None
@@ -776,6 +781,7 @@ def preview(args: argparse.Namespace) -> dict[str, Any]:
             f"@{owner_path}",
             "--owner-validation",
             f"@{validation_path}",
+            expected_sha256=core_cli_sha256,
         )
     bundle = finalized.get("bundle")
     core_approval_digest = finalized.get("approval_digest")
@@ -855,6 +861,7 @@ def apply(args: argparse.Namespace) -> dict[str, Any]:
             f"@{bundle_path}",
             "--approved-digest",
             approval_material["core_approval_digest"],
+            expected_sha256=approval_material["core"]["sha256"],
         )
     core_applied_digest = applied.get("approval_digest")
     warnings = list(applied.get("warnings", [])) if isinstance(applied.get("warnings", []), list) else []

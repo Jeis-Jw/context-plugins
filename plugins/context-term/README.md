@@ -34,7 +34,7 @@ The TERM CLI produces artifact drafts, lifecycle owner results, and `context-own
 
 `batch validate` re-reads the live Current source and index and re-derives the transition from the candidate, attestation, and mutation request. It issues a receipt only when the exact owner result matches. Source paths must remain inside canonical `context/term` containment with no symlink component.
 
-Explicit `$context-term:init` accepts only the absolute core CLI whose entrypoint path suffix and SHA-256 match the release pin. It directly verifies the core schema, protocol, required commands, `context-owner-descriptor/v2`, and doctor state before passing the descriptor and seed to core bootstrap. It does not attest marketplace provenance or installation scope, and it never installs, updates, downgrades, or migrates plugins automatically.
+Explicit `$context-term:init` accepts only an absolute core CLI with the expected entrypoint suffix, matching adjacent Claude/Codex manifests, and the same major version. It computes the actual entrypoint SHA-256 and holds it constant while directly verifying the core schema, protocol, required commands, `context-owner-descriptor/v2`, and doctor state before passing the descriptor and seed to core bootstrap. It does not attest marketplace provenance or installation scope, and it never installs, updates, downgrades, or migrates plugins automatically.
 
 The common primary claim and TERM `definition` are limited to 2,000 codepoints. Candidate and batch envelopes are bounded to 16 KiB canonical UTF-8, owner input to 8 KiB, and public output to 32 KiB. Lifecycle timestamps cannot precede the source `created_at`. Normal operations require exact `repository_state=ready`; explicit init may repair `partial`, while `invalid` always fails closed.
 
@@ -54,4 +54,4 @@ Structured claim and decline inputs use the explicit `--candidate @file` surface
 
 Runtime responses, questions, previews, and explanatory guidance follow the active language. Schema IDs, JSON keys, CLI options, error codes, filenames, and metadata fields remain English.
 
-Version `0.7.1` keeps TERM as an optional semantic-owner package outside the `core-decision` installation profile. The `v0.7.1` tag and marketplace publication are still pending.
+Version `0.8.0` keeps TERM as an optional semantic-owner package outside the `core-decision` installation profile and adopts same-major core compatibility. The `v0.8.0` tag and marketplace publication are still pending.

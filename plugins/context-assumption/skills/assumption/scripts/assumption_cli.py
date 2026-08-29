@@ -20,7 +20,7 @@ EXIT_NOT_FOUND = 3
 EXIT_CONFLICT = 5
 EXIT_INTEGRITY = 6
 PROTOCOL = "context-common/v2"
-CORE_PLUGIN_VERSION = "0.7.1"
+CORE_COMPATIBLE_MAJOR = 0
 REQUIRED_FEATURE = "context-owner-descriptor/v2"
 ASSUMPTION_INDEX = "context/assumption/assumption.index.md"
 SIGNAL = "assumption-relevant"
@@ -56,7 +56,7 @@ REQUIRED_PLUGIN = {
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
     "entrypoint": "skills/context/scripts/context_cli.py",
-    "entrypoint_sha256": "sha256:7ad7fa86eec05f6cc1f7897366b11548199cf138c4cddd877106a308c60606e3",
+    "compatible_major": CORE_COMPATIBLE_MAJOR,
 }
 
 
@@ -138,6 +138,36 @@ def bytes_digest(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
 
 
+def _version_parts(value: Any) -> tuple[int, int, int]:
+    if not isinstance(value, str):
+        raise AssumptionError("core_surface_mismatch", "context-core version is missing", exit_code=EXIT_CONFLICT)
+    match = re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", value)
+    if match is None:
+        raise AssumptionError("core_surface_mismatch", "context-core version is invalid", exit_code=EXIT_CONFLICT)
+    return tuple(int(part) for part in match.groups())
+
+
+def core_surface_version(resolved: pathlib.Path) -> str:
+    suffix = pathlib.PurePosixPath(REQUIRED_PLUGIN["entrypoint"]).parts
+    plugin_root = resolved.parents[len(suffix) - 1]
+    versions: set[str] = set()
+    for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
+        try:
+            manifest = json.loads((plugin_root / relative).read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise AssumptionError("core_surface_mismatch", "context-core host manifests are unavailable or invalid", {"manifest": relative}, EXIT_CONFLICT) from error
+        version = manifest.get("version") if isinstance(manifest, dict) else None
+        if not isinstance(manifest, dict) or manifest.get("name") != "context-core":
+            raise AssumptionError("core_surface_mismatch", "context-core manifest identity is invalid", exit_code=EXIT_CONFLICT)
+        major, _, _ = _version_parts(version)
+        if major != CORE_COMPATIBLE_MAJOR:
+            raise AssumptionError("core_surface_mismatch", "context-core major version is incompatible", {"required_major": CORE_COMPATIBLE_MAJOR, "observed_version": version}, EXIT_CONFLICT)
+        versions.add(version)
+    if len(versions) != 1:
+        raise AssumptionError("core_surface_mismatch", "context-core host manifests use different versions", exit_code=EXIT_CONFLICT)
+    return versions.pop()
+
+
 def _byte_size_details(actual: int, maximum: int) -> dict[str, int]:
     return {
         "actual_bytes": actual,
@@ -154,26 +184,28 @@ def _codepoint_size_details(actual: int, maximum: int) -> dict[str, int]:
     }
 
 
-def required_core_surface(value: str) -> pathlib.Path:
+def required_core_surface(value: str, *, expected_sha256: str | None = None) -> pathlib.Path:
     supplied = pathlib.Path(value)
     try:
         resolved = supplied.resolve(strict=True)
         digest = bytes_digest(resolved.read_bytes())
     except (OSError, RuntimeError) as error:
-        raise AssumptionError("core_surface_unavailable", "the pinned context-core public CLI is unavailable", {"required_plugin": dict(REQUIRED_PLUGIN)}, EXIT_CONFLICT) from error
+        raise AssumptionError("core_surface_unavailable", "the compatible context-core public CLI is unavailable", {"required_plugin": dict(REQUIRED_PLUGIN)}, EXIT_CONFLICT) from error
     suffix = pathlib.PurePosixPath(REQUIRED_PLUGIN["entrypoint"]).parts
     if (
         not supplied.is_absolute()
         or not resolved.is_file()
         or tuple(resolved.parts[-len(suffix):]) != suffix
-        or digest != REQUIRED_PLUGIN["entrypoint_sha256"]
     ):
         raise AssumptionError(
             "core_surface_mismatch",
-            "context-core entrypoint path or SHA-256 differs from the pinned release contract",
-            {"required_entrypoint": REQUIRED_PLUGIN["entrypoint"], "required_sha256": REQUIRED_PLUGIN["entrypoint_sha256"], "observed_path": str(resolved), "observed_sha256": digest},
+            "context-core entrypoint path differs from the public compatibility contract",
+            {"required_entrypoint": REQUIRED_PLUGIN["entrypoint"], "observed_path": str(resolved), "observed_sha256": digest},
             EXIT_CONFLICT,
         )
+    core_surface_version(resolved)
+    if expected_sha256 is not None and digest != expected_sha256:
+        raise AssumptionError("core_surface_changed", "context-core entrypoint changed during the operation", {"observed_sha256": digest}, EXIT_CONFLICT)
     return resolved
 
 
@@ -946,22 +978,21 @@ def validate_core_doctor(doctor: Any) -> dict[str, Any]:
     warnings = doctor.get("warnings")
     entrypoint = doctor.get("entrypoint")
     try:
-        resolved_entrypoint = pathlib.Path(entrypoint).resolve(strict=True) if isinstance(entrypoint, str) else None
-        observed_sha256 = bytes_digest(resolved_entrypoint.read_bytes()) if resolved_entrypoint is not None else None
-    except (OSError, RuntimeError):
+        resolved_entrypoint = required_core_surface(entrypoint) if isinstance(entrypoint, str) else None
+        surface_version = core_surface_version(resolved_entrypoint) if resolved_entrypoint is not None else None
+    except (AssumptionError, OSError, RuntimeError):
         resolved_entrypoint = None
-        observed_sha256 = None
+        surface_version = None
     required_suffix = pathlib.PurePosixPath(REQUIRED_PLUGIN["entrypoint"]).parts
     if (
         doctor.get("schema") != "context-core-doctor/v1"
         or doctor.get("owner") != "context-core"
         or doctor.get("root") != "context/"
-        or doctor.get("plugin_version") != CORE_PLUGIN_VERSION
+        or doctor.get("plugin_version") != surface_version
         or doctor.get("protocol") != PROTOCOL
         or resolved_entrypoint is None
         or str(resolved_entrypoint) != entrypoint
         or tuple(resolved_entrypoint.parts[-len(required_suffix):]) != required_suffix
-        or observed_sha256 != REQUIRED_PLUGIN["entrypoint_sha256"]
         or doctor.get("repository_state") not in {"absent", "partial", "invalid", "ready"}
         or not isinstance(protocols, list)
         or not protocols

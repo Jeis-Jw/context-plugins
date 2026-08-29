@@ -4,7 +4,7 @@
 
 Context Plugins는 모든 대화를 몰래 영구 상태로 만들지 않으면서 coding agent에 repository 소유의 durable project context를 제공합니다. 지원 profile은 Git/Markdown context를 회수하고 안전하게 기록하는 `context-core`와, 세션이 바뀌어도 결정·취지·반려대안을 보존하는 `context-decision`을 함께 사용합니다. Agent는 오래 남길 가치가 있는 맥락만 제안하고 complete preview를 보여준 뒤 사용자가 직접 승인한 경우에만 기록합니다.
 
-> **Developer preview:** `0.7.1`은 `main`에 준비되어 있지만 `v0.7.1` tag는 아직 생성·push되지 않았습니다. Marketplace publication도 미완료입니다. 아래 설치 명령은 의도적으로 immutable tag를 사용하며 tag가 공개된 뒤에만 동작합니다. Source 공개, test, host lifecycle 검증은 tag, GitHub Release, marketplace publication 또는 지속 사용 가치의 증거가 아닙니다.
+> **Developer preview:** `0.8.0`은 `main`에 준비되어 있지만 `v0.8.0` tag는 아직 생성·push되지 않았습니다. Marketplace publication도 미완료입니다. 아래 설치 명령은 의도적으로 immutable tag를 사용하며 tag가 공개된 뒤에만 동작합니다. Source 공개, test, host lifecycle 검증은 tag, GitHub Release, marketplace publication 또는 지속 사용 가치의 증거가 아닙니다.
 
 ## 왜 필요한가요?
 
@@ -25,7 +25,7 @@ Context Plugins는 transcript를 보관하지 않습니다. Index와 metadata로
 | `context-assumption` | 명시적으로 검증되지 않은 전제와 confirm/refute lifecycle을 `ASM`으로 관리 | 선택, experimental |
 | `context-term` | 프로젝트 전용 canonical definition과 alias를 `TERM`으로 관리 | 선택, experimental |
 
-Bundle이나 meta-plugin은 없습니다. Core와 decision은 독립 package이고, 어떤 plugin도 다른 plugin을 암묵적으로 install·enable·update·init하지 않습니다. Core와 semantic addon은 반드시 같은 immutable checkout에서 설치해야 하며, 혼합 설치나 일부 update는 `core_surface_mismatch`로 중단됩니다.
+Bundle이나 meta-plugin은 없습니다. Core와 decision은 독립 package이고, 어떤 plugin도 다른 plugin을 암묵적으로 install·enable·update·init하지 않습니다. Package version 호환성은 major 기준입니다. 활성화된 addon은 같은 major의 활성화된 core를 사용할 수 있고, 실제 호환성은 runtime의 protocol·capability·command·doctor handshake가 최종 판정합니다.
 
 ## 요구사항과 지원 범위
 
@@ -35,19 +35,21 @@ Bundle이나 meta-plugin은 없습니다. Core와 decision은 독립 package이�
 | Repository | macOS 또는 Linux의 Git repository. Write coordinator가 POSIX `fcntl` lock 사용 |
 | Codex | Plugin marketplace CLI. `0.149.0-alpha.4.1`에서 fresh install/cache lifecycle 확인 |
 | Claude Code | Plugin marketplace CLI. `2.1.89`에서 fresh install/cache lifecycle 확인, runtime UX는 experimental |
-| 지원 profile | `context-core@context-plugins` + `context-decision@context-plugins`, 모두 `0.7.1` |
+| 지원 profile | `context-core@context-plugins` + `context-decision@context-plugins`; 현재 release `0.8.0`, 같은 major끼리 호환 |
 | 선택 기능 | `context-assumption`, `context-term`은 설치 가능하지만 experimental |
 | 언어 | Runtime과 문서의 canonical source는 영어입니다. 사용자 응답은 명시적 언어 선택, host의 preferred response language, 기존 대화 언어 순으로 따르고 판별할 수 없으면 영어를 사용합니다. 식별자와 machine-readable field는 영어로 유지합니다. |
 
 Windows는 현재 지원하지 않습니다. 위 host version은 검증 당시의 snapshot이며 영구적인 최소 version이나 호환성 보장은 아닙니다.
+
+Package version은 세 역할로 관리합니다. **major**는 호환성 경계, **minor**는 기능 추가·변경, **patch**는 작은 수정입니다. 이 규칙은 `1.0` 이전에도 동일하여 package gate에서는 모든 `0.*` version을 호환으로 봅니다. 단, 같은 major라는 이유만으로 실행을 신뢰하지는 않습니다. Protocol·capability·command·manifest·doctor surface가 맞지 않으면 runtime이 계속 fail-closed합니다.
 
 ## 설치
 
 지원 경로는 clean immutable release checkout 하나에서 시작합니다.
 
 ```bash
-git clone --branch v0.7.1 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.7.1
-cd context-plugins-v0.7.1
+git clone --branch v0.8.0 --depth 1 https://github.com/Jeis-Jw/context-plugins.git context-plugins-v0.8.0
+cd context-plugins-v0.8.0
 ```
 
 ### Codex
@@ -64,7 +66,7 @@ python3 scripts/install_profile.py --host codex
 python3 scripts/install_profile.py --host claude-code --scope user
 ```
 
-Installer는 release surface의 version 정합성을 확인하고, 필요하면 현재 checkout을 `context-plugins` marketplace로 등록한 뒤 core와 decision 순서로 설치합니다. Legacy provider, mixed version, disabled plugin 또는 다른 checkout을 가리키는 marketplace가 있으면 변경 전에 중단합니다. 기존 context를 migration하거나 부분 설치 실패를 자동 rollback하지 않습니다.
+Installer는 각 package가 두 host manifest와 catalog에서 일치하는지 확인하고, 필요하면 현재 checkout을 `context-plugins` marketplace로 등록한 뒤 profile에서 빠진 plugin만 core·decision 순서로 설치합니다. 이미 활성화된 같은-major plugin은 update하지 않고 그대로 인정합니다. Disabled plugin, 다른 major, legacy provider 또는 다른 checkout을 가리키는 marketplace가 있으면 변경 전에 중단합니다. Repository context를 init·migration하거나, 호환 plugin을 자동 update하거나, 부분 설치 실패를 자동 rollback하지 않습니다.
 
 설치 후 host를 reload하거나 새 session을 여세요.
 
@@ -202,9 +204,9 @@ Host uninstall은 대상 repository를 변경하지 않습니다. 기존 `contex
 | Codex + Claude Code | 네 plugin 모두 install/load 통과 | ASM/TERM은 optional experimental surface |
 | Actual model behavior | 미확인 | No-signal 비율, capture 품질, task outcome, retained use, end-to-end token 측정 없음 |
 
-Codex prompt material은 3,147자에서 1,333자로 57.6% 감소했습니다. 문자 수 측정이며 token 절감률 주장이 아닙니다.
+Codex prompt material은 3,147자에서 1,339자로 57.5% 감소했습니다. 문자 수 측정이며 token 절감률 주장이 아닙니다.
 
-준비된 manifest, local catalog, test, `main`의 source 또는 installer dry run은 `v0.7.1` tag, GitHub Release, marketplace publication이나 실제 사용자 채택의 증거가 아닙니다. Publication과 가치증명은 별도 gate로 남아 있습니다.
+준비된 manifest, local catalog, test, `main`의 source 또는 installer dry run은 `v0.8.0` tag, GitHub Release, marketplace publication이나 실제 사용자 채택의 증거가 아닙니다. Publication과 가치증명은 별도 gate로 남아 있습니다.
 
 ## 라이선스
 

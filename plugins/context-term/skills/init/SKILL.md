@@ -1,14 +1,14 @@
 ---
 name: init
-description: When explicitly requested, register the TERM descriptor and index through an exact context-core v2 handshake.
+description: When explicitly requested, register the TERM descriptor and index through a same-major context-core v2 handshake.
 ---
 
 # Context term init
 
 Run only when the user explicitly invokes `$context-term:init`. Never install, enable, update, downgrade, or migrate automatically.
 
-1. Compare the `REQUIRED_PLUGIN` core entrypoint suffix and SHA-256 with the supplied `--core-cli`, then resolve the sibling entrypoint from the loaded catalog.
-2. Only the matching core may handshake `context-core-schema/v1`, `context-common/v2`, `context-owner-descriptor/v2`, required commands, and doctor state.
+1. Check the supplied `--core-cli` against the required entrypoint suffix, matching adjacent core manifests, and compatible major; compute its actual SHA-256.
+2. Hold that digest constant while the verified core handshakes `context-core-schema/v1`, `context-common/v2`, `context-owner-descriptor/v2`, required commands, and doctor state.
 3. `term_init.py` sends descriptor v2 and its fixed index seed to core `bootstrap`, then checks ready, profile, index, and managed-policy results.
 
 ```bash
@@ -19,7 +19,7 @@ python3 "${INIT_SKILL_FILE%/SKILL.md}/scripts/term_init.py" \
   --json
 ```
 
-The TERM adapter has no write primitive beyond temporary descriptor and seed transport. It passes `absent|partial|invalid|ready` to the pinned core; a mismatch produces zero subprocess, receipt, or repository writes.
+The TERM adapter has no write primitive beyond temporary descriptor and seed transport. It passes `absent|partial|invalid|ready` to the verified core; a mismatch produces zero subprocess, receipt, or repository writes.
 
 Follow context-core's active-language contract. An explicit user language choice wins; otherwise use the host preference, then established conversation language, then English. OS locale is not authoritative. Use the active language for user-facing setup guidance and explanatory errors; keep machine-readable surfaces in English.
 

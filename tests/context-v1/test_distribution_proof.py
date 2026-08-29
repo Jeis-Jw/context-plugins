@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PHASE0 = ROOT / "tests/context-v1/phase0/phase0_contract.py"
 PLUGIN_NAMES = ("context-core", "context-decision", "context-assumption", "context-term")
-RELEASE_VERSION = "0.7.1"
+RELEASE_VERSION = "0.8.0"
 OWNER_SKILLS = {
     "context-core": "context",
     "context-decision": "decision",
@@ -53,15 +53,6 @@ FORBIDDEN_KEYS = {
     "installed_by_default",
     "installedByDefault",
 }
-BASELINE_SKILL_BYTES = 40_715
-UNCHANGED_EXPERIMENTAL_MANIFESTS = {
-    "plugins/context-assumption/.claude-plugin/plugin.json": "8c081f8b923ba847e0059edeb8990d84b3a693336c6984c7588ae575c3d20cb7",
-    "plugins/context-assumption/.codex-plugin/plugin.json": "2b6c6633ebb7319aeb7dd0a6fb605307dd591f06c8ad0e2e485e278223056d45",
-    "plugins/context-term/.claude-plugin/plugin.json": "1f86f13b3f83e32d0713ad27d1646b447ef28a607f7a7b78e04e0760f1a0c875",
-    "plugins/context-term/.codex-plugin/plugin.json": "ba1d5903c8ba908d09e21e3b559bf3e17a50877a6a6308ea12b8d928790f415c",
-}
-
-
 def load(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec and spec.loader
@@ -359,14 +350,15 @@ class DistributionProofTests(unittest.TestCase):
             "Apache License 2.0",
         ):
             self.assertIn(token, readme)
-        self.assertIn("v0.7.1", readme)
-        self.assertIn("--branch v0.7.1", readme)
+        self.assertIn("v0.8.0", readme)
+        self.assertIn("--branch v0.8.0", readme)
         self.assertIn("scripts/install_profile.py --host codex", readme)
         self.assertIn("scripts/install_profile.py --host claude-code --scope user", readme)
         self.assertNotIn("--ref main", readme)
         profile = read_json(ROOT / "profiles/core-decision.json")
-        self.assertEqual("context-plugin-profile/v1", profile["schema"])
+        self.assertEqual("context-plugin-profile/v2", profile["schema"])
         self.assertEqual(RELEASE_VERSION, profile["version"])
+        self.assertEqual("same-major", profile["compatibility"])
         self.assertEqual(
             ["context-core@context-plugins", "context-decision@context-plugins"],
             profile["plugins"],
@@ -534,26 +526,52 @@ class DistributionProofTests(unittest.TestCase):
             self.assertTrue(any("active language" in prompt for prompt in prompts), manifest)
             self.assertTrue(any("machine fields English" in prompt for prompt in prompts), manifest)
 
-    def test_semantic_plugins_pin_the_distributed_core_entrypoint(self) -> None:
-        core_cli = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
+    def test_semantic_plugins_accept_same_major_core_and_reject_other_major(self) -> None:
         expected = read_json(ROOT / "tests/context-v1/fixtures/host-inventory/required-plugin.json")
-        expected_digest = "sha256:" + hashlib.sha256(core_cli.read_bytes()).hexdigest()
         self.assertEqual("skills/context/scripts/context_cli.py", expected["entrypoint"])
-        self.assertEqual(expected_digest, expected["entrypoint_sha256"])
+        self.assertEqual(0, expected["compatible_major"])
+        self.assertNotIn("entrypoint_sha256", expected)
 
+        modules = []
         for name in PLUGIN_NAMES[1:]:
             owner_cli = ROOT / "plugins" / name / OWNER_CLIS[name]
-            module = load(f"{name.replace('-', '_')}_distribution_pin", owner_cli)
+            module = load(f"{name.replace('-', '_')}_distribution_compatibility", owner_cli)
+            modules.append(module)
             self.assertEqual(expected, module.REQUIRED_PLUGIN)
             init_source = (ROOT / "plugins" / name / INIT_ENTRYPOINTS[name]).read_text(encoding="utf-8")
             self.assertIn(".required_core_surface", init_source)
-            self.assertNotIn(expected_digest, init_source)
+            self.assertIn("expected_sha256=core_cli_sha256", init_source)
 
         workflow_source = (
             ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
         ).read_text(encoding="utf-8")
         self.assertIn("decision_cli.required_core_surface", workflow_source)
-        self.assertNotIn(expected_digest, workflow_source)
+        self.assertIn("expected_sha256=core_cli_sha256", workflow_source)
+
+        with tempfile.TemporaryDirectory() as temp:
+            copied_core = Path(temp) / "context-core"
+            shutil.copytree(ROOT / "plugins/context-core", copied_core)
+            copied_cli = copied_core / "skills/context/scripts/context_cli.py"
+
+            def set_core_version(version: str) -> None:
+                for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
+                    manifest_path = copied_core / relative
+                    manifest = read_json(manifest_path)
+                    manifest["version"] = version
+                    manifest_path.write_text(
+                        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8",
+                    )
+
+            set_core_version("0.6.2")
+            for module in modules:
+                self.assertEqual(copied_cli.resolve(), module.required_core_surface(str(copied_cli.resolve())))
+
+            set_core_version("1.0.0")
+            for module in modules:
+                with self.assertRaises(Exception) as caught:
+                    module.required_core_surface(str(copied_cli.resolve()))
+                self.assertEqual("core_surface_mismatch", caught.exception.code)
 
     def test_development_and_public_trust_contract_match_the_release_surface(self) -> None:
         version = read_json(ROOT / "plugins/context-core/.claude-plugin/plugin.json")["version"]
@@ -563,9 +581,9 @@ class DistributionProofTests(unittest.TestCase):
             self.assertIn(f"  {name}/", development)
             self.assertIn(f"plugins/{name}/tests", development)
         for token in (
-            "shasum -a 256 plugins/context-core/skills/context/scripts/context_cli.py",
-            "REQUIRED_PLUGIN.entrypoint_sha256",
-            "test_semantic_plugins_pin_the_distributed_core_entrypoint",
+            "compatible major",
+            "실제 `context_cli.py` digest",
+            "test_semantic_plugins_accept_same_major_core_and_reject_other_major",
             "marketplace provenance",
             "low-level compatibility mode",
         ):
@@ -573,14 +591,14 @@ class DistributionProofTests(unittest.TestCase):
 
         for name in ("context-assumption", "context-term"):
             readme = (ROOT / "plugins" / name / "README.md").read_text(encoding="utf-8")
-            for token in ("path suffix", "SHA-256", "marketplace provenance", "compatibility", "@file", "8 KiB", "16 KiB"):
+            for token in ("entrypoint suffix", "SHA-256", "marketplace provenance", "compatibility", "@file", "8 KiB", "16 KiB"):
                 self.assertIn(token, readme)
             self.assertIn("`--candidate @file`", readme)
             self.assertNotIn("--sec-*", readme)
             self.assertNotIn("@@literal", readme)
             prompts = read_json(ROOT / "plugins" / name / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"]
             prompt_text = " ".join(prompts)
-            for token in ("pinned context_cli.py", "SHA-256", "marketplace provenance/source/enabled", "low-level compatibility"):
+            for token in ("same-major manifests", "actual CLI SHA", "marketplace provenance/source/enabled", "low-level compatibility"):
                 self.assertIn(token, prompt_text)
 
         root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -618,7 +636,7 @@ class DistributionProofTests(unittest.TestCase):
             "Actual model behavior",
             "Unverified",
             "not a token-savings claim",
-            "core_surface_mismatch",
+            "same major",
         ):
             self.assertIn(token, root_readme)
 
@@ -645,8 +663,8 @@ class DistributionProofTests(unittest.TestCase):
         )
         for token in ("complete preview", "직접적·명시적·무조건적", "`알겠어`", "context-common/v2"):
             self.assertIn(token, korean_readme)
-        self.assertIn("`0.7.1`은 `main`에 준비되어 있지만", korean_readme)
-        self.assertIn("`v0.7.1` tag는 아직 생성·push되지 않았습니다", korean_readme)
+        self.assertIn("`0.8.0`은 `main`에 준비되어 있지만", korean_readme)
+        self.assertIn("`v0.8.0` tag는 아직 생성·push되지 않았습니다", korean_readme)
         self.assertIn("독립 package", korean_readme)
         self.assertIn("scripts/install_profile.py --host codex", korean_readme)
         self.assertNotIn("tag와 release commit은 아직 생성·push되지 않았", korean_readme)
@@ -711,9 +729,8 @@ class DistributionProofTests(unittest.TestCase):
             check=True,
         ).stdout
         for token in (
-            "path suffix", "SHA-256", "context-common/v2", "required commands",
-            "owner-descriptor feature", "doctor state", "does not attest marketplace provenance",
-            "low-level compatibility", "@file", "@@literal", "1,200", "2,000", "8 KiB",
+            "entrypoint suffix", "same-major", "actual core digest", "context-common/v2", "required commands",
+            "owner-descriptor feature", "doctor state", "@file", "@@literal", "1,200", "2,000", "8 KiB",
             "16 KiB", "0600", "outside the repository", "approval_digest",
         ):
             self.assertIn(token, decision_init)
@@ -731,9 +748,8 @@ class DistributionProofTests(unittest.TestCase):
                 check=True,
             ).stdout
             for token in (
-                "path suffix", "SHA-256", "context-common/v2", "required commands",
-                "owner-descriptor feature", "doctor state", "does not attest marketplace provenance",
-                "low-level compatibility", f"{label} claim and decline", "--candidate @file",
+                "entrypoint suffix", "same-major", "actual core digest", "context-common/v2", "required commands",
+                "owner-descriptor feature", "doctor state", f"{label} claim and decline", "--candidate @file",
                 "2,000", "8 KiB", "16 KiB",
             ):
                 self.assertIn(token, init_help)

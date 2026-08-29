@@ -6,5 +6,5 @@
   "provider": "Jinwuk-Lee (Jeis-Jw)",
   "required_protocol": "context-common/v2",
   "entrypoint": "skills/context/scripts/context_cli.py",
-  "entrypoint_sha256": "sha256:7ad7fa86eec05f6cc1f7897366b11548199cf138c4cddd877106a308c60606e3"
+  "compatible_major": 0
 }

@@ -1,6 +1,6 @@
 {
   "name": "context-assumption",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Provisional project assumptions with evidence-bound confirmation, refutation, and supersession.",
   "author": {
     "name": "Jinwuk-Lee",

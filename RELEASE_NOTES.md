@@ -1,5 +1,15 @@
 # Release notes
 
+## 0.8.0 (developer preview; tag not published)
+
+- Package versions now use major as the compatibility boundary, minor for functional changes, and patch for small fixes. The same rule applies to `0.x`, so `0.*` packages pass the package-version gate together.
+- `context-plugin-profile/v2` declares `compatibility: same-major`. The profile installer accepts enabled same-major plugins, installs only missing core/decision members, and does not auto-update compatible installations.
+- Disabled plugins, different majors, the legacy provider, and a marketplace mapped to another checkout still stop before host mutation.
+- Semantic addons validate the core entrypoint suffix and adjacent Claude/Codex manifests, require the same major, retain the schema/protocol/capability/command/doctor handshake, and bind the actual executable digest for each init operation or frozen DEC preview/apply lifecycle.
+- Existing `context-common/v2` repository artifacts require no migration. Plugin packages and semantic ownership remain separate.
+- Codex default-prompt material was reduced from 3,147 to 1,339 characters, a 57.5% character reduction. This is a character-count observation, not a runtime token-savings measurement.
+- Static prompt or document-size reductions are not claimed as measured runtime token savings; improved runtime value remains a separate live-validation question.
+
 ## 0.7.1 (developer preview; tag not published)
 
 - Canonical runtime instructions, managed policies, manifests, and default prompts are authored in English. User-facing prose follows the explicit user language, host preference, established conversation language, then English fallback.
@@ -54,4 +64,4 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ## Release boundary
 
-This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.7.1` remain owner-gated.
+This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.8.0` remain owner-gated.

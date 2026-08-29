@@ -34,7 +34,7 @@ REQUIRED_PLUGIN_FIELDS = (
     "provider",
     "required_protocol",
     "entrypoint",
-    "entrypoint_sha256",
+    "compatible_major",
 )
 OBSERVED_FIELDS = (
     "marketplace",
@@ -73,7 +73,10 @@ OWNER_DESCRIPTOR_FIELDS = (
 def _required_plugin(value):
     if not isinstance(value, dict) or tuple(value) != REQUIRED_PLUGIN_FIELDS:
         raise InventoryContractError("required_plugin_invalid")
-    if any(not isinstance(value[field], str) or not value[field] for field in value):
+    string_fields = tuple(field for field in REQUIRED_PLUGIN_FIELDS if field != "compatible_major")
+    if any(not isinstance(value[field], str) or not value[field] for field in string_fields):
+        raise InventoryContractError("required_plugin_invalid")
+    if not isinstance(value["compatible_major"], int) or isinstance(value["compatible_major"], bool) or value["compatible_major"] < 0:
         raise InventoryContractError("required_plugin_invalid")
     return value
 

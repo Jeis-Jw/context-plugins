@@ -5,7 +5,7 @@ description: 선택 신호가 있을 때 Current DEC 실제 본문을 비교하�
 
 # Decision (한국어)
 
-별도 설치된 context-core와 함께만 사용한다. 이 semantic owner는 대화를 재-audit하거나 repository를 쓰지 않으며 core만 실제로 쓴다. Read-only command에는 host inventory가 필요 없다. Canonical init/capture는 release-pinned core를 검증하고 schema/doctor를 직접 handshake한다. Caller inventory argument는 low-level compatibility에서만 유지한다.
+별도 설치된 같은-major context-core와 함께만 사용한다. 이 semantic owner는 대화를 재-audit하거나 repository를 쓰지 않으며 core만 실제로 쓴다. Read-only command에는 host inventory가 필요 없다. Canonical init/capture는 인접 manifest를 검증하고 actual core digest를 operation에 결박한 뒤 schema/doctor를 직접 handshake한다. Caller inventory argument는 low-level compatibility에서만 유지한다.
 
 ## 조회와 판정
 

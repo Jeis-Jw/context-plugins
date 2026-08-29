@@ -49,8 +49,13 @@ def _load_assumption_cli():
     return module
 
 
-def _run_core(module, core_cli: pathlib.Path, *arguments: str) -> subprocess.CompletedProcess[str]:
-    module.required_core_surface(str(core_cli))
+def _run_core(
+    module,
+    core_cli: pathlib.Path,
+    *arguments: str,
+    expected_sha256: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    module.required_core_surface(str(core_cli), expected_sha256=expected_sha256)
     return _run([sys.executable, str(core_cli), *arguments, "--json"])
 
 
@@ -64,14 +69,13 @@ def _result(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="assumption_init.py",
-        description="Initialize context-core storage and the experimental ASM owner with the release-pinned core CLI.",
+        description="Initialize context-core storage and the experimental ASM owner with a same-major compatible core CLI.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""core trust:
-  Before subprocess execution, --core-cli must match the release-pinned
-  skills/context/scripts/context_cli.py path suffix and SHA-256. The adapter then
-  handshakes schema, context-common/v2, required commands, owner-descriptor feature,
-  and doctor state. This does not attest marketplace provenance, source, or enabled
-  state. Caller-created inventory/doctor files are low-level compatibility inputs only.
+  Before subprocess execution, --core-cli must have the public entrypoint suffix and
+  same-major context-core manifests. The adapter then handshakes schema,
+  context-common/v2, required commands, owner-descriptor feature, and doctor state.
+  The actual core digest is held constant for the whole init operation.
 
 semantic input contract (outside init):
   ASM claim and decline receive structured candidate JSON through --candidate @file.
@@ -174,11 +178,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     assumption_cli = _load_assumption_cli()
     try:
         core_cli = assumption_cli.required_core_surface(args.core_cli)
-        handshake = _run_core(assumption_cli, core_cli, "schema")
+        core_cli_sha256 = assumption_cli.bytes_digest(core_cli.read_bytes())
+        handshake = _run_core(assumption_cli, core_cli, "schema", expected_sha256=core_cli_sha256)
         if handshake.returncode:
             return _forward(handshake)
         assumption_cli.validate_core_schema_handshake(_result(handshake))
-        doctor_before_command = _run_core(assumption_cli, core_cli, "doctor")
+        doctor_before_command = _run_core(assumption_cli, core_cli, "doctor", expected_sha256=core_cli_sha256)
         if doctor_before_command.returncode:
             return _forward(doctor_before_command)
         doctor_before = assumption_cli.validate_core_doctor(_result(doctor_before_command))
@@ -188,7 +193,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "observed": {
                     "repository_state": doctor_before["repository_state"],
                     "entrypoint": str(core_cli),
-                    "entrypoint_sha256": assumption_cli.REQUIRED_PLUGIN["entrypoint_sha256"],
+                    "entrypoint_sha256": core_cli_sha256,
                 },
             }
         )
@@ -214,6 +219,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"@{seed}",
             "--host",
             args.host,
+            expected_sha256=core_cli_sha256,
         )
     if completed.returncode:
         return _forward(completed)
@@ -221,7 +227,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         bootstrap = json.loads(completed.stdout)["result"]
     except (KeyError, TypeError, json.JSONDecodeError):
         return _error("core_bootstrap_result_invalid", "context-core bootstrap result is invalid", compact=args.json)
-    post_doctor = _run_core(assumption_cli, core_cli, "doctor")
+    post_doctor = _run_core(assumption_cli, core_cli, "doctor", expected_sha256=core_cli_sha256)
     if post_doctor.returncode:
         return _forward(post_doctor)
     try:

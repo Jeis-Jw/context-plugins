@@ -145,7 +145,8 @@ class PluginContractTests(unittest.TestCase):
         self.assertIn("`context-owner-descriptor/v1`", protocol)
         for forbidden in ("install", "enable", "update", "marketplace", "plugin caches", "embed a core"):
             self.assertIn(forbidden, protocol)
-        self.assertIn("release-pinned", init)
+        self.assertIn("compatible major", init)
+        self.assertIn("actual SHA-256", init)
         self.assertIn("context_cli.py bootstrap", init)
         self.assertIn("decision_init.py", init)
         self.assertIn("exactly once", init)

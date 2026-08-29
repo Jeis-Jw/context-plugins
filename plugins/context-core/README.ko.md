@@ -4,7 +4,7 @@
 
 ## 시작하기
 
-지원 profile은 immutable `v0.7.1` checkout의 root installer를 한 번 실행해 `context-core@context-plugins`와 `context-decision@context-plugins`을 같은 version·scope의 독립 package로 설치합니다. Bundle/meta-plugin이 아니며 decision code를 core에 내장하지 않습니다.
+지원 profile은 immutable `v0.8.0` checkout의 root installer를 한 번 실행해 빠진 plugin만 설치하고 활성화된 같은-major version은 호환으로 인정합니다. `context-core@context-plugins`와 `context-decision@context-plugins`은 계속 독립 package이며 bundle/meta-plugin이 아니고 decision code를 core에 내장하지 않습니다.
 
 Core-only 구성이 필요하면 다음 경로를 그대로 사용할 수 있습니다.
 
@@ -46,3 +46,5 @@ Core-only 구성이 필요하면 다음 경로를 그대로 사용할 수 있습
 0.5.1은 repository identity에 결박된 approval, frozen DEC receipt, release-pinned core 실행 전 검증, healthy miss/recovery body-open 경계와 actual semantic input limit을 추가한 developer-preview patch입니다.
 
 0.7.1은 자연어 승인 UX와 deterministic receipt lifecycle을 통합하고, core와 semantic owner package를 분리한 채 root profile installer로 설치 동작만 묶습니다. `v0.7.1` tag와 publication은 아직 완료되지 않았습니다.
+
+0.8.0은 package 호환성 경계를 major로 두고 minor는 기능 변화, patch는 작은 수정에 사용합니다. 같은-major package도 protocol·capability handshake가 맞지 않으면 fail-closed합니다. `v0.8.0` tag와 publication은 아직 완료되지 않았습니다.

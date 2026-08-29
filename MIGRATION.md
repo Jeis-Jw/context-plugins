@@ -46,7 +46,7 @@ Rollback is distribution-level: stop using or uninstall the optional addon while
 
 Frozen workflow receipts contain decision material. They remain outside the repository and Git metadata with mode `0600`; reusing one across a clone, linked worktree or same-path repository recreation fails before repository writes. The agent owns this transport lifecycle rather than asking the user to manage it.
 
-No storage migration is required. Existing callers of `--core-inventory` and `--core-doctor` may keep using the low-level compatibility surface, but canonical addon init and DEC workflow should provide the release-pinned `--core-cli` instead.
+No storage migration is required. Existing callers of `--core-inventory` and `--core-doctor` may keep using the low-level compatibility surface, but canonical addon init and DEC workflow should provide the loaded same-major `--core-cli` instead.
 
 ## 0.6.0 natural-language approval UX (unreleased)
 
@@ -61,3 +61,11 @@ The wording and workflow changes ship as one release unit. Frozen receipt, appro
 For fresh core+decision installs, the immutable release checkout contains `profiles/core-decision.json` and `scripts/install_profile.py`. One explicit installer invocation asks the host to register that checkout and install core followed by decision at the same version and selected scope. This is distribution tooling, not a plugin dependency or runtime auto-install path. It does not initialize repositories, migrate corpus, remove old coordinates, replace an existing marketplace, or roll back partial host changes automatically.
 
 An enabled `context-core@jeis-ai-plugins` or `context-decision@jeis-ai-plugins`, an existing `context-plugins` marketplace pointing at another checkout, a disabled target plugin, or a mixed target version fails before the installer mutates host state. The user must explicitly disable, uninstall or update those coordinates and then rerun the installer from the exact `v0.6.0` checkout. Repository artifacts remain untouched throughout distribution migration.
+
+## 0.8.0 major-based package compatibility
+
+`0.8.0` changes the distribution policy without changing `context-common/v2` storage. Package major is the compatibility boundary, minor versions carry functional changes, and patch versions carry small fixes. This project applies that rule to pre-1.0 versions as well, so `0.*` packages pass the version gate together.
+
+The profile schema is `context-plugin-profile/v2` with `compatibility: same-major`. The installer accepts enabled same-major plugins, installs only missing profile members, and does not auto-update compatible installations. Disabled plugins, different majors, the legacy provider, and another marketplace checkout still fail before host mutation.
+
+Semantic addons no longer carry a release-wide hardcoded core byte digest. They verify the core entrypoint suffix and adjacent host manifests, require the same major, perform the existing schema/protocol/capability/command/doctor handshake, and bind the actual executable digest for each init operation or frozen DEC preview/apply lifecycle. No repository artifact migration is required.

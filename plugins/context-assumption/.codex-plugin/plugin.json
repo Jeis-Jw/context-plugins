@@ -1,6 +1,6 @@
 {
   "name": "context-assumption",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Provisional project assumptions with explicit verification conditions and evidence-bound lifecycle transitions.",
   "author": {
     "name": "Jinwuk-Lee",
@@ -15,7 +15,7 @@
     "category": "Productivity",
     "capabilities": ["Read", "Validation"],
     "defaultPrompt": [
-      "Before core runs, verify pinned context_cli.py suffix + SHA-256; handshake schema, protocol, commands, features, doctor.",
+      "Before core runs, verify same-major manifests; handshake schema, protocol, commands, features, doctor; bind actual CLI SHA.",
       "No marketplace provenance/source/enabled attestation; caller inventory is low-level compatibility input only.",
       "Use active language for user-facing text; keep machine fields English. Claim only explicit unverified premises."
     ]

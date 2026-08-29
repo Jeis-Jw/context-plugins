@@ -328,7 +328,10 @@ class DecisionWorkflowTests(unittest.TestCase):
             self.assertEqual(5, denied.returncode, denied.stdout + denied.stderr)
             denied_error = json.loads(denied.stdout)["error"]
             self.assertEqual("core_surface_mismatch", denied_error["code"])
-            self.assertEqual("Plugin version mismatch; reinstall and start a new session.", denied_error["message"])
+            self.assertEqual(
+                "The installed core is not same-major compatible; install a compatible core and start a new session.",
+                denied_error["message"],
+            )
             self.assertFalse(marker.exists())
             self.assertFalse(receipt_path.exists())
             self.assertEqual(before, digest_tree(repo))
