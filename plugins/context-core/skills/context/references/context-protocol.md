@@ -68,6 +68,7 @@ The managed policy requires one audit per conversation delta, silence when there
 - Unknown/duplicate keys, non-canonical input, executable defaults, regex/expression/callback fields, and depth/node/field/item bound violations fail closed.
 - Profiles allow at most 24 closed-type fields, 12 ordered H2 sections, and four scalar index projections. Lifecycle topology is limited to `create_current|replace_same_state|retire_current|supersede_current|delete_one`.
 - A v2 semantic receipt binds descriptor digest, capability, owner result, base area index, ordered same-area prior bundles, topology, and semantic input digest. Core independently validates target envelopes, fields, sections, projections, lifecycle, relations, paths, indexes, CAS, and operations during preview and again under lock during apply.
+- `typed-relations/v1` keeps the existing relation map bytes. A key shaped as `<predicate>:<target-kind>` requires every target ID to resolve to that live kind during preview and apply revalidation; refresh and doctor report the same mismatch. A key without `:` remains an untyped legacy relation. Core creates neither inverse relations nor a graph index.
 - The root registry and area descriptor must carry the same immutable digest. A trust mismatch is a blocking doctor/refresh issue and `refresh --fix index` does not repair it.
 
 ## CLI envelope and init

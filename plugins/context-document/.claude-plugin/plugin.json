@@ -1,0 +1,9 @@
+{
+  "name": "context-document",
+  "version": "0.10.0",
+  "description": "Authoritative living documents with stable scoped slots and same-ID content replacement.",
+  "author": {
+    "name": "Jinwuk-Lee",
+    "url": "https://github.com/Jeis-Jw"
+  }
+}

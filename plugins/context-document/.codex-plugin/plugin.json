@@ -1,0 +1,26 @@
+{
+  "name": "context-document",
+  "version": "0.10.0",
+  "description": "Authoritative living documents with stable scoped slots and same-ID content replacement.",
+  "author": {
+    "name": "Jinwuk-Lee",
+    "url": "https://github.com/Jeis-Jw"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Context Document",
+    "shortDescription": "Keep living project documents durable and current.",
+    "longDescription": "Captures project-scoped living documents as authoritative artifacts and replaces Content under a stable ID through context-core approval and storage.",
+    "developerName": "Jinwuk-Lee",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Validation"
+    ],
+    "defaultPrompt": [
+      "Use active language; keep machine fields English. Claim only a living document with one stable scoped slot.",
+      "Update Content by replace_same_state while retaining the current artifact ID, path, scope, and document_key.",
+      "Produce drafts and receipts only. Delegate every persistent write, lock, CAS, preview, and apply to context-core."
+    ]
+  }
+}

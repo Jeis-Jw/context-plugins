@@ -533,6 +533,45 @@ class DecisionWorkflowTests(unittest.TestCase):
             self.assertTrue(json.loads(applied.stdout)["result"]["applied"])
             self.assertFalse(receipt_path.exists())
 
+    def test_typed_preview_conditionally_requires_typed_core_feature(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = self._initialized_repository(root)
+            receipt_path = root / "typed-old-core-receipt.json"
+            old_core_schema = {
+                "schema": "context-core-schema/v1",
+                "protocol": workflow_module.decision_cli.PROTOCOL,
+                "features": ["context-owner-descriptor/v2", "filesystem-vault/v1"],
+                "commands": ["doctor", "bootstrap", "transaction preview", "transaction apply"],
+            }
+            self.assertIs(
+                old_core_schema,
+                workflow_module.decision_cli.validate_core_schema_handshake(old_core_schema),
+                "standalone and legacy DEC must retain the prior same-major handshake",
+            )
+            args = workflow_module.build_parser().parse_args([
+                "--vault", str(repo),
+                "preview",
+                "--host", "codex",
+                "--core-cli", str(CORE_CLI),
+                *self._inline_arguments(),
+                "--serves-intent", "ctx_550e8400e29b41d4a716446655440099",
+                "--attest-explicit-choice",
+                "--attest-scope-identified",
+                "--attest-commitment-present",
+                "--receipt-file", str(receipt_path),
+                "--json",
+            ])
+            before = digest_tree(repo)
+            with mock.patch.object(workflow_module, "_run_core", return_value=old_core_schema) as run_core:
+                with self.assertRaises(workflow_module.decision_cli.DecisionError) as caught:
+                    workflow_module.preview(args)
+            self.assertEqual("core_incompatible", caught.exception.code)
+            self.assertIn("typed-relations/v1", caught.exception.details["required_features"])
+            self.assertEqual(1, run_core.call_count, "typed preview must fail before doctor or receipt creation")
+            self.assertFalse(receipt_path.exists())
+            self.assertEqual(before, digest_tree(repo))
+
     def test_inline_body_files_fail_closed_before_receipt_or_repository_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

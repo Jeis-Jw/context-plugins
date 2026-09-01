@@ -105,6 +105,7 @@ WINDOWS_RESERVED = re.compile(r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$", re.IGN
 FIELD_KEY = re.compile(r"^[a-z][a-z0-9_]*$")
 LOCAL_ID = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
 AREA_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,79}$")
+TYPED_RELATION_KEY = re.compile(r"^(?P<predicate>[a-z][a-z0-9_]{0,79}):(?P<target_kind>[a-z][a-z0-9_-]{0,79})$")
 ROOT_ROW = re.compile(r"^.*<!-- context-area (\{.*\}) -->$")
 ENTRY_ROW = re.compile(r"^.*<!-- context-entry (\{.*\}) -->$")
 OWNER_PROFILE_ROW = re.compile(r"^<!-- context-owner-profile (\{.*\}) -->$")
@@ -4147,6 +4148,106 @@ def _profile_reference_ids(frontmatter: dict[str, Any], profile: dict[str, Any])
     return identifiers
 
 
+def _typed_relation_entries(frontmatter: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Return (relation key, target kind, target id) for typed relations.
+
+    Relation storage stays the existing ``relations: {key: [ctx_id...]}`` shape.
+    Keys without ``:`` remain legacy untyped relations. A key containing ``:`` is
+    therefore unambiguously opting into the typed-relations/v1 contract.
+    """
+
+    relations = frontmatter.get("relations")
+    if relations is None:
+        return []
+    if not isinstance(relations, dict):
+        raise ContextError("schema_invalid", "relations must be an object")
+    entries: list[tuple[str, str, str]] = []
+    for key, identifiers in relations.items():
+        if not isinstance(key, str):
+            raise ContextError("schema_invalid", "relation key must be a string")
+        if ":" not in key:
+            continue
+        match = TYPED_RELATION_KEY.fullmatch(key)
+        if match is None:
+            raise ContextError(
+                "typed_relation_key_invalid",
+                "typed relation key must be <predicate>:<target-kind>",
+                {"relation": key},
+                EXIT_CONFLICT,
+            )
+        if (
+            not isinstance(identifiers, list)
+            or any(not isinstance(identifier, str) for identifier in identifiers)
+            or len(identifiers) != len(set(identifiers))
+        ):
+            raise ContextError(
+                "schema_invalid",
+                "typed relation targets must be a unique context id list",
+                {"relation": key},
+            )
+        for identifier in identifiers:
+            _require_context_id(identifier, "relations")
+            entries.append((key, match.group("target_kind"), identifier))
+    return entries
+
+
+def _validate_typed_relations(
+    repo: pathlib.Path,
+    owner_result: dict[str, Any],
+    descriptor: dict[str, Any] | None,
+) -> None:
+    """Validate typed relation targets against planned drafts and the vault.
+
+    This runs during preview and again during apply validation. It deliberately
+    does not add inverse edges or a graph index.
+    """
+
+    effects = {effect.get("effect_id"): effect for effect in owner_result.get("effects", [])}
+    planned_kinds: dict[str, str] = {}
+    documents: list[tuple[str, Document]] = []
+    for draft in owner_result.get("artifact_drafts", []):
+        effect = effects.get(draft.get("effect_id"), {})
+        kind = effect.get("area")
+        if not isinstance(kind, str):
+            continue
+        draft_descriptor = descriptor if descriptor is not None and descriptor.get("kind") == kind else None
+        document = parse_document(draft.get("content", ""), draft_descriptor)
+        planned_kinds[document.frontmatter["id"]] = kind
+        documents.append((draft.get("path", ""), document))
+
+    resolved: dict[str, str] = {}
+    for path, document in documents:
+        for relation, target_kind, identifier in _typed_relation_entries(document.frontmatter):
+            actual_kind = planned_kinds.get(identifier)
+            if actual_kind is None:
+                if identifier not in resolved:
+                    try:
+                        resolved[identifier] = _find_artifact(repo, identifier)[0]
+                    except ContextError as error:
+                        if error.code == "artifact_not_found":
+                            raise ContextError(
+                                "typed_relation_target_missing",
+                                "typed relation target does not exist",
+                                {"path": path, "relation": relation, "target": identifier},
+                                EXIT_CONFLICT,
+                            ) from error
+                        raise
+                actual_kind = resolved[identifier]
+            if actual_kind != target_kind:
+                raise ContextError(
+                    "typed_relation_kind_mismatch",
+                    "typed relation target kind differs from the relation key",
+                    {
+                        "path": path,
+                        "relation": relation,
+                        "target": identifier,
+                        "expected_kind": target_kind,
+                        "actual_kind": actual_kind,
+                    },
+                    EXIT_CONFLICT,
+                )
+
+
 def _validate_profiled_owner_structure(
     repo: pathlib.Path,
     owner_result: dict[str, Any],
@@ -4348,6 +4449,7 @@ def finalize_owner_result(repo: pathlib.Path, owner_result: dict[str, Any], owne
         descriptor,
     )
     validate_owner_result(owner_result, capability, descriptor)
+    _validate_typed_relations(repo, owner_result, descriptor)
     if descriptor is not None:
         assert transition_topology is not None
         _validate_profiled_owner_structure(repo, owner_result, descriptor, transition_topology)
@@ -5599,6 +5701,7 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
                 verify_base_area_index=not bool(same_area_prior_digests),
             )
         validate_owner_result(owner_result, capability, registered_descriptor)
+        _validate_typed_relations(repo, owner_result, registered_descriptor)
         if registered_descriptor is not None:
             assert transition_topology is not None
             _validate_profiled_owner_structure(repo, owner_result, registered_descriptor, transition_topology)
@@ -6186,6 +6289,7 @@ def refresh_repository(repo: pathlib.Path) -> dict[str, Any]:
         issues.append({"code": "duplicate_claim_owner", "path": ROOT_INDEX})
     seen_ids: dict[str, str] = {}
     documents: dict[str, tuple[str, dict[str, Any]]] = {}
+    document_kinds: dict[str, str] = {}
     root_specs: list[tuple[dict[str, Any], str, str]] = []
     for area in areas:
         index_valid = True
@@ -6264,6 +6368,7 @@ def refresh_repository(repo: pathlib.Path) -> dict[str, Any]:
                 else:
                     seen_ids[row["id"]] = relative
                     documents[row["id"]] = (relative, document.frontmatter)
+                    document_kinds[row["id"]] = area["area"]
                 actual[row["id"]] = row
         except ContextError as error:
             issues.append({"code": error.code, "path": error.details.get("path", f"context/{area['area']}")})
@@ -6304,6 +6409,23 @@ def refresh_repository(repo: pathlib.Path) -> dict[str, Any]:
         if isinstance(relations, dict):
             for value in relations.values():
                 refs.extend(value if isinstance(value, list) else [value])
+        try:
+            typed_relations = _typed_relation_entries(frontmatter)
+        except ContextError as error:
+            issues.append({"code": error.code, "path": path, "id": identifier})
+            typed_relations = []
+        for relation, expected_kind, target in typed_relations:
+            actual_kind = document_kinds.get(target)
+            if actual_kind is not None and actual_kind != expected_kind:
+                issues.append({
+                    "code": "typed_relation_kind_mismatch",
+                    "path": path,
+                    "id": identifier,
+                    "relation": relation,
+                    "target": target,
+                    "expected_kind": expected_kind,
+                    "actual_kind": actual_kind,
+                })
         for target in refs:
             if isinstance(target, str) and target.startswith("ctx_") and target not in documents:
                 issues.append({"code": "broken_internal_ref", "path": path, "id": identifier, "target": target})
@@ -6431,7 +6553,7 @@ def doctor_repository(repo: pathlib.Path) -> dict[str, Any]:
 def schema_result() -> dict[str, Any]:
     return {
         "schema": "context-core-schema/v1", "protocol": PROTOCOL, "storage_root": "context/", "root_override": True,
-        "features": ["context-owner-descriptor/v2", "filesystem-vault/v1"],
+        "features": ["context-owner-descriptor/v2", "filesystem-vault/v1", "typed-relations/v1"],
         "id": "ctx_<lowercase-uuidv4-hex>", "json_success": {"ok": True, "result": {}},
         "json_error": {"ok": False, "error": {"code": "string", "message": "string", "details": {}}},
         "exit_codes": {"usage_schema_filename": 2, "not_found": 3, "conflict": 5, "integrity_index": 6},

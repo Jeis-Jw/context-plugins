@@ -10,6 +10,8 @@ plugins/
   context-decision/
   context-assumption/
   context-term/
+  context-intent/
+  context-document/
 tests/context-v1/
 .claude-plugin/marketplace.json
 .agents/plugins/marketplace.json
@@ -28,13 +30,15 @@ python3 -m pytest -q plugins/context-core/tests
 python3 -m pytest -q plugins/context-decision/tests
 python3 -m pytest -q plugins/context-assumption/tests
 python3 -m pytest -q plugins/context-term/tests
+python3 -m pytest -q plugins/context-intent/tests
+python3 -m pytest -q plugins/context-document/tests
 python3 -m pytest -q tests/context-v1/test_distribution_proof.py tests/context-v1/test_cross_plugin_flow.py
 python3 -m pytest -q tests/context-v1/test_profile_installer.py
 python3 -m pytest -q tests/context-v1/test_semantic_input_limits.py tests/context-v1/test_token_io_evidence.py
 PYTHONPATH=tests/context-v1/phase0 python3 -m pytest -q tests/context-v1/phase0
 ```
 
-배포 전에는 두 host marketplace의 네 plugin version/source parity, old coordinate 잔존 여부, actual CLI schema/capabilities/help와 temporary consumer init을 별도로 검증해야 합니다.
+배포 전에는 두 host marketplace의 여섯 plugin version/source parity, old coordinate 잔존 여부, actual CLI schema/capabilities/help와 temporary consumer init을 별도로 검증해야 합니다.
 
 ### Core+decision profile installer
 
@@ -60,8 +64,8 @@ Package version은 major를 호환성 경계, minor를 기능 추가·변경, pa
 - Core selector: `context-core@context-plugins`
 - Source: `Jeis-Jw/context-plugins`
 - Protocol: `context-common/v2`
-- Current repository version: `0.9.0`
-- Optional release tag: `v0.9.0` (not created or pushed; owner approval required)
+- Current repository version: `0.10.0`
+- Optional release tag: `v0.10.0` (not created or pushed; owner approval required)
 
 ## Provenance
 
@@ -71,4 +75,4 @@ Package version은 major를 호환성 경계, minor를 기능 추가·변경, pa
 
 이 저장소에는 root [`LICENSE`](./LICENSE)의 Apache License 2.0이 적용됩니다.
 
-라이선스 선택은 완료됐지만 `v0.9.0` tag 생성·push와 marketplace publication은 여전히 각각 별도 owner gate입니다. 라이선스 적용, 검증 또는 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.
+라이선스 선택은 완료됐지만 `v0.10.0` tag 생성·push와 marketplace publication은 여전히 각각 별도 owner gate입니다. 라이선스 적용, 검증 또는 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.

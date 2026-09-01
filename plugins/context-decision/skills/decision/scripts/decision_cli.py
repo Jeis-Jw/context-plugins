@@ -51,6 +51,12 @@ LEGACY_OBSERVATION_ALIASES = {
 REMOVED_FINGERPRINT_FIELDS = {"claim_fingerprint", "source_claim_fingerprint"}
 REMOVED_CANDIDATE_FIELDS = REMOVED_FINGERPRINT_FIELDS | {"claim_key"}
 SEMANTIC_RELATIONS = ("new", "same", "supporting", "rationale_changed", "conflict")
+TYPED_RELATION_INPUTS = {
+    "serves_intents": "serves:intent",
+    "informed_by_observations": "informed_by:observation",
+    "informed_by_assumptions": "informed_by:assumption",
+    "affects_documents": "affects:document",
+}
 RELATION_ACTIONS = {
     "new": "Ask about capture after the decision becomes explicit.",
     "same": "Cite the existing DEC without creating another one.",
@@ -263,8 +269,11 @@ def required_core_surface(value: str, *, expected_sha256: str | None = None) -> 
     return resolved
 
 
-def validate_core_schema_handshake(value: Any) -> dict[str, Any]:
+def validate_core_schema_handshake(value: Any, *, require_typed_relations: bool = False) -> dict[str, Any]:
     required_commands = {"doctor", "bootstrap", "transaction preview", "transaction apply"}
+    required_features = {"context-owner-descriptor/v2", "filesystem-vault/v1"}
+    if require_typed_relations:
+        required_features.add("typed-relations/v1")
     if not isinstance(value, dict):
         raise DecisionError("core_handshake_invalid", "context-core schema handshake is invalid", exit_code=EXIT_CONFLICT)
     features = value.get("features")
@@ -273,15 +282,18 @@ def validate_core_schema_handshake(value: Any) -> dict[str, Any]:
         value.get("schema") != "context-core-schema/v1"
         or value.get("protocol") != PROTOCOL
         or not isinstance(features, list)
-        or "context-owner-descriptor/v2" not in features
-        or "filesystem-vault/v1" not in features
+        or not required_features.issubset(features)
         or not isinstance(commands, list)
         or not required_commands.issubset(commands)
     ):
         raise DecisionError(
             "core_incompatible",
             "context-core schema, protocol, feature, or required command handshake is incompatible",
-            {"required_plugin": dict(REQUIRED_PLUGIN), "required_commands": sorted(required_commands)},
+            {
+                "required_plugin": dict(REQUIRED_PLUGIN),
+                "required_commands": sorted(required_commands),
+                "required_features": sorted(required_features),
+            },
             EXIT_CONFLICT,
         )
     return value
@@ -576,6 +588,20 @@ def validate_decision_document(frontmatter: dict[str, Any], sections: dict[str, 
         _validate_date(frontmatter["revisit_on"], "revisit_on")
     if frontmatter["scope"] != canonical_scope(frontmatter["scope"]) or frontmatter["decision_key"] != canonical_decision_key(frontmatter["decision_key"]):
         raise DecisionError("slot_invalid", "stored scope and decision_key must already be canonical")
+    relations = frontmatter.get("relations")
+    if isinstance(relations, dict):
+        for key, identifiers in relations.items():
+            if not isinstance(key, str) or ":" not in key:
+                continue
+            if (
+                not isinstance(identifiers, list)
+                or len(identifiers) > 12
+                or any(not isinstance(identifier, str) for identifier in identifiers)
+                or len(identifiers) != len(set(identifiers))
+            ):
+                raise DecisionError("schema_invalid", "typed relation values must be unique bounded context id lists", {"relation": key})
+            for identifier in identifiers:
+                require_context_id(identifier, key)
     if "verified_at" in frontmatter or "status" in frontmatter:
         raise DecisionError("schema_invalid", "DEC forbids verified_at and status")
     canonical_names = {_canonical_section_name(name) for name in sections}
@@ -649,6 +675,10 @@ def decision_capability() -> dict[str, Any]:
                 "tradeoffs": {"type": "string_list", "max_items": 8, "max_item_chars": 240},
                 "revisit_when": {"type": "string_list", "max_items": 8, "max_item_chars": 240},
                 "revisit_on": {"type": "date"},
+                "serves_intents": {"type": "string_list", "format": "context_id", "max_items": 12, "max_item_chars": 36},
+                "informed_by_observations": {"type": "string_list", "format": "context_id", "max_items": 12, "max_item_chars": 36},
+                "informed_by_assumptions": {"type": "string_list", "format": "context_id", "max_items": 12, "max_item_chars": 36},
+                "affects_documents": {"type": "string_list", "format": "context_id", "max_items": 12, "max_item_chars": 36},
             },
         },
     }
@@ -738,7 +768,10 @@ def validate_candidate(candidate: dict[str, Any]) -> tuple[str, str, dict[str, A
     if not isinstance(owner_inputs, dict) or not isinstance(owner_inputs.get("decision"), dict):
         raise DecisionError("candidate_invalid", "candidate lacks decision owner inputs")
     values = owner_inputs["decision"]
-    allowed = {"decision", "rationale", "rejected_alternatives", "decision_key", "constraints", "tradeoffs", "revisit_when", "revisit_on"}
+    allowed = {
+        "decision", "rationale", "rejected_alternatives", "decision_key", "constraints", "tradeoffs",
+        "revisit_when", "revisit_on", *TYPED_RELATION_INPUTS,
+    }
     if set(values) - allowed:
         raise DecisionError("candidate_invalid", "decision owner input has undeclared fields", {"fields": sorted(set(values) - allowed)})
     decision = _bounded_string(values.get("decision"), "decision", MAX_DECISION_CODEPOINTS)
@@ -750,6 +783,13 @@ def validate_candidate(candidate: dict[str, Any]) -> tuple[str, str, dict[str, A
             _bounded_list(values[field], field, item_maximum=240)
     if "revisit_on" in values:
         _validate_date(values["revisit_on"], "revisit_on")
+    for field in TYPED_RELATION_INPUTS:
+        if field in values:
+            identifiers = _bounded_list(values[field], field, maximum=12, item_maximum=36)
+            if len(identifiers) != len(set(identifiers)):
+                raise DecisionError("candidate_invalid", f"{field} contains duplicate context ids", {"field": field})
+            for identifier in identifiers:
+                require_context_id(identifier, field)
     _bounded_string(candidate.get("title"), "title", 120)
     _bounded_string(candidate.get("claim"), "claim", MAX_PRIMARY_CLAIM_CODEPOINTS)
     _bounded_string(candidate.get("summary"), "summary", 280)
@@ -847,6 +887,16 @@ def _list_body(values: Sequence[str]) -> str:
     return "\n".join(f"- {value}" for value in values)
 
 
+def _candidate_relations(candidate: dict[str, Any], values: dict[str, Any]) -> dict[str, list[str]]:
+    relations: dict[str, list[str]] = {}
+    if candidate.get("informed_by"):
+        relations["informed_by"] = [require_context_id(item, "informed_by") for item in candidate["informed_by"]]
+    for field, relation in TYPED_RELATION_INPUTS.items():
+        if values.get(field):
+            relations[relation] = [require_context_id(item, field) for item in values[field]]
+    return relations
+
+
 def _validate_claim_draft_binding(
     candidate: dict[str, Any],
     frontmatter: dict[str, Any],
@@ -870,10 +920,9 @@ def _validate_claim_draft_binding(
         expected_frontmatter["revisit_when"] = list(values["revisit_when"])
     if values.get("revisit_on"):
         expected_frontmatter["revisit_on"] = values["revisit_on"]
-    if candidate.get("informed_by"):
-        expected_frontmatter["relations"] = {
-            "informed_by": [require_context_id(item, "informed_by") for item in candidate["informed_by"]],
-        }
+    relations = _candidate_relations(candidate, values)
+    if relations:
+        expected_frontmatter["relations"] = relations
     candidate_owned_fields = {
         "schema", "title", "summary", "captured_from", "source_refs", "tags", "search_terms",
         "scope", "decision_key", "revisit_when", "revisit_on", "relations",
@@ -939,9 +988,9 @@ def _draft_from_candidate(
         frontmatter["revisit_when"] = list(values["revisit_when"])
     if values.get("revisit_on"):
         frontmatter["revisit_on"] = values["revisit_on"]
-    if candidate.get("informed_by"):
-        informed = [require_context_id(item, "informed_by") for item in candidate["informed_by"]]
-        frontmatter["relations"] = {"informed_by": informed}
+    relations = _candidate_relations(candidate, values)
+    if relations:
+        frontmatter["relations"] = relations
     if extra_frontmatter:
         frontmatter.update(extra_frontmatter)
     sections = {
@@ -2613,6 +2662,10 @@ def build_direct_candidate(args: argparse.Namespace) -> dict[str, Any]:
             values[key] = [semantic_body(value) for value in argument]
     if args.revisit_on:
         values["revisit_on"] = args.revisit_on
+    for field in TYPED_RELATION_INPUTS:
+        items = getattr(args, field, [])
+        if items:
+            values[field] = items
     candidate = {
         "schema": "context-capture-candidate/v1", "candidate_id": args.candidate_id,
         "title": args.title, "claim": decision, "summary": args.summary, "captured_from": args.captured_from,
@@ -2646,6 +2699,10 @@ def _add_capture_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--tag", action="append", default=[])
     parser.add_argument("--search-term", action="append", default=[])
     parser.add_argument("--informed-by", action="append", default=[])
+    parser.add_argument("--serves-intent", dest="serves_intents", action="append", default=[])
+    parser.add_argument("--informed-by-observation", dest="informed_by_observations", action="append", default=[])
+    parser.add_argument("--informed-by-assumption", dest="informed_by_assumptions", action="append", default=[])
+    parser.add_argument("--affects-document", dest="affects_documents", action="append", default=[])
 
 
 def _add_preflight_arguments(parser: argparse.ArgumentParser) -> None:

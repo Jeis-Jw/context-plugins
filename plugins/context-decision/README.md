@@ -2,13 +2,15 @@
 
 `context-decision` preserves decision continuity: what the project chose, why it chose it, which alternatives it rejected, and when a newer DEC superseded the old one. Current DEC documents are authoritative; history is marked `do_not_follow`.
 
+DEC remains standalone: an Intent is optional. Existing artifacts keep descriptor v1, required `Decision`, `Rationale`, and `Rejected alternatives` sections, legacy untyped `informed_by`, and their existing bytes. New candidates may additionally supply `serves_intents`, `informed_by_observations`, `informed_by_assumptions`, and `affects_documents`; DEC projects them to `serves:intent`, `informed_by:observation`, `informed_by:assumption`, and `affects:document`. Core validates that typed targets exist and have the declared kind.
+
 ## Supported developer-preview path
 
 1. Run the root `core-decision` profile installer once from the downloaded plugin files. It installs missing profile plugins and accepts enabled same-major installations as compatible.
 2. Reload the host or open a new session.
 3. Run `$context-decision:init` once in the target vault directory.
 
-There is no bundle or meta-plugin, and decision code is not embedded in core. The root installer is explicit distribution tooling; this plugin never changes host installation state. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.9.0` tag is not published yet; tag creation and publication remain owner-gated.
+There is no bundle or meta-plugin, and decision code is not embedded in core. The root installer is explicit distribution tooling; this plugin never changes host installation state. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.10.0` tag is not published yet; tag creation and publication remain owner-gated.
 
 Core and decision package versions are compatible when their major versions match. Minor versions add or change functionality and patch versions contain small fixes; for the current `0.x` line, any `0.*` pair passes the package-version gate. The runtime handshake below still rejects a same-major implementation whose actual surface is incompatible.
 
@@ -20,9 +22,10 @@ Before any core subprocess, canonical init and workflow verify the absolute entr
 - `protocol=context-common/v2`
 - required doctor, bootstrap, and transaction preview/apply commands
 - `context-owner-descriptor/v2` and `filesystem-vault/v1`
+- `typed-relations/v1` when the candidate actually contains a typed relation input
 - the exact doctor field shape and current repository state
 
-This verifies the executable compatibility contract. It does **not** attest marketplace provenance, catalog source, installation scope, or host enabled state. Inventory and doctor files remain available only for low-level compatibility operations; canonical init and the DEC workflow do not ask users to provide them.
+Standalone and legacy-untyped DEC operations retain the prior same-major handshake; only typed relation use needs the additive Core feature. This verifies the executable compatibility contract. It does **not** attest marketplace provenance, catalog source, installation scope, or host enabled state. Inventory and doctor files remain available only for low-level compatibility operations; canonical init and the DEC workflow do not ask users to provide them.
 
 The low-level inventory preflight may report `core_missing`, `core_source_mismatch`, `core_disabled`, `core_incompatible`, `core_uninitialized`, or `ready`. For the first four, install or correct `context-core@context-plugins` from `Jeis-Jw/context-plugins` in the intended scope, reload or open a new session, and retry `context-decision:init`. `core_uninitialized` is not an install failure: the same init call invokes core bootstrap for both core and DEC.
 
@@ -65,5 +68,7 @@ A healthy index miss opens zero indexed bodies; missing or stale index recovery 
 Existing DEC bytes and `context-common/v2` remain compatible. ASM and TERM are optional experimental owners and are not installed, enabled, initialized, or migrated automatically.
 
 Version `0.9.0` introduces the major-based package compatibility policy and keeps protocol/capability handshakes plus operation-bound actual runtime digests as the fail-closed execution boundary.
+
+Version `0.10.0` adds optional typed relation inputs while preserving standalone decisions and legacy artifact bytes. No tag or publication is implied.
 
 See the [owner protocol](./skills/decision/references/decision-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).

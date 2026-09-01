@@ -55,3 +55,5 @@ Structured claim and decline inputs use the explicit `--candidate @file` surface
 Runtime responses, questions, previews, and explanatory guidance follow the active language. Schema IDs, JSON keys, CLI options, error codes, filenames, and metadata fields remain English.
 
 Version `0.9.0` keeps TERM as an optional semantic-owner package outside the `core-decision` installation profile and adopts same-major core compatibility. The `v0.9.0` tag and marketplace publication are still pending.
+
+Version `0.10.0` aligns the six-plugin distribution version; TERM semantics and stored bytes are unchanged. No tag or publication is implied.

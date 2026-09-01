@@ -892,6 +892,96 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             self.assertEqual("ready", doctor["repository_state"])
             self.assertEqual([], doctor["issues"])
 
+    def test_typed_relations_validate_target_kind_at_preview_apply_and_doctor(self) -> None:
+        with vault_dir() as temp:
+            repo = Path(temp)
+            self._init(repo)
+
+            observation = context_cli.direct_candidate(
+                "observation",
+                title="Runtime observation",
+                summary="Typed relation target fixture.",
+                captured_from="manual",
+                owner_inputs={"observation": "The runtime boundary is observable.", "evidence": ["fixture evidence"]},
+            )
+            observation_attestation = {
+                "schema": "context-semantic-attestation/v1",
+                "operation": "claim",
+                "input_schema": observation["schema"],
+                "input_digest": context_cli.canonical_digest(observation),
+                "assertions": [
+                    {"name": "reusable_observation", "value": True, "evidence_pointers": ["/owner_inputs/observation/observation"]},
+                    {"name": "evidence_present", "value": True, "evidence_pointers": ["/owner_inputs/observation/evidence/0"]},
+                ],
+            }
+            observation_result = context_cli.draft_owner_result(
+                observation,
+                observation_attestation,
+                identifier="ctx_550e8400e29b41d4a716446655440010",
+                now="2026-08-21T11:00:00+09:00",
+            )
+            observation_preview = context_cli.finalize_owner_result(repo, observation_result)
+            context_cli.apply_bundle(repo, observation_preview["bundle"], observation_preview["approval_digest"])
+
+            descriptor = owner_descriptor()
+            descriptor["structural_profile"]["fields"].pop("related")
+            descriptor["structural_profile"]["fields"]["relations"] = {
+                "type": "relation_map",
+                "required": False,
+                "keys": ["supports", "supports:observation", "supports:assumption"],
+                "max_items": 12,
+            }
+            self._register(repo, descriptor, area_seed(descriptor), "typed")
+            capability = owner_capability(descriptor)
+
+            def related_result(key: str, target: str) -> dict:
+                result = claim_result(descriptor, capability)
+                document = context_cli.parse_document(result["artifact_drafts"][0]["content"], descriptor)
+                frontmatter = dict(document.frontmatter)
+                frontmatter["relations"] = {key: [target]}
+                result["artifact_drafts"][0]["content"] = context_cli.render_document(frontmatter, document.sections, descriptor)
+                return result
+
+            before = tree_digest(repo)
+            for key, target, expected_code in (
+                ("supports:observation", "ctx_550e8400e29b41d4a716446655440099", "typed_relation_target_missing"),
+                ("supports:assumption", "ctx_550e8400e29b41d4a716446655440010", "typed_relation_kind_mismatch"),
+            ):
+                with self.subTest(key=key):
+                    invalid = related_result(key, target)
+                    receipt = owner_receipt(repo, descriptor, capability, invalid, "create_current")
+                    with self.assertRaises(context_cli.ContextError) as caught:
+                        context_cli.finalize_owner_result(repo, invalid, receipt)
+                    self.assertEqual(expected_code, caught.exception.code)
+                    self.assertEqual(before, tree_digest(repo))
+
+            legacy = related_result("supports", "ctx_550e8400e29b41d4a716446655440010")
+            legacy_receipt = owner_receipt(repo, descriptor, capability, legacy, "create_current")
+            legacy_preview = context_cli.finalize_owner_result(repo, legacy, legacy_receipt)
+            self.assertEqual(before, tree_digest(repo), "preview must remain byte-noop")
+
+            valid = related_result("supports:observation", "ctx_550e8400e29b41d4a716446655440010")
+            valid_receipt = owner_receipt(repo, descriptor, capability, valid, "create_current")
+            valid_preview = context_cli.finalize_owner_result(repo, valid, valid_receipt)
+            observation_path = repo / observation_result["artifact_drafts"][0]["path"]
+            observation_path.unlink()
+            tampered = tree_digest(repo)
+            with self.assertRaises(context_cli.ContextError) as caught:
+                context_cli.apply_bundle(repo, valid_preview["bundle"], valid_preview["approval_digest"])
+            self.assertEqual("typed_relation_target_missing", caught.exception.code)
+            self.assertEqual(tampered, tree_digest(repo))
+            self.assertFalse((repo / "context/premise/fixture.md").exists())
+
+            observation_path.write_text(observation_result["artifact_drafts"][0]["content"], encoding="utf-8")
+            context_cli.apply_bundle(repo, valid_preview["bundle"], valid_preview["approval_digest"])
+            artifact_path = repo / "context/premise/fixture.md"
+            text = artifact_path.read_text(encoding="utf-8")
+            artifact_path.write_text(text.replace("supports:observation", "supports:assumption"), encoding="utf-8")
+            refresh = context_cli.refresh_repository(repo)
+            self.assertIn("typed_relation_kind_mismatch", [issue["code"] for issue in refresh["issues"]])
+            doctor = context_cli.doctor_repository(repo)
+            self.assertIn("typed_relation_kind_mismatch", [issue["code"] for issue in doctor["issues"]])
+
     def test_acceptance_55_apply_revalidates_after_lock_tamper(self) -> None:
         with vault_dir() as temp:
             repo = Path(temp)

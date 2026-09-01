@@ -9,10 +9,12 @@ Context Plugins는 AI 코딩 에이전트에게 프로젝트 전용 기억을 �
 AI 코딩 에이전트는 유용하지만 새 대화를 시작하면 “왜 이렇게 만들었는지”를 잊을 수 있습니다. Context Plugins는 대화가 바뀌어도 남아야 할 내용을 보관합니다.
 
 - **결정** — 무엇을 선택했고, 왜 선택했으며, 어떤 대안을 제외했는지
+- **취지** — 프로젝트가 지속적으로 지향하려는 방향
 - **관찰 기록** — 테스트 결과, 장애 원인처럼 다음에도 활용할 수 있는 사실
+- **문서** — 같은 식별자를 유지하면서 내용을 갱신할 living project guidance
 - **작업 현황** — 어디까지 작업했고 다음에 무엇을 해야 하는지
 
-저장된 내용은 프로젝트의 `context/` 폴더에 일반 Markdown 파일로 남습니다. 다른 프로젝트 파일처럼 직접 읽고 수정하거나 Git으로 공유할 수 있습니다.
+저장된 내용은 filesystem vault의 `context/` 폴더에 일반 Markdown 파일로 남습니다. 직접 읽고 수정할 수 있고, 필요하면 기존 파일 공유나 버전 관리 방식으로 함께 사용할 수 있습니다. Git은 선택 사항이며 runtime 전제가 아닙니다.
 
 Context Plugins는 대화 전체를 자동으로 저장하지 않습니다. 에이전트가 오래 남길 만한 내용을 발견하면 먼저 저장할 내용을 보여주고 사용자에게 확인합니다.
 
@@ -50,7 +52,24 @@ claude plugin install context-decision@context-plugins --scope user
 
 Marketplace가 이미 등록되어 있다면 첫 번째 명령은 생략해도 됩니다. 설치가 끝나면 에이전트를 다시 시작하거나 새 세션을 여세요.
 
-처음 사용할 때는 `context-core`와 `context-decision`만 설치하면 됩니다. Marketplace에는 필요에 따라 사용할 수 있는 가정 관리와 프로젝트 용어 관리 플러그인도 포함되어 있습니다.
+처음 사용할 때는 `context-core`와 `context-decision`만 설치하면 됩니다. 모든 semantic owner는 `context-core`가 필요하지만 semantic owner끼리는 서로를 요구하지 않습니다. 필요한 optional owner만 아래 명령으로 설치하고 초기화하세요. 하나를 설치해도 다른 owner가 자동으로 설치되거나 초기화되지 않습니다.
+
+| Optional owner | Codex 설치 | Claude Code 설치 | Agent 대화창에서 초기화 |
+| --- | --- | --- | --- |
+| Intent | `codex plugin add context-intent@context-plugins` | `claude plugin install context-intent@context-plugins --scope user` | `$context-intent:init` |
+| Document | `codex plugin add context-document@context-plugins` | `claude plugin install context-document@context-plugins --scope user` | `$context-document:init` |
+| Assumption | `codex plugin add context-assumption@context-plugins` | `claude plugin install context-assumption@context-plugins --scope user` | `$context-assumption:init` |
+| Term | `codex plugin add context-term@context-plugins` | `claude plugin install context-term@context-plugins --scope user` | `$context-term:init` |
+
+### Context type의 관계
+
+- **Intent**는 desired direction입니다.
+- **Observation**과 **Assumption**은 evidence와 premise입니다.
+- **Decision**은 chosen commitment입니다.
+- **Rationale**은 해당 근거에서 왜 그 결정을 택했고 그 결정이 Intent를 어떻게 섬기는지 설명합니다.
+- **Document**는 식별자를 유지하면서 갱신할 수 있는 living content입니다.
+
+intent-only, decision-only, document-only로 각각 사용할 수 있습니다. 관련 artifact가 함께 존재하면 decision이 `serves:intent`, `informed_by:observation`, `informed_by:assumption`, `affects:document` 관계를 기록할 수 있습니다. 이 관계는 inverse record를 만들지 않고 어떤 plugin도 필수로 바꾸지 않습니다.
 
 ## 사용하는 방법
 

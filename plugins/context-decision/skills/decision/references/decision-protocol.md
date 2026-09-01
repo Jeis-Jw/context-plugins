@@ -48,6 +48,8 @@ Capture returns one Current draft/effect/create operation. Draft time fixes ID a
 
 Ordinary OBS evidence remains active and is linked by `relations.informed_by`. A decision-like fallback OBS import requires exact source ID/path/SHA/actual claim, `same_claim`, and a cross-owner coordinator plan.
 
+DEC remains valid without INTENT, DOCUMENT, OBS, or ASM references. Optional owner inputs `serves_intents`, `informed_by_observations`, `informed_by_assumptions`, and `affects_documents` project to typed relation keys `serves:intent`, `informed_by:observation`, `informed_by:assumption`, and `affects:document`. Legacy top-level `informed_by` continues to project to the untyped `informed_by` key and keeps its prior parser/cardinality behavior and bytes. Core validates typed target existence and kind without rewriting existing artifacts or storing inverse edges. The workflow conditionally requires Core `typed-relations/v1` only when a typed input is non-empty; standalone and legacy-untyped DEC operations retain the prior same-major handshake.
+
 ## Same-batch validation
 
 `batch validate` starts from the exact physical `decision.index.md` SHA and overlays prior same-area final bundles in proposal order. Each plan must bind the exact preceding digest sequence. Virtual Current enforces slot uniqueness, overlap acknowledgement/read preconditions, and lifecycle predecessor state.

@@ -187,6 +187,56 @@ def bundle(result: dict, *, validation: dict | None = None, priors: list[str] | 
 
 
 class DecisionSchemaTests(unittest.TestCase):
+    def test_legacy_untyped_relations_keep_pre_010_cardinality_and_bytes(self) -> None:
+        identifiers = [
+            "ctx_550e8400e29b41d4a71644665544" + f"{number:04x}"
+            for number in range(13)
+        ]
+        legacy_candidate = candidate()
+        legacy_candidate["informed_by"] = identifiers
+        content = claim_result(legacy_candidate)["artifact_drafts"][0]["content"]
+        frontmatter, sections = decision_cli.parse_document(content)
+        self.assertEqual(identifiers, frontmatter["relations"]["informed_by"])
+        self.assertEqual(content, decision_cli.render_document(frontmatter, sections))
+
+        typed_frontmatter = dict(frontmatter)
+        typed_frontmatter["relations"] = {"serves:intent": identifiers}
+        with self.assertRaises(decision_cli.DecisionError) as typed_error:
+            decision_cli.validate_decision_document(typed_frontmatter, sections)
+        self.assertEqual("schema_invalid", typed_error.exception.code)
+
+    def test_optional_typed_relation_inputs_preserve_standalone_and_legacy_shapes(self) -> None:
+        standalone = claim_result(candidate())["artifact_drafts"][0]["content"]
+        standalone_frontmatter, _ = decision_cli.parse_document(standalone)
+        self.assertNotIn("relations", standalone_frontmatter)
+
+        legacy_candidate = candidate()
+        legacy_candidate["informed_by"] = ["ctx_550e8400e29b41d4a716446655440010"]
+        legacy_frontmatter, _ = decision_cli.parse_document(claim_result(legacy_candidate)["artifact_drafts"][0]["content"])
+        self.assertEqual(
+            {"informed_by": ["ctx_550e8400e29b41d4a716446655440010"]},
+            legacy_frontmatter["relations"],
+        )
+
+        typed_candidate = candidate()
+        typed_candidate["owner_inputs"]["decision"].update({
+            "serves_intents": ["ctx_550e8400e29b41d4a716446655440011"],
+            "informed_by_observations": ["ctx_550e8400e29b41d4a716446655440012"],
+            "informed_by_assumptions": ["ctx_550e8400e29b41d4a716446655440013"],
+            "affects_documents": ["ctx_550e8400e29b41d4a716446655440014"],
+        })
+        typed_frontmatter, _ = decision_cli.parse_document(claim_result(typed_candidate)["artifact_drafts"][0]["content"])
+        self.assertEqual(
+            {
+                "serves:intent": ["ctx_550e8400e29b41d4a716446655440011"],
+                "informed_by:observation": ["ctx_550e8400e29b41d4a716446655440012"],
+                "informed_by:assumption": ["ctx_550e8400e29b41d4a716446655440013"],
+                "affects:document": ["ctx_550e8400e29b41d4a716446655440014"],
+            },
+            typed_frontmatter["relations"],
+        )
+        self.assertEqual("context-owner-descriptor/v1", decision_cli.build_init_plan()["owner_descriptor"]["schema"])
+
     def test_removed_artifact_fields_are_readable_and_lazy_cleaned(self) -> None:
         content = claim_result()["artifact_drafts"][0]["content"]
         for field in ("claim_fingerprint", "source_claim_fingerprint"):

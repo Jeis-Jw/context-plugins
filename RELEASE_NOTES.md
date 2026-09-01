@@ -1,5 +1,15 @@
 # Release notes
 
+## 0.10.0 (developer preview; tag not published)
+
+- Add additive `typed-relations/v1` validation. Storage remains `relations: { key: [ctx_id...] }`; `<predicate>:<target-kind>` targets must exist with that kind during preview, apply revalidation, refresh, and doctor. Legacy keys without `:` remain compatible.
+- Add optional `context-intent` with authoritative `(scope, intent_key)`, required `Intent`, optional success/constraint/revisit sections, and capture/read/search/supersede lifecycle.
+- Add optional `context-document` with authoritative `(scope, document_key)`, required `Content`, and stable-ID `replace_same_state` updates. No taxonomy, inverse relations, or extra lifecycle is introduced.
+- Keep DEC standalone and preserve descriptor v1, required sections, legacy `informed_by`, and existing artifact bytes. Optional DEC inputs project to `serves:intent`, `informed_by:observation`, `informed_by:assumption`, and `affects:document`.
+- Intent, decision, and document owners remain independently installable and usable. The `core-decision` profile remains exactly core plus decision, and no plugin installs another.
+- Codex default-prompt material is now from 3,147 to 2,010 characters, a 36.1% character reduction. This is a character-count observation, not a runtime token-savings measurement.
+- Filesystem vault, approval, CAS, locking, and artifact-byte compatibility remain unchanged. No Git dependency, migration, tag, push, or publication is introduced.
+
 ## 0.9.0 (developer preview; tag not published)
 
 - Context storage and approval no longer depend on Git, repositories, worktrees, or Git metadata. `--vault DIR` selects a directory containing `context/`; automatic selection uses the nearest current/ancestor `context` entry, or cwd for fresh initialization.
@@ -71,4 +81,4 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ## Release boundary
 
-This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.9.0` remain owner-gated.
+This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.10.0` remain owner-gated.

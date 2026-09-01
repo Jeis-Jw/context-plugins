@@ -2,6 +2,8 @@
 
 `context-decision`은 “무엇을 결정했고, 왜 그 결정을 따르며, 어떤 대안을 반려했는가”를 다음 agent와 session에서 바로 복원하는 decision continuity plugin입니다. 현재 DEC는 authoritative하며 superseded history는 `do_not_follow`로 표시됩니다.
 
+DEC는 standalone을 유지하며 Intent는 선택 사항입니다. 기존 artifact의 descriptor v1, 필수 `Decision`, `Rationale`, `Rejected alternatives`, legacy untyped `informed_by`와 저장 bytes는 유지합니다. 신규 candidate는 선택적으로 `serves_intents`, `informed_by_observations`, `informed_by_assumptions`, `affects_documents`를 전달할 수 있고 DEC는 이를 `serves:intent`, `informed_by:observation`, `informed_by:assumption`, `affects:document`로 투영합니다. Core는 typed target의 존재와 kind를 검증합니다.
+
 ## Manual hard dependency
 
 요구 좌표는 marketplace `context-plugins`, plugin `context-core`, selector `context-core@context-plugins`, source `Jeis-Jw/context-plugins`, protocol `context-common/v2`입니다. 동명 plugin이나 다른 marketplace source는 대체하지 못합니다.
@@ -11,7 +13,7 @@
 3. `$context-decision:init`을 한 번 호출합니다.
 4. installed core public bootstrap이 필요한 core seed와 decision area를 적용하고, 현재 host의 `AGENTS.md` 또는 `CLAUDE.md`에 context 운영지침 managed block을 설치합니다. ready 재호출은 모두 noop입니다.
 
-Root installer는 명시적으로 실행하는 배포 도구일 뿐 bundle/meta-plugin이 아닙니다. `context-decision` 자체는 marketplace add, install, enable, update 또는 host configuration 변경을 자동 실행하지 않습니다. Manifest에도 dependency나 implicit/default install metadata가 없고 core 구현을 내장하지 않습니다. Canonical init과 workflow는 subprocess 전에 absolute entrypoint suffix, 인접한 Claude/Codex core manifest의 name·version 일치와 같은 major를 확인하고 실제 entrypoint SHA-256을 해당 operation 동안 고정합니다. 이어서 `context-core-schema/v1`, `context-common/v2`, required doctor/transaction/bootstrap command, `context-owner-descriptor/v2`·`filesystem-vault/v1` feature와 doctor state를 직접 handshake합니다. 이 검사는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 저수준 compatibility mode의 입력일 뿐 canonical 경로의 신뢰 근거가 아닙니다.
+Root installer는 명시적으로 실행하는 배포 도구일 뿐 bundle/meta-plugin이 아닙니다. `context-decision` 자체는 marketplace add, install, enable, update 또는 host configuration 변경을 자동 실행하지 않습니다. Manifest에도 dependency나 implicit/default install metadata가 없고 core 구현을 내장하지 않습니다. Canonical init과 workflow는 subprocess 전에 absolute entrypoint suffix, 인접한 Claude/Codex core manifest의 name·version 일치와 같은 major를 확인하고 실제 entrypoint SHA-256을 해당 operation 동안 고정합니다. 이어서 `context-core-schema/v1`, `context-common/v2`, required doctor/transaction/bootstrap command, `context-owner-descriptor/v2`·`filesystem-vault/v1` feature와 doctor state를 직접 handshake합니다. Typed relation input이 실제로 있을 때만 `typed-relations/v1`을 추가로 요구하며 standalone·legacy untyped DEC는 기존 same-major handshake를 유지합니다. 이 검사는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 저수준 compatibility mode의 입력일 뿐 canonical 경로의 신뢰 근거가 아닙니다.
 
 Core와 decision package는 major version이 같으면 version-compatible합니다. Minor는 기능 추가·변경, patch는 작은 수정이며 현재 `0.x`에서는 모든 `0.*` 조합이 package-version gate를 통과합니다. 단, 실제 runtime surface가 맞지 않으면 아래 handshake가 같은-major 구현도 계속 차단합니다.
 
@@ -71,3 +73,5 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 0.7.1은 자연어 승인 질문, discovery-only read, supersede/withdraw golden path와 deterministic receipt lifecycle을 통합합니다. Core와 decision의 semantic ownership 및 package 경계는 유지하며 root profile installer만 설치 동작을 묶습니다. `v0.7.1` tag와 publication은 아직 완료되지 않았습니다.
 
 0.9.0은 package version 호환성을 major 기준으로 바꾸고, protocol·capability handshake와 operation-bound actual runtime digest를 fail-closed 실행 경계로 유지합니다. `v0.9.0` tag와 publication은 아직 완료되지 않았습니다.
+
+0.10.0은 standalone decision과 legacy artifact bytes를 유지하면서 optional typed relation input을 추가합니다. tag나 publication을 의미하지 않습니다.

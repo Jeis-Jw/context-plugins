@@ -18,13 +18,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PHASE0 = ROOT / "tests/context-v1/phase0/phase0_contract.py"
-PLUGIN_NAMES = ("context-core", "context-decision", "context-assumption", "context-term")
-RELEASE_VERSION = "0.9.0"
+PLUGIN_NAMES = (
+    "context-core",
+    "context-decision",
+    "context-assumption",
+    "context-term",
+    "context-intent",
+    "context-document",
+)
+RELEASE_VERSION = "0.10.0"
 OWNER_SKILLS = {
     "context-core": "context",
     "context-decision": "decision",
     "context-assumption": "assumption",
     "context-term": "term",
+    "context-intent": "intent",
+    "context-document": "document",
 }
 OWNER_CLIS = {
     name: f"skills/{skill}/scripts/{skill}_cli.py"
@@ -35,12 +44,16 @@ INIT_ENTRYPOINTS = {
     "context-decision": "skills/init/scripts/decision_init.py",
     "context-assumption": "skills/init/scripts/assumption_init.py",
     "context-term": "skills/init/scripts/term_init.py",
+    "context-intent": "skills/init/scripts/intent_init.py",
+    "context-document": "skills/init/scripts/document_init.py",
 }
 SCHEMA_NAMES = {
     "context-core": "context-core-schema/v1",
     "context-decision": "context-decision-schema/v1",
     "context-assumption": "context-assumption-schema/v1",
     "context-term": "context-term-schema/v1",
+    "context-intent": "context-intent-schema/v1",
+    "context-document": "context-document-schema/v1",
 }
 FORBIDDEN_KEYS = {
     "dependencies",
@@ -193,7 +206,7 @@ class DistributionProofTests(unittest.TestCase):
         self.assertEqual("context-plugins", claude_marketplace["name"])
         self.assertEqual("context-plugins", codex_marketplace["name"])
         self.assertEqual(
-            "Developer-preview marketplace for Git-backed, approval-gated durable project context.",
+            "Developer-preview marketplace for filesystem-vault, approval-gated durable project context.",
             claude_marketplace["metadata"]["description"],
         )
         self.assertEqual(list(PLUGIN_NAMES), [item["name"] for item in claude_marketplace["plugins"]])
@@ -353,6 +366,27 @@ class DistributionProofTests(unittest.TestCase):
             "Apache License 2.0",
         ):
             self.assertIn(token, readme)
+        optional_owners = {
+            "context-intent": "$context-intent:init",
+            "context-document": "$context-document:init",
+            "context-assumption": "$context-assumption:init",
+            "context-term": "$context-term:init",
+        }
+        for public_readme in (ROOT / "README.md", ROOT / "README.ko.md"):
+            text = public_readme.read_text(encoding="utf-8")
+            for plugin, selector in optional_owners.items():
+                self.assertIn(f"codex plugin add {plugin}@context-plugins", text, public_readme)
+                self.assertIn(
+                    f"claude plugin install {plugin}@context-plugins --scope user",
+                    text,
+                    public_readme,
+                )
+                self.assertIn(selector, text, public_readme)
+        self.assertIn("Every semantic owner requires `context-core`", readme)
+        self.assertIn("semantic owners do not require one another", readme)
+        korean_readme = (ROOT / "README.ko.md").read_text(encoding="utf-8")
+        self.assertIn("모든 semantic owner는 `context-core`가 필요", korean_readme)
+        self.assertIn("semantic owner끼리는 서로를 요구하지 않습니다", korean_readme)
         for developer_only_token in (
             "git clone",
             "scripts/install_profile.py",
@@ -447,9 +481,9 @@ class DistributionProofTests(unittest.TestCase):
         skill_paths = sorted(ROOT.glob("plugins/*/skills/*/SKILL*.md"))
         canonical_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.md"))
         translated_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.ko.md"))
-        self.assertEqual(10, len(canonical_skills))
+        self.assertEqual(14, len(canonical_skills))
         self.assertEqual(6, len(translated_skills))
-        self.assertEqual(16, len(skill_paths))
+        self.assertEqual(20, len(skill_paths))
 
         for path in canonical_skills:
             text = path.read_text(encoding="utf-8")
@@ -501,6 +535,29 @@ class DistributionProofTests(unittest.TestCase):
                 )
 
         policy_paths = sorted(ROOT.glob("plugins/*/rules/*.md"))
+        semantic_policy_paths = [
+            ROOT / "plugins" / name / "rules" / f"{OWNER_SKILLS[name]}-policy.md"
+            for name in PLUGIN_NAMES[1:]
+        ]
+        self.assertEqual(5, len(semantic_policy_paths))
+        for path in semantic_policy_paths:
+            text = path.read_text(encoding="utf-8")
+            for token in (
+                "complete rendered body",
+                "`approval_digest`",
+                "receipt path",
+                "internal ID",
+                "core path",
+                "direct, explicit, unconditional",
+                "acknowledgement",
+                "praise",
+                "condition",
+                "edit request",
+                "topic change",
+                "Confirm ambiguity once",
+                "never regenerate after approval",
+            ):
+                self.assertIn(token.casefold(), text.casefold(), path)
         approval_surfaces = [*skill_paths, *readmes, *policy_paths, ROOT / "AGENTS.md"]
         core_cli = load(
             "context_cli_natural_language_policy",
@@ -531,6 +588,31 @@ class DistributionProofTests(unittest.TestCase):
             prompts = read_json(manifest)["interface"]["defaultPrompt"]
             self.assertTrue(any("active language" in prompt for prompt in prompts), manifest)
             self.assertTrue(any("machine fields English" in prompt for prompt in prompts), manifest)
+
+        core_approval_prompt = read_json(
+            ROOT / "plugins/context-core/.codex-plugin/plugin.json"
+        )["interface"]["defaultPrompt"][2]
+        for token in (
+            "Complete preview",
+            "only direct, explicit, unconditional natural-language yes approves",
+            "Keep transport private",
+            "never regenerate",
+        ):
+            self.assertIn(token, core_approval_prompt)
+        for transport_detail in ("approval_digest", "repo", "SHA", "CAS", "lock"):
+            self.assertNotIn(transport_detail.casefold(), core_approval_prompt.casefold())
+
+    def test_agents_policy_tracks_current_owners_and_filesystem_vault_contract(self) -> None:
+        policy = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        for owner in PLUGIN_NAMES:
+            self.assertIn(f"`{owner}`", policy)
+        self.assertIn("선택된 filesystem vault root의 `context/`", policy)
+        self.assertIn("Git은 공유와 버전 관리를 위한 선택 사항", policy)
+        self.assertIn("context runtime의 전제가 아니다", policy)
+        self.assertIn("모든 semantic owner", policy)
+        self.assertIn("`context-core@context-plugins`", policy)
+        self.assertIn("semantic owner끼리는 서로를 요구하지 않는다", policy)
+        self.assertNotIn("repository root의 `context/`", policy)
 
     def test_semantic_plugins_accept_same_major_core_and_reject_other_major(self) -> None:
         expected = read_json(ROOT / "tests/context-v1/fixtures/host-inventory/required-plugin.json")
@@ -655,8 +737,8 @@ class DistributionProofTests(unittest.TestCase):
         ]
         actual_prompt_chars = sum(len(prompt) for prompt in prompt_values)
         reduction_percent = (baseline_prompt_chars - actual_prompt_chars) * 100 / baseline_prompt_chars
-        self.assertEqual(12, len(prompt_values))
-        self.assertLessEqual(actual_prompt_chars, 1_339)
+        self.assertEqual(18, len(prompt_values))
+        self.assertLessEqual(actual_prompt_chars, 2_100)
         english_measurement = (
             f"from {baseline_prompt_chars:,} to {actual_prompt_chars:,} characters, "
             f"a {reduction_percent:.1f}% character reduction"
@@ -830,6 +912,8 @@ class DistributionProofTests(unittest.TestCase):
         contracts = {
             "context-assumption": "assumption_test_support",
             "context-term": "term_test_support",
+            "context-intent": "intent_test_support",
+            "context-document": "document_test_support",
         }
         for plugin, support in contracts.items():
             tests_root = ROOT / "plugins" / plugin / "tests"

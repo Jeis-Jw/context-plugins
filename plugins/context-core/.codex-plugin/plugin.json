@@ -1,6 +1,6 @@
 {
   "name": "context-core",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Proactive scoped recall and approval-gated context capture with coordinated writes.",
   "author": {
     "name": "Jinwuk-Lee",
@@ -13,11 +13,15 @@
     "longDescription": "Installs a managed conversational workflow for scoped recall, actual-body comparison, conflict notification, and approval-gated capture; stores handoffs and evidence as Markdown and remains the only physical writer for context-common/v2 owners.",
     "developerName": "Jinwuk-Lee",
     "category": "Productivity",
-    "capabilities": ["Read", "Write", "Validation"],
+    "capabilities": [
+      "Read",
+      "Write",
+      "Validation"
+    ],
     "defaultPrompt": [
       "Mechanical pathless: search one inferred subtree; no root/hidden/AGENTS/`context/`; unsafe→ask; calls/reads/mentions=0.",
-      "Use active language; machine fields English. Conflict first; hold: keep=not done; supersede only after explicit choice",
-      "Approval: pass approval_digest unchanged; verify SHA/repo/CAS/lock; never regenerate. Recall index→body→mention→question"
+      "Use active language; machine fields English. Conflict; keep=not done, supersede by choice. Recall index→body→mention→question",
+      "Complete preview: only direct, explicit, unconditional natural-language yes approves. Keep transport private; never regenerate."
     ]
   }
 }

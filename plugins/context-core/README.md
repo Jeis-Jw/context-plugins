@@ -8,7 +8,7 @@ Run the root `core-decision` profile installer once from the downloaded plugin f
 
 For a core-only setup, `$context-core:init` remains available. It creates the canonical root, SNAP and OBS indexes and the active host policy. Re-running init after a ready result is a filesystem no-op.
 
-The `v0.9.0` tag is not published yet. See the repository root README for the owner-gated tag, publication, and license status.
+The `v0.10.0` tag is not published yet. See the repository root README for the owner-gated tag, publication, and license status.
 
 ## Runtime contract
 
@@ -49,9 +49,15 @@ A denied apply, preview, recall, route, claim, or validation has zero repository
 | DEC | Current decision and superseded history | authoritative, owned by `context-decision` |
 | ASM | Optional unverified premise | provisional, experimental owner |
 | TERM | Optional project vocabulary | authoritative, experimental owner |
+| INTENT | Optional desired direction | authoritative, owned by `context-intent` |
+| DOCUMENT | Optional living project content | authoritative, owned by `context-document` |
 
 Markdown artifacts are canonical; `context.index.md` and area indexes are deterministic projections. Existing `context-common/v2` artifacts are not rewritten by the 0.9.0 release, and existing `wiki/` content is never migrated automatically.
 
+`typed-relations/v1` is additive and keeps the existing relation-map storage shape. Keys shaped as `<predicate>:<target-kind>` are checked against the live target kind during preview, apply revalidation, refresh, and doctor. Keys without `:` retain legacy behavior. Core stores no inverse edge and performs no artifact migration.
+
 Version `0.9.0` uses major versions as the package compatibility boundary, minor versions for functional changes, and patch versions for small fixes. Protocol and capability handshakes remain authoritative even for same-major packages.
+
+Version `0.10.0` adds typed relation validation and optional INTENT/DOCUMENT owner registration surfaces without changing the filesystem-vault or approval model. No tag or publication is implied.
 
 See the [storage protocol](./skills/context/references/context-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).

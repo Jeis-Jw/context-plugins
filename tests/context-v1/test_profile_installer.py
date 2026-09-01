@@ -33,7 +33,7 @@ class ProfileInstallerTests(unittest.TestCase):
     def test_acceptance_68_profile_installer_keeps_core_and_decision_separate(self) -> None:
         profile = installer.load_profile()
         self.assertEqual("context-plugin-profile/v2", profile["schema"])
-        self.assertEqual("0.9.0", profile["version"])
+        self.assertEqual("0.10.0", profile["version"])
         self.assertEqual("same-major", profile["compatibility"])
         self.assertEqual(
             ["context-core@context-plugins", "context-decision@context-plugins"],
@@ -77,7 +77,7 @@ class ProfileInstallerTests(unittest.TestCase):
         profile = installer.load_profile()
         marketplaces = [{"name": "context-plugins", "root": str(ROOT.resolve())}]
         installed = [
-            {"pluginId": selector, "version": "0.9.0", "enabled": True}
+            {"pluginId": selector, "version": "0.10.0", "enabled": True}
             for selector in profile["plugins"]
         ]
         self.assertEqual([], installer.build_install_plan(profile, "codex", "user", marketplaces, installed))

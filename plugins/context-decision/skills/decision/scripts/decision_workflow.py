@@ -604,7 +604,11 @@ def _semantic_inputs(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str
     if not args.inline:
         inline_values = [
             name
-            for name in (*INLINE_FIELDS, "sec_constraints", "sec_tradeoffs", "sec_revisit", "revisit_on", "source_ref", "tag", "search_term", "informed_by", *ATTESTATION_FLAGS)
+            for name in (
+                *INLINE_FIELDS, "sec_constraints", "sec_tradeoffs", "sec_revisit", "revisit_on",
+                "source_ref", "tag", "search_term", "informed_by", *decision_cli.TYPED_RELATION_INPUTS,
+                *ATTESTATION_FLAGS,
+            )
             if getattr(args, name)
         ]
         if inline_values:
@@ -666,6 +670,7 @@ def _prepare_operation_inputs(
                 "tag",
                 "search_term",
                 "informed_by",
+                *decision_cli.TYPED_RELATION_INPUTS,
                 *ATTESTATION_FLAGS,
                 "ack_conflicts",
             )
@@ -721,7 +726,9 @@ def preview(args: argparse.Namespace) -> dict[str, Any]:
     core_cli = _core_cli(args.core_cli)
     core_cli_sha256 = _file_digest(core_cli)
     schema = _run_core(core_cli, repo, "schema", expected_sha256=core_cli_sha256)
-    decision_cli.validate_core_schema_handshake(schema)
+    decision_values = candidate.get("owner_inputs", {}).get("decision", {}) if candidate is not None else {}
+    require_typed_relations = any(decision_values.get(field) for field in decision_cli.TYPED_RELATION_INPUTS)
+    decision_cli.validate_core_schema_handshake(schema, require_typed_relations=require_typed_relations)
     doctor = _run_core(core_cli, repo, "doctor", expected_sha256=core_cli_sha256)
     preflight = _require_ready_core(args.host, core_cli, doctor)
     if operation == "capture":
@@ -953,6 +960,10 @@ receipt and approval:
     preview_parser.add_argument("--tag", action="append", default=[])
     preview_parser.add_argument("--search-term", action="append", default=[])
     preview_parser.add_argument("--informed-by", action="append", default=[])
+    preview_parser.add_argument("--serves-intent", dest="serves_intents", action="append", default=[])
+    preview_parser.add_argument("--informed-by-observation", dest="informed_by_observations", action="append", default=[])
+    preview_parser.add_argument("--informed-by-assumption", dest="informed_by_assumptions", action="append", default=[])
+    preview_parser.add_argument("--affects-document", dest="affects_documents", action="append", default=[])
     preview_parser.add_argument("--attest-explicit-choice", action="store_true")
     preview_parser.add_argument("--attest-scope-identified", action="store_true")
     preview_parser.add_argument("--attest-commitment-present", action="store_true")

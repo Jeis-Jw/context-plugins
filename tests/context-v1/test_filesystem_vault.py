@@ -13,7 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
 WORKFLOW = ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
-OWNERS = ("decision", "assumption", "term")
+OWNERS = ("decision", "assumption", "term", "intent", "document")
 
 
 @pytest.fixture
@@ -100,10 +100,25 @@ def test_addon_init_and_reads_select_explicit_vault_from_another_project(tmp_pat
         inventory = {"plugins": [{"marketplace": "context-plugins", "plugin": "context-core", "source": "Jeis-Jw/context-plugins", "enabled": True, "protocols": ["context-common/v2"], "entrypoint": str(CORE)}]}
         (caller / "inventory.json").write_text(json.dumps(inventory))
         (caller / "doctor.json").write_text(json.dumps(invoke(CORE, caller, no_git, "--vault", vault, "doctor")))
-        signal = "assumption-relevant" if owner == "assumption" else "term-encountered"
-        preflight = ["--signal", signal, "--host", "codex", "--core-inventory", "@inventory.json", "--core-doctor", "@doctor.json"]
+        preflight = ["--host", "codex", "--core-inventory", "@inventory.json", "--core-doctor", "@doctor.json"]
+        signal = {"assumption": "assumption-relevant", "term": "term-encountered"}.get(owner)
+        if signal:
+            preflight = ["--signal", signal, *preflight]
     cli = ROOT / f"plugins/context-{owner}/skills/{owner}/scripts/{owner}_cli.py"
     invoke(cli, caller, no_git, "--vault", vault, "search", "--query", "absent fixture", *preflight)
+    missing = invoke(
+        cli,
+        caller,
+        no_git,
+        "--vault",
+        vault,
+        "read",
+        "--id",
+        "ctx_550e8400e29b41d4a716446655440000",
+        *preflight,
+        expected=3,
+    )
+    assert missing["code"] == "artifact_not_found"
     nested = vault / "nested"
     nested.mkdir()
     if preflight:

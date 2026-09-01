@@ -5,7 +5,7 @@ description: On a choice signal, compare Current DEC bodies and prepare only exp
 
 # Decision
 
-Use only with same-major context-core. This owner neither re-audits nor writes; core alone writes. Read-only commands need no host inventory. Canonical init/capture verify adjacent manifests, bind the actual core digest for the operation, and perform their own schema/doctor handshake; caller inventory arguments are low-level compatibility only.
+Use same-major context-core. Core alone writes. Init/capture bind the active Core digest and validate manifests/schema/doctor; read-only calls skip inventory.
 
 ## Recall and decide
 
@@ -15,9 +15,11 @@ Use only with same-major context-core. This owner neither re-audits nor writes; 
 4. Hold the affected action: make no code, file, or command change that performs or advances it until the user answers. Ask one explicit binary question offering both choices. Keep means the action is not performed; supersede permits it only after that explicit choice. A satisfied revisit authorizes reassessment, not implementation; durable capture requires separate approval. `new` covers returned results only.
 5. Claim only a caller-provided explicit choice governing action, with canonical scope and commitment evidence. Finish the request before one grouped mature proposal; re-propose dismissed/deferred candidates only with new evidence.
 
+DEC is standalone; Intent is optional. Typed inputs are `serves:intent`, `informed_by:observation`, `informed_by:assumption`, and `affects:document`; Core checks target existence/kind. Legacy `informed_by` and bytes remain.
+
 ## Capture
 
-For normal capture, call sibling `scripts/decision_workflow.py preview --inline` with semantic fields and three `--attest-*` judgments. Candidate ID and `captured_from:conversation` are automatic. Use loaded core's sibling `scripts/context_cli.py`; never scan caches. Do not pre-run host inventory or core doctor: preview handshakes them. Call documented entrypoints; inspect script source only after an unexplained interface failure.
+Run sibling `scripts/decision_workflow.py preview --inline` with semantic fields and three `--attest-*` judgments. Candidate ID and `captured_from:conversation` are automatic. Use sibling Core CLI; never scan caches. Do not pre-run host inventory or core doctor: preview handles them. Call documented entrypoints; inspect script source only after an unexplained interface failure.
 
 Preview creates one private frozen receipt. Ask once in the active language with the complete rendered body. Keep preview stdout's `approval_digest` in session and pass it unchanged; never expose or request the digest, receipt path, internal ID, core path, or other transport details. Approval is semantic and language-independent: only a direct, explicit, unconditional affirmative to that specific capture question qualifies. Acknowledgement, praise, a condition, edit request, or topic change does not. Confirm ambiguity once; never regenerate after approval.
 

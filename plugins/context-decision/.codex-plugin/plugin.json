@@ -1,6 +1,6 @@
 {
   "name": "context-decision",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Decision continuity with actual-body comparison, proactive conflict notices, and approval-gated capture.",
   "author": {
     "name": "Jinwuk-Lee",
@@ -13,7 +13,10 @@
     "longDescription": "Before a choice is finalized, supplies related Current decision bodies for same, supporting, rationale-changed, conflict, or new assessment; preserves approved decisions with rationale and rejected alternatives and marks superseded history do_not_follow.",
     "developerName": "Jinwuk-Lee",
     "category": "Productivity",
-    "capabilities": ["Read", "Validation"],
+    "capabilities": [
+      "Read",
+      "Validation"
+    ],
     "defaultPrompt": [
       "One check; quote/reuse actual sections; no reread; hold; ask keep=not done/supersede",
       "Say satisfied|no evidence|ambiguous. Action≠evidence; unrelated→no evidence; relevant partial→ambiguous",

@@ -9,10 +9,12 @@ Context Plugins gives AI coding agents a small, project-owned memory. It keeps i
 AI coding agents are helpful, but a new conversation may forget why your project was built a certain way. Context Plugins keeps the parts that should survive between conversations:
 
 - **Decisions** — what you chose, why you chose it, and which alternatives you rejected
+- **Intents** — which durable direction the project is trying to serve
 - **Observations** — test results, incidents, and other facts worth reusing
+- **Documents** — living project guidance whose content stays current under one stable identity
 - **Snapshots** — where unfinished work stopped and what should happen next
 
-Saved context is plain Markdown inside your project’s `context/` folder. It can be reviewed, edited, and shared through Git like the rest of your project.
+Saved context is plain Markdown inside a filesystem vault’s `context/` folder. It can be reviewed and edited directly, then shared through any file-sharing or version-control workflow you already use. Git is optional and is never a runtime requirement.
 
 Context Plugins does not automatically save your entire conversation. When the agent finds something worth keeping, it shows you a preview and asks first.
 
@@ -50,7 +52,24 @@ claude plugin install context-decision@context-plugins --scope user
 
 If the marketplace is already registered, skip the first command. After installation, restart the agent or open a new session.
 
-`context-core` and `context-decision` are all you need to get started. The marketplace also includes optional assumption and terminology plugins for more specialized workflows.
+`context-core` and `context-decision` are all you need to get started. Every semantic owner requires `context-core`, but semantic owners do not require one another. Install and initialize only the optional owners you want; installing one never installs or initializes another.
+
+| Optional owner | Codex install | Claude Code install | Initialize in agent chat |
+| --- | --- | --- | --- |
+| Intent | `codex plugin add context-intent@context-plugins` | `claude plugin install context-intent@context-plugins --scope user` | `$context-intent:init` |
+| Document | `codex plugin add context-document@context-plugins` | `claude plugin install context-document@context-plugins --scope user` | `$context-document:init` |
+| Assumption | `codex plugin add context-assumption@context-plugins` | `claude plugin install context-assumption@context-plugins --scope user` | `$context-assumption:init` |
+| Terminology | `codex plugin add context-term@context-plugins` | `claude plugin install context-term@context-plugins --scope user` | `$context-term:init` |
+
+### How the context types relate
+
+- **Intent** is a desired direction.
+- **Observation** and **Assumption** are evidence and premises.
+- **Decision** is a chosen commitment.
+- **Rationale** explains why the decision follows from its grounds and serves the intent.
+- **Document** is living content that can be updated without changing its identity.
+
+You can use intent-only, decision-only, or document-only storage. When the relevant artifacts coexist, a decision can record `serves:intent`, `informed_by:observation`, `informed_by:assumption`, and `affects:document` references. These links do not create inverse records or make any plugin mandatory.
 
 ## How to use it
 
