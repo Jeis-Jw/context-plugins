@@ -5,6 +5,8 @@ description: When explicitly requested, initialize context-core storage and the 
 
 # Init
 
+Use the same vault throughout the operation. `--vault DIR` selects an existing directory containing `context/`; otherwise use the nearest current/ancestor directory with a `context` entry, or cwd for a fresh vault. Git is not required. Core/owner/workflow CLIs take `--vault` before the subcommand; init adapters accept it as an option. Relative input paths remain caller-cwd relative.
+
 Only for explicit core setup, call one matching host command:
 
 ```bash

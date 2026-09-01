@@ -20,7 +20,7 @@ context/
 
 ## Development
 
-요구사항은 Python 3.11+, Git과 Python standard library입니다. 테스트 실행에는 `pytest`가 필요합니다.
+실행 요구사항은 Python 3.11+와 Python standard library입니다. Git은 선택적인 버전관리 도구이며 runtime·설치기·테스트의 의존성이 아닙니다. 테스트 실행에는 `pytest`가 필요합니다.
 
 ```bash
 python3 -m pytest -q
@@ -38,9 +38,9 @@ PYTHONPATH=tests/context-v1/phase0 python3 -m pytest -q tests/context-v1/phase0
 
 ### Core+decision profile installer
 
-`profiles/core-decision.json`은 core와 decision의 설치 좌표와 compatible major를 선언하는 배포 profile이며 두 plugin package나 semantic ownership을 합치지 않습니다. `scripts/install_profile.py`는 사용자가 immutable release checkout에서 명시적으로 실행할 때만 host marketplace를 등록하고 빠진 plugin 설치 명령만 순서대로 호출합니다. 이미 활성화된 같은-major plugin은 update하지 않습니다. Plugin runtime에서는 host inventory 탐색이나 install/enable/update를 수행하지 않습니다.
+`profiles/core-decision.json`은 core와 decision의 설치 좌표와 compatible major를 선언하는 배포 profile이며 두 plugin package나 semantic ownership을 합치지 않습니다. `scripts/install_profile.py`는 사용자가 내려받은 plugin 디렉터리에서 명시적으로 실행할 때만 host marketplace를 등록하고 빠진 plugin 설치 명령만 순서대로 호출합니다. 이미 활성화된 같은-major plugin은 update하지 않습니다. Plugin runtime에서는 host inventory 탐색이나 install/enable/update를 수행하지 않습니다.
 
-Release tag 전 local 검증에만 `--allow-unreleased-checkout --dry-run`을 사용할 수 있습니다. 실제 설치는 clean checkout의 exact `v<profile-version>` tag를 요구하며, old provider·다른 checkout·disabled plugin·different major는 자동 정리하지 않고 중단합니다.
+`--dry-run`으로 host 변경 없이 설치 계획을 검증할 수 있습니다. Git 실행파일·metadata·tag·clean checkout을 요구하지 않으며 archive로 받은 파일도 사용할 수 있습니다. Profile·manifest·catalog 일치 검증은 유지하고, old provider·다른 등록 경로·disabled plugin·different major는 자동 정리하지 않고 중단합니다.
 
 ### Core compatibility boundary
 
@@ -49,7 +49,7 @@ Package version은 major를 호환성 경계, minor를 기능 추가·변경, pa
 1. absolute path와 canonical core entrypoint suffix를 확인합니다.
 2. 인접한 Claude/Codex manifest가 모두 `context-core`이고 서로 같은 version인지 확인한 뒤 semantic plugin과 major가 같은지 확인합니다.
 3. 실제 `context_cli.py` digest를 계산해 init operation 또는 frozen preview/apply receipt 동안 변하지 않게 결박합니다.
-4. `context-core-schema/v1`, `context-common/v2`, required command, `context-owner-descriptor/v2`와 doctor shape/state를 직접 handshake합니다.
+4. `context-core-schema/v1`, `context-common/v2`, required command, `context-owner-descriptor/v2`·`filesystem-vault/v1`와 doctor shape/state를 직접 handshake합니다.
 5. `python3 -m pytest -q tests/context-v1/test_distribution_proof.py::DistributionProofTests::test_semantic_plugins_accept_same_major_core_and_reject_other_major`와 각 plugin suite를 실행합니다.
 
 이 실행 파일 계약은 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 low-level compatibility mode의 입력일 뿐 canonical init/workflow의 신뢰 근거가 아닙니다.
@@ -60,8 +60,8 @@ Package version은 major를 호환성 경계, minor를 기능 추가·변경, pa
 - Core selector: `context-core@context-plugins`
 - Source: `Jeis-Jw/context-plugins`
 - Protocol: `context-common/v2`
-- Current repository version: `0.8.0`
-- Immutable install ref: `v0.8.0` (not created or pushed; owner approval required)
+- Current repository version: `0.9.0`
+- Optional release tag: `v0.9.0` (not created or pushed; owner approval required)
 
 ## Provenance
 
@@ -71,4 +71,4 @@ Package version은 major를 호환성 경계, minor를 기능 추가·변경, pa
 
 이 저장소에는 root [`LICENSE`](./LICENSE)의 Apache License 2.0이 적용됩니다.
 
-라이선스 선택은 완료됐지만 `v0.8.0` tag 생성·push와 marketplace publication은 여전히 각각 별도 owner gate입니다. 라이선스 적용, 검증 또는 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.
+라이선스 선택은 완료됐지만 `v0.9.0` tag 생성·push와 marketplace publication은 여전히 각각 별도 owner gate입니다. 라이선스 적용, 검증 또는 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.

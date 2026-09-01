@@ -69,7 +69,7 @@ def write_json(path: Path, value: object, *, canonical: bool = False) -> Path:
 def repository_bytes(repo: Path) -> dict[str, str]:
     output: dict[str, str] = {}
     for path in sorted(repo.rglob("*")):
-        if not path.is_file() or ".git" in path.relative_to(repo).parts:
+        if not path.is_file():
             continue
         output[path.relative_to(repo).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     return output
@@ -417,7 +417,6 @@ class CrossPluginFlowTests(unittest.TestCase):
     def test_acceptance_31_evidence_relation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", temp], check=True)
             initialize(repo)
             obs_candidate = {
                 **choice("cand_123e4567e89b42d3a456426614174000"),
@@ -447,7 +446,6 @@ class CrossPluginFlowTests(unittest.TestCase):
     def test_acceptance_32_fallback_import(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", temp], check=True)
             initialize(repo)
             fallback = choice()
             fallback["requested_kind"] = "observation"
@@ -485,7 +483,6 @@ class CrossPluginFlowTests(unittest.TestCase):
     def test_acceptance_37_parallel(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", temp], check=True)
             core = context_cli.build_init_bundle(repo)
             context_cli.apply_bundle(repo, core["bundle"], core["approval_digest"])
 
@@ -524,7 +521,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             (repo / "keep.txt").write_text("preserve\n", encoding="utf-8")
             completed = run_cli(
                 repo,
@@ -569,7 +565,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             plan = decision_cli.build_init_plan()
             descriptor = root / "descriptor.json"
             invalid_seed = root / "invalid.index.md"
@@ -624,7 +619,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             state = bootstrap_three_owners(root, repo)
 
             self.assertEqual("applied", state["decision_bootstrap"]["phases"][1]["status"])
@@ -668,7 +662,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             state = bootstrap_three_owners(root, repo)
             before = repository_bytes(repo)
             preflight = preflight_arguments(state["inventory"], state["doctor"])
@@ -801,7 +794,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             state = bootstrap_three_owners(root, repo)
             before = repository_bytes(repo)
             preflight = preflight_arguments(state["inventory"], state["doctor"])
@@ -898,7 +890,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             state = bootstrap_three_owners(root, repo)
             preflight = preflight_arguments(state["inventory"], state["doctor"])
             candidate = assumption_candidate("cand_123e4567e89b42d3a456426614174401")
@@ -982,7 +973,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             state = bootstrap_three_owners(root, repo)
             preflight = preflight_arguments(state["inventory"], state["doctor"])
             candidate = assumption_candidate("cand_123e4567e89b42d3a456426614174501")
@@ -1050,7 +1040,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             state = bootstrap_term_owners(root, repo)
             self.assertEqual("applied", state["term_bootstrap"]["phases"][1]["status"])
             doctor = public_result(run_cli(repo, CORE_CLI, "doctor", "--json"))
@@ -1172,7 +1161,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             state = bootstrap_term_owners(root, repo)
             before = repository_bytes(repo)
             preflight = preflight_arguments(state["inventory"], state["doctor"])
@@ -1257,7 +1245,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             state = bootstrap_term_owners(root, repo)
             preflight = preflight_arguments(state["inventory"], state["doctor"])
             candidate = term_candidate("cand_123e4567e89b42d3a456426614174620")
@@ -1338,7 +1325,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             state = bootstrap_term_owners(root, repo)
             preflight = preflight_arguments(state["inventory"], state["doctor"])
             candidate = term_candidate("cand_123e4567e89b42d3a456426614174630")
@@ -1404,7 +1390,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             state = bootstrap_term_owners(root, repo)
             preflight = preflight_arguments(state["inventory"], state["doctor"])
             candidate = term_candidate("cand_123e4567e89b42d3a456426614174640")
@@ -1557,7 +1542,6 @@ class CrossPluginFlowTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             public_result(run_cli(repo, CORE_CLI, "init", "--host", "codex", "--json"))
             public_result(run_cli(
                 repo,

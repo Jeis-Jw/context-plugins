@@ -13,7 +13,6 @@ import os
 import pathlib
 import re
 import stat
-import subprocess
 import sys
 import tempfile
 import unicodedata
@@ -2680,81 +2679,49 @@ def _material(material_id: str, path: str | None, content: str) -> dict[str, Any
     return {"material_id": material_id, "path": path, "content": content}
 
 
-def repository_identity(repo: pathlib.Path) -> dict[str, Any]:
+def vault_identity(repo: pathlib.Path) -> dict[str, Any]:
     try:
-        worktree = repo.resolve(strict=True)
+        root = repo.resolve(strict=True)
+        metadata = root.stat()
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise OSError("vault root is not a directory")
     except (OSError, RuntimeError) as error:
-        raise ContextError("repository_not_found", "Git worktree identity could not be resolved", exit_code=EXIT_NOT_FOUND) from error
-    completed = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel", "--git-common-dir"],
-        cwd=worktree,
-        text=True,
-        capture_output=True,
-    )
-    lines = completed.stdout.splitlines()
-    if completed.returncode or len(lines) != 2:
-        raise ContextError("repository_not_found", "Git worktree identity could not be resolved", exit_code=EXIT_NOT_FOUND)
-    try:
-        observed_worktree = pathlib.Path(lines[0]).resolve(strict=True)
-        common_value = pathlib.Path(lines[1])
-        git_common_dir = (
-            common_value.resolve(strict=True)
-            if common_value.is_absolute()
-            else (worktree / common_value).resolve(strict=True)
-        )
-        if observed_worktree != worktree:
-            raise ContextError("repository_not_found", "repository path is not the resolved Git worktree root", exit_code=EXIT_NOT_FOUND)
-        worktree_stat = worktree.stat()
-        common_stat = git_common_dir.stat()
-    except ContextError:
-        raise
-    except (OSError, RuntimeError) as error:
-        raise ContextError("repository_not_found", "Git worktree identity could not be resolved", exit_code=EXIT_NOT_FOUND) from error
+        raise ContextError("vault_not_found", "vault directory could not be resolved", exit_code=EXIT_NOT_FOUND) from error
     return {
-        "schema": "context-repository-identity/v1",
-        "worktree": {
-            "path": str(worktree),
-            "device": str(worktree_stat.st_dev),
-            "inode": str(worktree_stat.st_ino),
-        },
-        "git_common_dir": {
-            "path": str(git_common_dir),
-            "device": str(common_stat.st_dev),
-            "inode": str(common_stat.st_ino),
-        },
+        "schema": "context-vault-identity/v1",
+        "root": {"path": str(root), "device": str(metadata.st_dev), "inode": str(metadata.st_ino)},
     }
 
 
-def _validate_repository_identity(value: Any) -> None:
-    if not isinstance(value, dict) or set(value) != {"schema", "worktree", "git_common_dir"}:
-        raise ContextError("repository_identity_invalid", "repository identity envelope is invalid", exit_code=EXIT_CONFLICT)
-    if value.get("schema") != "context-repository-identity/v1":
-        raise ContextError("repository_identity_invalid", "repository identity schema is invalid", exit_code=EXIT_CONFLICT)
-    for field in ("worktree", "git_common_dir"):
-        entry = value.get(field)
-        if (
-            not isinstance(entry, dict)
-            or set(entry) != {"path", "device", "inode"}
-            or not isinstance(entry.get("path"), str)
-            or not pathlib.Path(entry["path"]).is_absolute()
-            or not isinstance(entry.get("device"), str)
-            or not entry["device"].isdigit()
-            or not isinstance(entry.get("inode"), str)
-            or not entry["inode"].isdigit()
-        ):
-            raise ContextError("repository_identity_invalid", "repository identity entry is invalid", {"field": field}, EXIT_CONFLICT)
+def _validate_vault_identity(value: Any) -> None:
+    if not isinstance(value, dict) or set(value) != {"schema", "root"}:
+        raise ContextError("vault_identity_invalid", "vault identity is missing or obsolete; create a new approval preview", exit_code=EXIT_CONFLICT)
+    if value.get("schema") != "context-vault-identity/v1":
+        raise ContextError("vault_identity_invalid", "vault identity schema is invalid; create a new approval preview", exit_code=EXIT_CONFLICT)
+    entry = value["root"]
+    if (
+        not isinstance(entry, dict)
+        or set(entry) != {"path", "device", "inode"}
+        or not isinstance(entry.get("path"), str)
+        or not pathlib.Path(entry["path"]).is_absolute()
+        or not isinstance(entry.get("device"), str)
+        or not entry["device"].isdigit()
+        or not isinstance(entry.get("inode"), str)
+        or not entry["inode"].isdigit()
+    ):
+        raise ContextError("vault_identity_invalid", "vault identity entry is invalid", {"field": "root"}, EXIT_CONFLICT)
 
 
-def _require_repository_identity(repo: pathlib.Path, approval_material: Any) -> dict[str, Any]:
+def _require_vault_identity(repo: pathlib.Path, approval_material: Any) -> dict[str, Any]:
     if not isinstance(approval_material, dict):
         raise ContextError("bundle_invalid", "approval material is invalid", exit_code=EXIT_CONFLICT)
-    expected = approval_material.get("repository_identity")
-    _validate_repository_identity(expected)
-    actual = repository_identity(repo)
+    expected = approval_material.get("vault_identity")
+    _validate_vault_identity(expected)
+    actual = vault_identity(repo)
     if expected != actual:
         raise ContextError(
-            "repository_identity_mismatch",
-            "approved mutation belongs to a different Git worktree identity",
+            "vault_identity_mismatch",
+            "approved mutation belongs to a different vault; create a new approval preview",
             {"expected": expected, "actual": actual},
             EXIT_CONFLICT,
         )
@@ -2764,7 +2731,7 @@ def _require_repository_identity(repo: pathlib.Path, approval_material: Any) -> 
 def _bundle_result(repo: pathlib.Path, preview: dict[str, Any], plan: dict[str, Any], materials: list[dict[str, Any]]) -> dict[str, Any]:
     if len(canonical_json(preview).encode("utf-8")) > MAX_APPROVAL_PREVIEW_BYTES:
         raise ContextError("approval_preview_too_large", "grouped approval preview exceeds 32 KiB; split the candidates", exit_code=EXIT_CONFLICT)
-    approval_material = {"repository_identity": repository_identity(repo), "preview": preview, "plan": plan}
+    approval_material = {"vault_identity": vault_identity(repo), "preview": preview, "plan": plan}
     digest = canonical_digest(approval_material)
     bundle = {"schema": "context-mutation-bundle/v1", "approval_material": approval_material, "approval_digest": digest, "materials": materials}
     return {"bundle": bundle, "approval_preview": preview, "approval_digest": digest, "applied": False, "noop": False}
@@ -2799,15 +2766,14 @@ def _validate_receipt_location(repo: pathlib.Path, path: pathlib.Path) -> pathli
         )
     try:
         resolved = path.resolve(strict=False)
-        identity = repository_identity(repo)
-        repository_root = pathlib.Path(identity["worktree"]["path"]).resolve(strict=True)
-        git_common = pathlib.Path(identity["git_common_dir"]["path"]).resolve(strict=True)
+        identity = vault_identity(repo)
+        root = pathlib.Path(identity["root"]["path"])
     except (OSError, RuntimeError) as error:
         raise ContextError("receipt_path_invalid", "receipt path could not be resolved", exit_code=EXIT_CONFLICT) from error
-    if _path_within(resolved, repository_root) or _path_within(resolved, git_common):
+    if _path_within(resolved, root):
         raise ContextError(
             "receipt_path_unsafe",
-            "receipt path must remain outside the repository and Git metadata",
+            "receipt path must remain outside the vault",
             {"path": str(path)},
             EXIT_CONFLICT,
         )
@@ -4089,9 +4055,9 @@ def _bundle_owner_result(repo: pathlib.Path, bundle: dict[str, Any]) -> tuple[di
     if bundle.get("schema") != "context-mutation-bundle/v1" or bundle.get("approval_digest") != canonical_digest(bundle.get("approval_material")):
         raise ContextError("prior_bundle_invalid", "prior bundle digest is invalid", exit_code=EXIT_CONFLICT)
     try:
-        _require_repository_identity(repo, bundle.get("approval_material"))
+        _require_vault_identity(repo, bundle.get("approval_material"))
     except ContextError as error:
-        raise ContextError("prior_bundle_invalid", "prior bundle repository identity is invalid", {"cause": error.code}, EXIT_CONFLICT) from error
+        raise ContextError("prior_bundle_invalid", "prior bundle vault identity is invalid", {"cause": error.code}, EXIT_CONFLICT) from error
     plan = bundle["approval_material"].get("plan", {})
     material = next((item for item in bundle.get("materials", []) if item.get("material_id") == plan.get("owner_result_material")), None)
     if plan.get("source_type") != "owner_result" or material is None or material.get("path") is not None:
@@ -5502,7 +5468,7 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
     actual = canonical_digest(bundle.get("approval_material"))
     if approved_digest != bundle.get("approval_digest") or actual != bundle.get("approval_digest"):
         raise ContextError("approval_digest_mismatch", "approved digest does not match the immutable final bundle", exit_code=EXIT_CONFLICT)
-    _require_repository_identity(repo, bundle.get("approval_material"))
+    _require_vault_identity(repo, bundle.get("approval_material"))
     materials = bundle.get("materials", [])
     by_id = {item.get("material_id"): item for item in materials}
     if len(by_id) != len(materials) or any(not LOCAL_ID.fullmatch(str(key)) for key in by_id):
@@ -6464,8 +6430,8 @@ def doctor_repository(repo: pathlib.Path) -> dict[str, Any]:
 
 def schema_result() -> dict[str, Any]:
     return {
-        "schema": "context-core-schema/v1", "protocol": PROTOCOL, "storage_root": "context/", "root_override": False,
-        "features": ["context-owner-descriptor/v2"],
+        "schema": "context-core-schema/v1", "protocol": PROTOCOL, "storage_root": "context/", "root_override": True,
+        "features": ["context-owner-descriptor/v2", "filesystem-vault/v1"],
         "id": "ctx_<lowercase-uuidv4-hex>", "json_success": {"ok": True, "result": {}},
         "json_error": {"ok": False, "error": {"code": "string", "message": "string", "details": {}}},
         "exit_codes": {"usage_schema_filename": 2, "not_found": 3, "conflict": 5, "integrity_index": 6},
@@ -6484,17 +6450,23 @@ def schema_result() -> dict[str, Any]:
     }
 
 
-def _repository_root() -> pathlib.Path:
-    completed = subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True, capture_output=True)
-    if completed.returncode or not completed.stdout.strip():
-        raise ContextError("repository_not_found", "current directory is not in a Git worktree", exit_code=EXIT_NOT_FOUND)
-    root = pathlib.Path(completed.stdout.strip()).resolve()
-    cwd = pathlib.Path.cwd().resolve()
+def _vault_root(vault: str | None = None) -> pathlib.Path:
     try:
-        cwd.relative_to(root)
-    except ValueError as error:
-        raise ContextError("repository_not_found", "cwd is outside the resolved Git worktree", exit_code=EXIT_NOT_FOUND) from error
-    return root
+        if vault is not None:
+            root = pathlib.Path(vault).expanduser().resolve(strict=True)
+            if not root.is_dir():
+                raise OSError("vault root is not a directory")
+            return root
+        cwd = pathlib.Path.cwd().resolve(strict=True)
+        for root in (cwd, *cwd.parents):
+            try:
+                (root / "context").lstat()
+            except FileNotFoundError:
+                continue
+            return root
+        return cwd
+    except (OSError, RuntimeError) as error:
+        raise ContextError("vault_not_found", "vault must be an existing directory", exit_code=EXIT_NOT_FOUND) from error
 
 
 def _read_input_file(value: str) -> str:
@@ -6686,6 +6658,7 @@ def _body_to_items(value: str) -> list[str]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="context_cli.py")
+    parser.add_argument("--vault", help="Directory containing context/; defaults to the nearest context/ ancestor or cwd.")
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("schema", "capabilities", "doctor"):
         command = sub.add_parser(name)
@@ -6891,7 +6864,7 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
         return schema_result()
     if args.command == "capabilities":
         return capabilities_result()
-    repo = _repository_root()
+    repo = _vault_root(getattr(args, "vault", None))
     if args.command == "doctor":
         return doctor_repository(repo)
     if args.command == "init":

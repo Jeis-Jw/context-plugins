@@ -4,7 +4,7 @@
 
 ## 시작하기
 
-지원 profile은 immutable `v0.8.0` checkout의 root installer를 한 번 실행해 빠진 plugin만 설치하고 활성화된 같은-major version은 호환으로 인정합니다. `context-core@context-plugins`와 `context-decision@context-plugins`은 계속 독립 package이며 bundle/meta-plugin이 아니고 decision code를 core에 내장하지 않습니다.
+지원 profile은 내려받은 plugin 파일의 root installer를 한 번 실행해 빠진 plugin만 설치하고 활성화된 같은-major version은 호환으로 인정합니다. `context-core@context-plugins`와 `context-decision@context-plugins`은 계속 독립 package이며 bundle/meta-plugin이 아니고 decision code를 core에 내장하지 않습니다.
 
 Core-only 구성이 필요하면 다음 경로를 그대로 사용할 수 있습니다.
 
@@ -13,10 +13,13 @@ Core-only 구성이 필요하면 다음 경로를 그대로 사용할 수 있습
 3. `$context-core:init`을 한 번 호출하면 canonical storage seed와 활성 host의 관리형 운영지침을 core coordinator가 적용합니다.
 4. 반환된 `doctor.repository_state: ready`, `policy.target`과 phase result를 확인합니다. ready 재호출은 noop입니다.
 
-`schema`와 `capabilities`는 repository root 없이 확인할 수 있습니다. `schema.features`의 `context-owner-descriptor/v2`는 bounded structural profile을 이해하는 runtime handshake입니다. `doctor`는 read-only이며 `context-common/v2`, `repository_state`, `issues`, `warnings`를 보고합니다. 저장소가 아직 초기화되지 않은 read operation은 dependency 오류가 아닌 `context_root_missing`으로 실패합니다. `init`은 absent에서 fixed root/SNAP/OBS seed와 `codex → AGENTS.md`, `claude-code → CLAUDE.md` 관리형 block만 직접 적용합니다. populated repository에서 root index만 없으면 exact built-in SNAP/OBS metadata로 rebuild하고 미등록 area는 자동 claim하지 않으며, legacy artifact/index warning은 init을 막지 않습니다. init target의 incompatible schema/owner/path는 덮어쓰지 않습니다.
+vault는 `context/`를 담는 일반 디렉터리이며 Git은 공유·버전관리의 선택사항입니다. 모든 CLI는 subcommand 앞의 `--vault DIR`로 저장 디렉터리를 선택할 수 있습니다. 생략하면 가장 가까운 `context/` 상위 디렉터리, 없으면 현재 디렉터리를 사용합니다. 입력 파일의 상대경로는 호출자 cwd 기준입니다.
+
+`schema`와 `capabilities`는 vault 없이 확인할 수 있고 addon은 `filesystem-vault/v1` feature를 요구합니다. `schema.features`의 `context-owner-descriptor/v2`는 bounded structural profile을 이해하는 runtime handshake입니다. `doctor`는 read-only이며 `context-common/v2`, `repository_state`, `issues`, `warnings`를 보고합니다. 저장소가 아직 초기화되지 않은 read operation은 dependency 오류가 아닌 `context_root_missing`으로 실패합니다. `init`은 absent에서 fixed root/SNAP/OBS seed와 `codex → AGENTS.md`, `claude-code → CLAUDE.md` 관리형 block만 직접 적용합니다. populated repository에서 root index만 없으면 exact built-in SNAP/OBS metadata로 rebuild하고 미등록 area는 자동 claim하지 않으며, legacy artifact/index warning은 init을 막지 않습니다. init target의 incompatible schema/owner/path는 덮어쓰지 않습니다.
 
 ## 제품 흐름
 
+- `repository_state`는 기존 호출자 호환성을 위해 유지한 vault 저장 상태 field이며 버전관리 상태가 아닙니다.
 - Standalone: 명시적 handoff는 SNAP, 재사용 가능한 발견·근거는 OBS로 제안합니다.
 - Integrated: semantic owner가 complete draft와 plan을 만들고, `context-core`가 grouped preview를 봉인한 뒤 유일한 physical coordinator로 적용합니다.
 - Generic addon: canonical `context-owner-descriptor/v2`가 closed field types, H2 order, index projection과 generic lifecycle topology를 선언합니다. `supersede_current`는 predecessor→successor와 successor→predecessor reference recipe를 모두 요구합니다. semantic receipt는 의미 claim을 증명하지만 core의 target-byte structural validation을 대체하지 않습니다.
@@ -29,7 +32,7 @@ Core-only 구성이 필요하면 다음 경로를 그대로 사용할 수 있습
 - 등록된 v2 root registry와 area descriptor의 digest가 다르면 `doctor`와 `refresh`는 blocking issue로 보고하고 `refresh --fix index`도 해당 trust bytes를 자동 복구하지 않습니다. 일반 artifact/index drift의 read fallback은 body open을 호출당 20개로 제한하고 초과를 warning으로 보고합니다. healthy index의 metadata miss는 indexed body를 다시 열지 않습니다. 이 hard bound는 body materialization/open, selected output, candidate/envelope와 owner input에 한정되며 index scoring·directory enumeration 및 end-to-end host/model token 사용량의 O(1)을 뜻하지 않습니다.
 - 관리형 운영지침은 conflict·취지 변경을 먼저 알리고, 그 외에는 원 답 뒤 성숙한 후보만 milestone당 한 번 제안합니다. dismissed·deferred 후보는 새 근거 전까지 반복하지 않으며 의미 판정에 hash·ID·metadata를 사용하지 않습니다.
 
-기존 `wiki/`를 자동 migration하지 않습니다. Obsidian은 repository root를 vault로 열 때의 선택적 view일 뿐 runtime dependency가 아닙니다. PCMS는 조직 권한·승인 queue·cross-project search·정책·감사 같은 control-plane 범위를 담당하며, 이 local plugin은 그 기능을 제한해 판매하는 제품이 아닙니다.
+기존 `wiki/`를 자동 migration하지 않습니다. Obsidian은 해당 디렉터리를 vault로 열 때의 선택적 view일 뿐 runtime dependency가 아닙니다. PCMS는 조직 권한·승인 queue·cross-project search·정책·감사 같은 control-plane 범위를 담당하며, 이 local plugin은 그 기능을 제한해 판매하는 제품이 아닙니다.
 
 0.2.0은 의미 판정에 쓰던 legacy fingerprint field와 batch-local claim key를 제거한 breaking release입니다. Owner-result 연결용 transport reference는 의미를 갖지 않습니다. 혼합 설치를 호환으로 오판하지 않도록 wire/storage handshake를 `context-common/v2`로 올렸습니다. 제거된 field가 남은 0.1.x artifact는 `schema_removed_field` warning으로 읽고 다음 승인 rewrite에서 lazy-clean합니다. 신규 artifact/candidate에는 계속 허용하지 않습니다.
 
@@ -43,8 +46,8 @@ Core-only 구성이 필요하면 다음 경로를 그대로 사용할 수 있습
 
 0.5.0은 read-only DEC spec view, generic `context-owner-descriptor/v2` structural validation, optional ASM·TERM owner 등록, full-envelope candidate batch 상한을 하나의 호환 release unit으로 묶습니다. `context-common/v2`와 기존 SNAP·OBS·DEC bytes는 유지하며 addon 설치나 artifact migration을 자동 수행하지 않습니다.
 
-0.5.1은 repository identity에 결박된 approval, frozen DEC receipt, release-pinned core 실행 전 검증, healthy miss/recovery body-open 경계와 actual semantic input limit을 추가한 developer-preview patch입니다.
+0.5.1은 vault identity에 결박된 approval, frozen DEC receipt, release-pinned core 실행 전 검증, healthy miss/recovery body-open 경계와 actual semantic input limit을 추가한 developer-preview patch입니다.
 
 0.7.1은 자연어 승인 UX와 deterministic receipt lifecycle을 통합하고, core와 semantic owner package를 분리한 채 root profile installer로 설치 동작만 묶습니다. `v0.7.1` tag와 publication은 아직 완료되지 않았습니다.
 
-0.8.0은 package 호환성 경계를 major로 두고 minor는 기능 변화, patch는 작은 수정에 사용합니다. 같은-major package도 protocol·capability handshake가 맞지 않으면 fail-closed합니다. `v0.8.0` tag와 publication은 아직 완료되지 않았습니다.
+0.9.0은 package 호환성 경계를 major로 두고 minor는 기능 변화, patch는 작은 수정에 사용합니다. 같은-major package도 protocol·capability handshake가 맞지 않으면 fail-closed합니다. `v0.9.0` tag와 publication은 아직 완료되지 않았습니다.

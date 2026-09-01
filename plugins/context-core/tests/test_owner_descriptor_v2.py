@@ -24,15 +24,14 @@ sys.modules[SPEC.name] = context_cli
 SPEC.loader.exec_module(context_cli)
 
 
-def git_repo() -> tempfile.TemporaryDirectory[str]:
+def vault_dir() -> tempfile.TemporaryDirectory[str]:
     temp = tempfile.TemporaryDirectory()
-    subprocess.run(["git", "init", "-q", temp.name], check=True)
     return temp
 
 
 def tree_digest(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(item for item in root.rglob("*") if item.is_file() and ".git" not in item.parts):
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
         digest.update(path.relative_to(root).as_posix().encode("utf-8"))
         digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -447,7 +446,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
         )[1]
 
     def test_acceptance_49_v1_exact_compatibility(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             self._init(repo)
             self.assertEqual(
@@ -486,7 +485,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_acceptance_50_v2_mixed_bootstrap_retry(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             self._init(repo)
             v1_descriptor = {
@@ -537,7 +536,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_acceptance_51_profile_fail_closed(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             self._init(repo)
             descriptor = owner_descriptor()
@@ -593,7 +592,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_acceptance_52_receipt_digest_and_provisional_binding(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             self._init(repo)
             descriptor, capability = self._register_profile(repo)
@@ -626,7 +625,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_regression_v2_expanded_recall_and_id_lookup_use_registered_descriptor(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             self._init(repo)
             descriptor, capability = self._register_profile(repo)
@@ -669,7 +668,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_regression_v2_cross_area_prior_filter_and_stale_same_area_rejection(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             self._init(repo)
             descriptor_a, capability_a = self._register_profile(repo)
@@ -762,7 +761,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_regression_v2_profile_registry_tamper_blocks_doctor_and_refresh(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             self._init(repo)
             self._register_profile(repo)
@@ -788,7 +787,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             self.assertEqual(tampered, tree_digest(repo))
 
     def test_regression_v2_supersede_profile_requires_reciprocal_recipe(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             self._init(repo)
             valid = owner_descriptor()
@@ -814,7 +813,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_acceptance_53_profiled_target_bytes_validation(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             self._init(repo)
             descriptor, capability = self._register_profile(repo)
@@ -864,7 +863,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
                     self.assertEqual(before, tree_digest(repo))
 
     def test_acceptance_54_generic_lifecycle_relations(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             self._init(repo)
             descriptor, capability = self._register_profile(repo)
@@ -894,7 +893,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             self.assertEqual([], doctor["issues"])
 
     def test_acceptance_55_apply_revalidates_after_lock_tamper(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             self._init(repo)
             descriptor, capability = self._register_profile(repo)
@@ -949,7 +948,7 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
         descriptor = owner_descriptor()
         seed_text = area_seed(descriptor)
         for state in ("none", "seed-only", "root-profile-only"):
-            with self.subTest(state=state), git_repo() as temp:
+            with self.subTest(state=state), vault_dir() as temp:
                 repo = Path(temp)
                 self._init(repo)
                 descriptor_path = self._json_input(f"partial-{state}.json", descriptor)

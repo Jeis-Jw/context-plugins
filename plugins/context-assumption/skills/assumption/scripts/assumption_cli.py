@@ -8,7 +8,6 @@ import hashlib
 import json
 import pathlib
 import re
-import subprocess
 import sys
 import unicodedata
 import uuid
@@ -219,6 +218,7 @@ def validate_core_schema_handshake(value: Any) -> dict[str, Any]:
         or value.get("protocol") != PROTOCOL
         or not isinstance(features, list)
         or REQUIRED_FEATURE not in features
+        or "filesystem-vault/v1" not in features
         or not isinstance(commands, list)
         or not required_commands.issubset(commands)
     ):
@@ -1066,16 +1066,23 @@ def require_core_preflight(args: argparse.Namespace, *, allow_absent: bool = Fal
     return result
 
 
-def repository_root() -> pathlib.Path:
-    completed = subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True, capture_output=True)
-    if completed.returncode or not completed.stdout.strip():
-        raise AssumptionError("repository_not_found", "cwd is not in a Git worktree", exit_code=EXIT_NOT_FOUND)
-    root = pathlib.Path(completed.stdout.strip()).resolve()
+def vault_root(vault: str | None = None) -> pathlib.Path:
     try:
-        pathlib.Path.cwd().resolve().relative_to(root)
-    except ValueError as error:
-        raise AssumptionError("repository_not_found", "cwd is outside the resolved Git root", exit_code=EXIT_NOT_FOUND) from error
-    return root
+        if vault is not None:
+            root = pathlib.Path(vault).expanduser().resolve(strict=True)
+            if not root.is_dir():
+                raise OSError("vault root is not a directory")
+            return root
+        cwd = pathlib.Path.cwd().resolve(strict=True)
+        for root in (cwd, *cwd.parents):
+            try:
+                (root / "context").lstat()
+            except FileNotFoundError:
+                continue
+            return root
+        return cwd
+    except (OSError, RuntimeError) as error:
+        raise AssumptionError("vault_not_found", "vault must be an existing directory", exit_code=EXIT_NOT_FOUND) from error
 
 
 def _safe_assumption_path(
@@ -1550,6 +1557,7 @@ def _add_preflight(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="assumption_cli.py")
+    parser.add_argument("--vault", help="Directory containing context/; defaults to the nearest context/ ancestor or cwd.")
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("schema", "capabilities"):
         command = sub.add_parser(name)
@@ -1642,7 +1650,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         return build_decline_result(_load_json_argument(args.candidate, allow_stdin=True), args.reason)
     if args.command == "candidate-batch" and args.candidate_batch_command == "validate":
         return validate_candidate_batch(_load_json_argument(args.batch, allow_stdin=True))
-    repo = repository_root()
+    repo = vault_root(getattr(args, "vault", None))
     if args.command == "search":
         return search_assumptions(repo, signal=args.signal, query=args.query, include_history=args.include_history, limit=args.limit)
     if args.command == "read":

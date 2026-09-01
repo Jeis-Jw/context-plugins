@@ -20,9 +20,8 @@ sys.modules[SPEC.name] = context_cli
 SPEC.loader.exec_module(context_cli)
 
 
-def git_repo() -> tempfile.TemporaryDirectory[str]:
+def vault_dir() -> tempfile.TemporaryDirectory[str]:
     temp = tempfile.TemporaryDirectory()
-    subprocess.run(["git", "init", "-q", temp.name], check=True)
     return temp
 
 
@@ -181,7 +180,7 @@ class StorageIndexTests(unittest.TestCase):
         self.assertFalse(context_cli.natural_filename("인증 세션").startswith(("OBS-", "DEC-", "SNAP-")))
 
     def test_acceptance_04_path_collision(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             area = repo / "context/observation"
@@ -198,7 +197,7 @@ class StorageIndexTests(unittest.TestCase):
                 context_cli.validate_filename(value)
 
     def test_acceptance_07_index_determinism(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             path = repo / "context/observation/인증.md"
@@ -210,7 +209,7 @@ class StorageIndexTests(unittest.TestCase):
             self.assertNotIn('"path":"context/observation/observation.index.md"', first)
 
     def test_acceptance_08_stage1_has_zero_artifact_io(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             for index in range(2):
@@ -229,7 +228,7 @@ class StorageIndexTests(unittest.TestCase):
             self.assertEqual(3, metrics.index_opens)
 
     def test_acceptance_09_index_fallback_and_strict(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             artifact = repo / "context/observation/관찰.md"
@@ -258,7 +257,7 @@ class StorageIndexTests(unittest.TestCase):
             self.assertEqual("context/observation/renamed.md", selected["items"][0]["path"])
 
     def test_acceptance_10_output_limit(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             for index in range(12):
@@ -277,7 +276,7 @@ class StorageIndexTests(unittest.TestCase):
             self.assertLessEqual(len(context_cli.canonical_json(result["items"]).encode()), 900)
 
     def test_index_first_artifact_lookup_and_fallback_warning(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             snapshot_id = "ctx_550e8400e29b41d4a716446655440010"
@@ -345,7 +344,7 @@ class StorageIndexTests(unittest.TestCase):
             self.assertIn("index_lookup_fallback", discard["warnings"])
 
     def test_recall_ranks_multi_term_matches_and_cuts_path_only_rows(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             relevant_id = "ctx_550e8400e29b41d4a716446655440020"
@@ -373,7 +372,7 @@ class StorageIndexTests(unittest.TestCase):
             self.assertEqual([relevant_id], [item["id"] for item in filler_query["items"]])
 
     def test_snapshot_load_and_observation_read_enforce_byte_budget(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             snapshot_id = "ctx_550e8400e29b41d4a716446655440030"
@@ -461,7 +460,7 @@ evidence
             context_cli.parse_document(unsupported)
 
     def test_acceptance_39_refresh_reports_index_drift_as_warnings(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             area = repo / "context/observation"
@@ -482,7 +481,7 @@ evidence
             self.assertEqual(3, len(list(p for p in area.glob("*.md") if not p.name.endswith(".index.md"))))
 
     def test_legacy_artifact_does_not_block_doctor_recall_init_or_capture(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             identifier = "ctx_550e8400e29b41d4a716446655440000"
@@ -532,7 +531,7 @@ evidence
             self.assertEqual([], context_cli.doctor_repository(repo)["warnings"])
 
     def test_missing_index_row_falls_back_and_repairs_in_one_call(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             identifier = "ctx_550e8400e29b41d4a716446655440000"
@@ -566,7 +565,7 @@ evidence
             self.assertEqual(artifact_before, artifact_path.read_bytes())
 
     def test_index_miss_body_reads_have_a_hard_cap(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             for index in range(25):
@@ -592,7 +591,7 @@ evidence
             self.assertEqual(20, broken_metrics.artifact_opens)
 
     def test_missing_at_file_uses_structured_error_envelope(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             completed = subprocess.run(
                 [
                     "python3", str(CLI_PATH), "draft", "--kind", "observation",
@@ -608,7 +607,7 @@ evidence
             self.assertEqual("input_unavailable", envelope["error"]["code"])
 
     def test_context_root_missing_is_storage_error(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             with self.assertRaises(context_cli.ContextError) as caught:
                 context_cli.recall_repository(Path(temp))
             self.assertEqual("context_root_missing", caught.exception.code)
@@ -617,7 +616,7 @@ evidence
 
 class StrictIntegrityTests(unittest.TestCase):
     def test_group_01_reserved_index_paths_and_self_entry(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             root = repo / context_cli.ROOT_INDEX
@@ -630,7 +629,7 @@ class StrictIntegrityTests(unittest.TestCase):
             )
             self.assertIn("reserved_index_path", diagnostic_codes(repo))
 
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             root = repo / context_cli.ROOT_INDEX
@@ -638,7 +637,7 @@ class StrictIntegrityTests(unittest.TestCase):
             root.write_text("\n".join(lines) + "\n", encoding="utf-8")
             self.assertIn("reserved_index_missing", diagnostic_codes(repo))
 
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             index = repo / "context/observation/observation.index.md"
@@ -682,7 +681,7 @@ class StrictIntegrityTests(unittest.TestCase):
             ),
         )
         for expected, mutate, relative in fixtures:
-            with self.subTest(expected=expected), git_repo() as temp:
+            with self.subTest(expected=expected), vault_dir() as temp:
                 repo = Path(temp)
                 initialize(repo)
                 path = repo / relative
@@ -696,13 +695,13 @@ class StrictIntegrityTests(unittest.TestCase):
         cases.append(("section_schema_error", valid_observation.replace("## 근거\n\n실제 임시 저장소 fixture\n", "")))
         cases.append(("schema_area_mismatch", artifact("context-decision/v1", "ctx_550e8400e29b41d4a716446655440001")))
         for expected, content in cases:
-            with self.subTest(expected=expected), git_repo() as temp:
+            with self.subTest(expected=expected), vault_dir() as temp:
                 repo = Path(temp)
                 initialize(repo)
                 (repo / "context/observation/fixture.md").write_text(content, encoding="utf-8")
                 self.assertIn(expected, diagnostic_codes(repo))
 
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             index = repo / "context/observation/observation.index.md"
@@ -710,7 +709,7 @@ class StrictIntegrityTests(unittest.TestCase):
             self.assertIn("area_index_mismatch", diagnostic_codes(repo))
 
     def test_group_04_duplicate_id(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             identifier = "ctx_550e8400e29b41d4a716446655440000"
@@ -720,7 +719,7 @@ class StrictIntegrityTests(unittest.TestCase):
             self.assertIn("duplicate_id", diagnostic_codes(repo))
 
     def test_group_05_broken_internal_reference(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             content = artifact(
@@ -756,13 +755,13 @@ class StrictIntegrityTests(unittest.TestCase):
             ),
         )
         for relative, content in fixtures:
-            with self.subTest(relative=relative), git_repo() as temp:
+            with self.subTest(relative=relative), vault_dir() as temp:
                 repo = Path(temp)
                 initialize(repo)
                 (repo / relative).write_text(content, encoding="utf-8")
                 self.assertIn("lifecycle_invalid", diagnostic_codes(repo))
 
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             register_decision(repo)
@@ -782,7 +781,7 @@ class StrictIntegrityTests(unittest.TestCase):
             self.assertEqual(before, (repo / "context/decision/retired/withdrawn.md").read_bytes())
 
     def test_group_07_reciprocal_supersede_edges(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             predecessor = "ctx_550e8400e29b41d4a716446655440000"
@@ -804,7 +803,7 @@ class StrictIntegrityTests(unittest.TestCase):
             self.assertIn("supersede_edge_missing", diagnostic_codes(repo))
 
     def test_group_08_lifecycle_cycle(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             first = "ctx_550e8400e29b41d4a716446655440000"
@@ -829,7 +828,7 @@ class StrictIntegrityTests(unittest.TestCase):
             self.assertIn("lifecycle_cycle", {issue["code"] for issue in repair["issues"]})
 
     def test_group_09_illegal_cross_kind_predecessor(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             register_decision(repo)
@@ -856,7 +855,7 @@ class StrictIntegrityTests(unittest.TestCase):
             self.assertIn("illegal_cross_kind_predecessor", diagnostic_codes(repo))
 
     def test_group_10_duplicate_current_decision_slot(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             register_decision(repo)
@@ -879,7 +878,7 @@ class StrictIntegrityTests(unittest.TestCase):
                 lambda row: row.replace('"state":"current"', '"state":"history"'),
             ),
         ):
-            with self.subTest(expected=expected), git_repo() as temp:
+            with self.subTest(expected=expected), vault_dir() as temp:
                 repo = Path(temp)
                 initialize(repo)
                 (repo / "context/observation/one.md").write_text(
@@ -899,7 +898,7 @@ class StrictIntegrityTests(unittest.TestCase):
                 self.assertEqual(document_before, (repo / "context/observation/one.md").read_bytes())
 
     def test_group_12_duplicate_area_and_claim_owner(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             root = repo / context_cli.ROOT_INDEX
@@ -912,7 +911,7 @@ class StrictIntegrityTests(unittest.TestCase):
 
     @unittest.skipIf(sys.platform == "win32", "POSIX symlink integrity fixture")
     def test_group_13_traversal_and_retired_symlink(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             root = repo / context_cli.ROOT_INDEX
@@ -925,7 +924,7 @@ class StrictIntegrityTests(unittest.TestCase):
             )
             self.assertIn("path_escape", diagnostic_codes(repo))
 
-        with git_repo() as temp, tempfile.TemporaryDirectory() as outside_temp:
+        with vault_dir() as temp, tempfile.TemporaryDirectory() as outside_temp:
             repo = Path(temp)
             initialize(repo)
             retired = repo / "context/observation/retired"
@@ -939,7 +938,7 @@ class StrictIntegrityTests(unittest.TestCase):
             self.assertIn("symlink_path", {issue["code"] for issue in repair["issues"]})
 
     def test_refresh_cli_reports_blocking_issue_without_strict_mode(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             content = artifact(

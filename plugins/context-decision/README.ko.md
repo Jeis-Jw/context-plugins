@@ -6,12 +6,12 @@
 
 요구 좌표는 marketplace `context-plugins`, plugin `context-core`, selector `context-core@context-plugins`, source `Jeis-Jw/context-plugins`, protocol `context-common/v2`입니다. 동명 plugin이나 다른 marketplace source는 대체하지 못합니다.
 
-1. 지원 profile은 immutable `v0.8.0` checkout의 root installer를 사용자가 한 번 실행해 빠진 profile plugin을 설치하고, 이미 활성화된 같은-major 설치는 호환으로 인정합니다.
+1. 지원 profile은 내려받은 plugin 파일의 root installer를 사용자가 한 번 실행해 빠진 profile plugin을 설치하고, 이미 활성화된 같은-major 설치는 호환으로 인정합니다.
 2. host를 reload하거나 새 session을 엽니다.
 3. `$context-decision:init`을 한 번 호출합니다.
 4. installed core public bootstrap이 필요한 core seed와 decision area를 적용하고, 현재 host의 `AGENTS.md` 또는 `CLAUDE.md`에 context 운영지침 managed block을 설치합니다. ready 재호출은 모두 noop입니다.
 
-Root installer는 명시적으로 실행하는 배포 도구일 뿐 bundle/meta-plugin이 아닙니다. `context-decision` 자체는 marketplace add, install, enable, update 또는 host configuration 변경을 자동 실행하지 않습니다. Manifest에도 dependency나 implicit/default install metadata가 없고 core 구현을 내장하지 않습니다. Canonical init과 workflow는 subprocess 전에 absolute entrypoint suffix, 인접한 Claude/Codex core manifest의 name·version 일치와 같은 major를 확인하고 실제 entrypoint SHA-256을 해당 operation 동안 고정합니다. 이어서 `context-core-schema/v1`, `context-common/v2`, required doctor/transaction/bootstrap command, `context-owner-descriptor/v2` feature와 doctor state를 직접 handshake합니다. 이 검사는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 저수준 compatibility mode의 입력일 뿐 canonical 경로의 신뢰 근거가 아닙니다.
+Root installer는 명시적으로 실행하는 배포 도구일 뿐 bundle/meta-plugin이 아닙니다. `context-decision` 자체는 marketplace add, install, enable, update 또는 host configuration 변경을 자동 실행하지 않습니다. Manifest에도 dependency나 implicit/default install metadata가 없고 core 구현을 내장하지 않습니다. Canonical init과 workflow는 subprocess 전에 absolute entrypoint suffix, 인접한 Claude/Codex core manifest의 name·version 일치와 같은 major를 확인하고 실제 entrypoint SHA-256을 해당 operation 동안 고정합니다. 이어서 `context-core-schema/v1`, `context-common/v2`, required doctor/transaction/bootstrap command, `context-owner-descriptor/v2`·`filesystem-vault/v1` feature와 doctor state를 직접 handshake합니다. 이 검사는 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 저수준 compatibility mode의 입력일 뿐 canonical 경로의 신뢰 근거가 아닙니다.
 
 Core와 decision package는 major version이 같으면 version-compatible합니다. Minor는 기능 추가·변경, patch는 작은 수정이며 현재 `0.x`에서는 모든 `0.*` 조합이 package-version gate를 통과합니다. 단, 실제 runtime surface가 맞지 않으면 아래 handshake가 같은-major 구현도 계속 차단합니다.
 
@@ -30,7 +30,7 @@ inline `--sec-*`는 plain text가 기본이며 explicit `@file`과 leading `@` l
 
 Agent는 기록 제안 전에 complete preview의 완성된 렌더링 본문을 만들고 한 번만 묻습니다. 그 capture 질문에 대한 직접적·명시적·무조건적 긍정만 승인입니다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니며 모호한 평가는 한 줄로 한 번만 재확인합니다. 수정 요청은 새 preview와 새 질문으로 처리합니다.
 
-사용자는 digest, 임시 파일 위치, 내부 ID나 core 경로를 보거나 입력하지 않습니다. Workflow는 질문 전에 repository identity, pinned runtime, semantic result, nested core bundle, CAS와 lock 결박을 고정하고 승인 뒤 재생성하지 않습니다. Tampering, clone·linked-worktree·same-path replay, runtime 변경과 잘못된 승인 material은 repository write 전에 실패합니다.
+사용자는 digest, 임시 파일 위치, 내부 ID나 core 경로를 보거나 입력하지 않습니다. Workflow는 질문 전에 vault identity, pinned runtime, semantic result, nested core bundle, CAS와 lock 결박을 고정하고 승인 뒤 재생성하지 않습니다. Tampering, 복사·이동된 vault·같은 경로에 재생성한 디렉터리에서의 승인 재사용, runtime 변경과 잘못된 승인 material은 repository write 전에 실패합니다.
 
 ## Product flow
 
@@ -70,4 +70,4 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 
 0.7.1은 자연어 승인 질문, discovery-only read, supersede/withdraw golden path와 deterministic receipt lifecycle을 통합합니다. Core와 decision의 semantic ownership 및 package 경계는 유지하며 root profile installer만 설치 동작을 묶습니다. `v0.7.1` tag와 publication은 아직 완료되지 않았습니다.
 
-0.8.0은 package version 호환성을 major 기준으로 바꾸고, protocol·capability handshake와 operation-bound actual runtime digest를 fail-closed 실행 경계로 유지합니다. `v0.8.0` tag와 publication은 아직 완료되지 않았습니다.
+0.9.0은 package version 호환성을 major 기준으로 바꾸고, protocol·capability handshake와 operation-bound actual runtime digest를 fail-closed 실행 경계로 유지합니다. `v0.9.0` tag와 publication은 아직 완료되지 않았습니다.

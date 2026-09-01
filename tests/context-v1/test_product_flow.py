@@ -29,7 +29,7 @@ decision_cli = flow.decision_cli
 
 def tree_digest(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(item for item in root.rglob("*") if item.is_file() and ".git" not in item.parts):
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
         digest.update(path.relative_to(root).as_posix().encode("utf-8"))
         digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -39,7 +39,6 @@ class ProductFlowTests(unittest.TestCase):
     def test_standalone_and_integrated_approval_flows(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", temp], check=True)
 
             init = context_cli.build_init_bundle(repo)
             before = tree_digest(repo)
@@ -116,7 +115,6 @@ class ProductFlowTests(unittest.TestCase):
     def test_acceptance_40_obsidian_graph(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", temp], check=True)
             flow.initialize(repo)
             candidate = flow.choice()
             result = decision_cli.build_claim_result(candidate, flow.decision_attestation(candidate), repo=repo)

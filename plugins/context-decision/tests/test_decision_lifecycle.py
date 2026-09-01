@@ -17,7 +17,7 @@ def draft_pair(result: dict, *, current: bool = True) -> tuple[str, str]:
 
 class DecisionLifecycleTests(unittest.TestCase):
     def test_acceptance_28_supersede(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             old_result = helpers.claim_result()
             helpers.write_decision_area(repo, current=[draft_pair(old_result)])
@@ -50,7 +50,7 @@ class DecisionLifecycleTests(unittest.TestCase):
             self.assertEqual("valid", receipt["status"])
 
     def test_supersede_requires_explicit_exact_successor_slot(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             old = helpers.claim_result()
             helpers.write_decision_area(repo, current=[draft_pair(old)])
@@ -71,7 +71,7 @@ class DecisionLifecycleTests(unittest.TestCase):
             self.assertEqual("successor_slot_mismatch", caught.exception.code)
 
     def test_repeated_same_title_history_paths_are_deterministic_and_distinct(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             first = helpers.claim_result()
             helpers.write_decision_area(repo, current=[draft_pair(first)])
@@ -108,7 +108,7 @@ class DecisionLifecycleTests(unittest.TestCase):
             self.assertTrue(second_history_path.endswith("--123e4567e89b.md"), (first_history_path, second_history_path))
 
     def test_acceptance_29_withdraw(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             current = helpers.claim_result()
             helpers.write_decision_area(repo, current=[draft_pair(current)])
@@ -134,7 +134,7 @@ class DecisionLifecycleTests(unittest.TestCase):
             self.assertTrue(history_search["items"][0]["do_not_follow"])
 
     def test_annotate_preserves_semantic_sections_and_slot(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             current = helpers.claim_result()
             path, content = draft_pair(current)

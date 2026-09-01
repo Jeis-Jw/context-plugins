@@ -42,7 +42,7 @@ def run_spec_view_cli(
 
 class DecisionRecallTests(unittest.TestCase):
     def test_read_only_cli_surfaces_need_no_host_inventory_and_write_no_repository_bytes(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             current = helpers.claim_result()
             helpers.write_decision_area(repo, current=[pair(current)])
@@ -70,7 +70,7 @@ class DecisionRecallTests(unittest.TestCase):
                     self.assertEqual(before, helpers.tree_digest(repo))
 
     def test_acceptance_30_revisit(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             due_value = helpers.candidate(revisit_on="2026-08-13")
             due = helpers.claim_result(due_value)
@@ -94,7 +94,7 @@ class DecisionRecallTests(unittest.TestCase):
             self.assertEqual(before, helpers.tree_digest(repo))
 
     def test_stage1_search_is_index_only_and_brief_reads_selected_decisions(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             first = helpers.claim_result()
             second_value = helpers.candidate(
@@ -123,7 +123,7 @@ class DecisionRecallTests(unittest.TestCase):
             self.assertEqual(set(decision_cli.CORE_SECTIONS), set(brief["items"][0]["sections"]))
 
     def test_brief_is_bounded_to_8_kib_and_keeps_only_complete_items(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             current: list[tuple[str, str]] = []
             identifiers = (
@@ -153,7 +153,7 @@ class DecisionRecallTests(unittest.TestCase):
                 decision_cli.brief_decisions(repo, query="결정", max_bytes=8193)
 
     def test_history_brief_marks_do_not_follow_and_reason(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             active = helpers.claim_result()
             helpers.write_decision_area(repo, current=[pair(active)])
@@ -176,7 +176,7 @@ class DecisionRecallTests(unittest.TestCase):
             self.assertTrue(read["do_not_follow"])
 
     def test_acceptance_48_spec_view_projection(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
 
             def make(
@@ -310,7 +310,7 @@ class DecisionRecallTests(unittest.TestCase):
             self.assertEqual(cli_before, helpers.tree_digest(repo))
 
     def test_spec_view_cap_omits_complete_low_rank_items(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             current: list[tuple[str, str]] = []
             for number in range(6):
@@ -354,7 +354,7 @@ class DecisionRecallTests(unittest.TestCase):
             self.assertEqual(before, helpers.tree_digest(repo))
 
     def test_spec_view_default_cap_bounds_raw_cli_envelope(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             current: list[tuple[str, str]] = []
             for number in range(22):
@@ -391,7 +391,7 @@ class DecisionRecallTests(unittest.TestCase):
             self.assertEqual(22, result["retrieval"]["body_reads"])
 
     def test_spec_view_cap_counts_raw_nfd_utf8_bytes(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             nfd = unicodedata.normalize("NFD", "가")
             current: list[tuple[str, str]] = []
@@ -433,7 +433,7 @@ class DecisionRecallTests(unittest.TestCase):
             self.assertEqual(8, result["omitted_count"])
 
     def test_spec_view_rechecks_envelope_at_body_read_digit_boundary(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             current: list[tuple[str, str]] = []
             for number in range(10):

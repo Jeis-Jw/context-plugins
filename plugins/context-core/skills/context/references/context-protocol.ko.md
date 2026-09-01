@@ -4,7 +4,9 @@
 
 ## 정본과 ID
 
-- Git worktree root의 `context/`만 storage root다. `--root` override는 없다.
+- vault는 `context/`를 담는 일반 디렉터리다. Git 실행파일·metadata·repository·worktree를 요구하지 않는다.
+- 모든 storage CLI는 subcommand 앞의 전역 `--vault DIR`를 지원하며 addon init adapter도 같은 옵션을 받는다. `DIR`는 존재하는 디렉터리여야 한다. 생략하면 현재·상위 디렉터리 중 `context` 항목이 있는 가장 가까운 곳, 없으면 현재 디렉터리를 사용한다. 잘못되거나 symlink인 `context`를 건너뛰어 다른 상위 vault를 선택하지 않는다. 명시한 경로가 잘못돼도 다른 vault로 fallback하지 않는다.
+- 입력 파일의 상대경로는 호출자의 작업 디렉터리를 기준으로 한다. owner 작업·preview·apply는 같은 vault를 사용한다. `schema`·`capabilities`는 vault 선택과 독립적이다. core는 `filesystem-vault/v1` feature를 제공하고 addon은 storage command 실행 전에 이를 요구한다.
 - Markdown artifact가 정본이고 `context.index.md`와 `<area>.index.md`는 deterministic projection이다.
 - artifact ID는 `ctx_` + lowercase UUIDv4 hex 32자다. filename, title, path와 lifecycle이 ID를 바꾸지 않는다.
 - frontmatter는 `KEY: JSON_VALUE` 한 줄 형식의 JSON-compatible YAML subset이고, document body는 schema별 fixed H2 section 순서를 사용한다.
@@ -37,7 +39,7 @@ recall·capture의 artifact body materialization, bounded output과 model·owner
 
 - semantic owner는 complete `context-owner-result/v1`의 draft/effect/proposed plan만 만든다.
 - `transaction preview`는 exact on-disk precondition, complete material, derived index rebuild와 owner/area authorization을 `context-mutation-bundle/v1`로 봉인한다.
-- `approval_digest`는 canonical `approval_material` 전체의 SHA-256이다. approval material은 preview·plan과 함께 resolved worktree 및 Git common-dir의 absolute path·device·inode decimal string을 exact `context-repository-identity/v1`로 결박한다. apply는 digest 확인 직후 현재 identity와 exact equality를 검증하고 동일 bundle object와 exact digest만 받는다. 다른 clone, linked worktree와 같은 path에 다시 만든 repository는 실패하며 HEAD와 unrelated content는 identity에 포함하지 않는다.
+- `approval_digest`는 canonical `approval_material` 전체의 SHA-256이다. `vault_identity`는 exact `{schema:"context-vault-identity/v1",root:{path,device,inode}}`이며 resolved vault absolute path와 device·inode decimal string을 담는다. extra·missing field는 거부한다. apply는 digest 확인 직후 현재 identity와 exact equality를 검증하고 동일 bundle object와 exact digest만 받는다. 복사·이동했거나 같은 path에 다시 만든 vault는 새 preview가 필요하다. unrelated file과 선택적인 버전관리 metadata는 결박하지 않고 실제 target byte는 CAS로 보호한다. 구 identity로 만든 미적용 bundle·receipt는 폐기하고 다시 preview해야 하며 기존 Markdown artifact는 migration하지 않는다.
 - context-core coordinator만 repository-realpath root lock 아래 atomic file operation과 deterministic index rebuild를 수행한다.
 - hidden operation, seed 누락, material/digest 불일치, changed precondition, path escape와 symlink segment는 write 전에 fail-closed한다.
 
@@ -45,7 +47,7 @@ recall·capture의 artifact body materialization, bounded output과 model·owner
 
 - `context-core-workflow-receipt/v1`은 정확히 `schema`, immutable `status:pending`, offset-aware `created_at`, `plan_id`, `core`, `plan_bundle`, `receipt_digest` 7-field다. `plan_id`는 filename/projection metadata일 뿐 semantic identity가 아니며 `plan_bundle.approval_material.plan.plan_id`와 같아야 한다. `core`는 exact `{path,sha256}`, `plan_bundle`은 기존 mutation bundle 그대로다. candidate ID나 중복 core bundle field는 금지한다.
 - `receipt_digest`는 나머지 6-field의 canonical SHA-256으로 손상만 탐지한다. 승인은 preview가 반환하고 receipt 밖 agent state에 보존한 exact `{core,plan_bundle}` workflow digest로 별도 결박한다. `transaction apply --receipt-file ... --approved-digest ...`는 이 독립 값을 필수로 검증한 뒤 current core path/SHA를 확인하고, 검증된 nested `plan_bundle.approval_digest`만 core apply에 넘긴다. receipt self-digest는 승인 근거가 아니다.
-- flag 기반 OBS/SNAP preview는 `tempdir/context-core/<plan_id>.json`에 frozen receipt 하나를 만든다. directory는 `0700`, regular file은 `0600`이고, prospective path가 repository와 Git metadata 밖인지 directory 생성 전에 검증한다. explicit path는 default directory를 만들지 않는다. target·direct parent·traversal·symlink·mode·inode identity는 fail-closed한다.
+- flag 기반 OBS/SNAP preview는 `tempdir/context-core/<plan_id>.json`에 frozen receipt 하나를 만든다. directory는 `0700`, regular file은 `0600`이고, prospective path가 vault 밖인지 directory 생성 전에 검증한다. explicit path는 default directory를 만들지 않는다. target·direct parent·traversal·symlink·mode·inode identity는 fail-closed한다.
 - selection은 preview에서 agent가 유지한 exact path뿐이며 directory scan이나 newest 선택은 없다. tri-state는 `--attestation @file`과 receipt option 없음이면 기존 bundle, complete built-in flag pair면 private default receipt, `--receipt-file`이면 그 explicit path다. 기존 `--plan-bundle @file` apply도 유지한다.
 - OBS flag는 `reusable_observation → /owner_inputs/observation/observation`, `evidence_present → /owner_inputs/observation/evidence/0`에, SNAP은 `handoff_requested → /owner_inputs/snapshot/current_context`, `unfinished_context_present → /owner_inputs/snapshot/open_items/0`에 고정된다. partial·absent·file/flag 혼용 attestation은 receipt와 repository write 전에 실패한다.
 - receipt apply 성공 시 receipt를 삭제한다. cleanup만 실패하면 `applied:true`와 `receipt_cleanup_failed`를 반환하고, fully applied receipt 재시도는 write 없이 거부한다. core에는 locator·keep·reject·TTL lifecycle을 추가하지 않는다.

@@ -50,7 +50,7 @@ def canonical_digest(value: object) -> str:
 
 def digest_tree(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(item for item in root.rglob("*") if item.is_file() and ".git" not in item.parts):
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
         digest.update(path.relative_to(root).as_posix().encode("utf-8"))
         digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -60,23 +60,12 @@ def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
-def repository_identity(repo: Path) -> dict:
-    worktree = repo.resolve(strict=True)
-    completed = subprocess.run(
-        ["git", "rev-parse", "--git-common-dir"],
-        cwd=worktree,
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-    common_value = Path(completed.stdout.strip())
-    common = common_value.resolve(strict=True) if common_value.is_absolute() else (worktree / common_value).resolve(strict=True)
-    worktree_stat = worktree.stat()
-    common_stat = common.stat()
+def vault_identity(repo: Path) -> dict:
+    root = repo.resolve(strict=True)
+    metadata = root.stat()
     return {
-        "schema": "context-repository-identity/v1",
-        "worktree": {"path": str(worktree), "device": str(worktree_stat.st_dev), "inode": str(worktree_stat.st_ino)},
-        "git_common_dir": {"path": str(common), "device": str(common_stat.st_dev), "inode": str(common_stat.st_ino)},
+        "schema": "context-vault-identity/v1",
+        "root": {"path": str(root), "device": str(metadata.st_dev), "inode": str(metadata.st_ino)},
     }
 
 
@@ -89,7 +78,6 @@ class DecisionWorkflowTests(unittest.TestCase):
     def _initialized_repository(self, root: Path) -> Path:
         repo = root / "repository"
         repo.mkdir()
-        subprocess.run(["git", "init", "-q", str(repo)], check=True)
         (repo / "keep.txt").write_text("repository bytes\n", encoding="utf-8")
         core_init = run(repo, CORE_CLI, "init", "--host", "codex", "--json")
         self.assertEqual(0, core_init.returncode, core_init.stdout + core_init.stderr)
@@ -379,7 +367,6 @@ class DecisionWorkflowTests(unittest.TestCase):
             approval_digest = json.loads(preview.stdout)["result"]["approval_digest"]
             other = root / "other-repository"
             other.mkdir()
-            subprocess.run(["git", "init", "-q", str(other)], check=True)
             mismatch = run(
                 other,
                 WORKFLOW,
@@ -393,8 +380,8 @@ class DecisionWorkflowTests(unittest.TestCase):
                 "--json",
             )
             self.assertEqual(5, mismatch.returncode, mismatch.stdout + mismatch.stderr)
-            self.assertEqual("repository_identity_mismatch", json.loads(mismatch.stdout)["error"]["code"])
-            self.assertEqual([], [path for path in other.rglob("*") if path.is_file() and ".git" not in path.parts])
+            self.assertEqual("vault_identity_mismatch", json.loads(mismatch.stdout)["error"]["code"])
+            self.assertEqual([], [path for path in other.rglob("*") if path.is_file()])
 
     def test_tampered_repository_and_rehashed_receipt_cannot_replay_in_identical_repo(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -428,10 +415,10 @@ class DecisionWorkflowTests(unittest.TestCase):
             receipt_path = Path(preview_result["receipt_file"])
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             workflow_material = receipt["approval_material"]
-            second_identity = repository_identity(second)
-            workflow_material["repository_identity"] = second_identity
+            second_identity = vault_identity(second)
+            workflow_material["vault_identity"] = second_identity
             core_bundle = workflow_material["core_bundle"]
-            core_bundle["approval_material"]["repository_identity"] = second_identity
+            core_bundle["approval_material"]["vault_identity"] = second_identity
             core_digest = canonical_digest(core_bundle["approval_material"])
             core_bundle["approval_digest"] = core_digest
             workflow_material["core_approval_digest"] = core_digest
@@ -739,7 +726,7 @@ class DecisionWorkflowTests(unittest.TestCase):
             self.assertEqual(
                 {
                     "schema",
-                    "repository_identity",
+                    "vault_identity",
                     "core",
                     "operation",
                     "workflow_input_digest",

@@ -23,15 +23,14 @@ sys.modules[SPEC.name] = context_cli
 SPEC.loader.exec_module(context_cli)
 
 
-def git_repo() -> tempfile.TemporaryDirectory[str]:
+def vault_dir() -> tempfile.TemporaryDirectory[str]:
     temp = tempfile.TemporaryDirectory()
-    subprocess.run(["git", "init", "-q", temp.name], check=True)
     return temp
 
 
 def tree_digest(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(path for path in root.rglob("*") if path.is_file() and ".git" not in path.parts):
+    for path in sorted(path for path in root.rglob("*") if path.is_file()):
         digest.update(path.relative_to(root).as_posix().encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -120,7 +119,7 @@ class ObservationTests(unittest.TestCase):
             private_temp = root / "private-temp"
             repo.mkdir()
             private_temp.mkdir(mode=0o700)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             initialize(repo)
             before = tree_digest(repo)
 
@@ -196,7 +195,7 @@ class ObservationTests(unittest.TestCase):
             private_temp = root / "private-temp"
             repo.mkdir()
             private_temp.mkdir(mode=0o700)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             initialize(repo)
             proof = root / "attestation.json"
             proof.write_text("{}", encoding="utf-8")
@@ -237,7 +236,7 @@ class ObservationTests(unittest.TestCase):
                 )
 
     def test_metadata_correction_does_not_change_claim(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             _, identifier = capture(repo, "원래 제목", "같은 claim")
@@ -251,7 +250,7 @@ class ObservationTests(unittest.TestCase):
             self.assertEqual("교정 제목", after["artifact"]["title"])
 
     def test_acceptance_14_invalidate(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             _, identifier = capture(repo, "무효화할 관찰")
@@ -268,7 +267,7 @@ class ObservationTests(unittest.TestCase):
             self.assertEqual("evidence", retired["authority"])
 
     def test_acceptance_15_supersede(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             _, predecessor = capture(repo, "같은 제목", "Safari cookie claim")
@@ -320,7 +319,7 @@ class ObservationTests(unittest.TestCase):
             self.assertIn(predecessor, new["supersedes"])
 
     def test_acceptance_16_repeated_supersede(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             _, first = capture(repo, "반복 제목", "claim v1")
@@ -344,7 +343,7 @@ class ObservationTests(unittest.TestCase):
                 self.assertTrue(row["path"].endswith(f"--{row['id'][4:16]}.md"))
 
     def test_acceptance_17_decision_fallback(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             owner_result, identifier = capture(

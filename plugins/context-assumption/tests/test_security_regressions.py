@@ -211,7 +211,6 @@ class AssumptionSecurityRegressionTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repo"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             fake = root / "context_cli.py"
             marker = root / "executed"
             fake.write_text("from pathlib import Path\nPath(" + repr(str(marker)) + ").write_text('executed')\n", encoding="utf-8")
@@ -225,7 +224,6 @@ class AssumptionSecurityRegressionTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repo"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             fake = root / "plugins/context-core/skills/context/scripts/context_cli.py"
             fake.parent.mkdir(parents=True)
             fake.write_text(
@@ -248,7 +246,6 @@ class AssumptionSecurityRegressionTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repo"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             inventory, doctor = helpers.write_preflight(root)
             preflight = helpers.preflight_args(inventory, doctor)
             value = helpers.candidate()
@@ -356,7 +353,7 @@ class AssumptionSecurityRegressionTests(unittest.TestCase):
                 "root": "context/",
                 "issues": [],
                 "warnings": [],
-                "plugin_version": "0.8.0",
+                "plugin_version": "0.9.0",
                 "entrypoint": str(helpers.CORE_CLI_PATH.resolve()),
                 "protocol": "context-common/v2",
             }

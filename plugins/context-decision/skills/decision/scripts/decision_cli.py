@@ -10,7 +10,6 @@ import os
 import pathlib
 import re
 import stat
-import subprocess
 import sys
 import unicodedata
 import uuid
@@ -275,6 +274,7 @@ def validate_core_schema_handshake(value: Any) -> dict[str, Any]:
         or value.get("protocol") != PROTOCOL
         or not isinstance(features, list)
         or "context-owner-descriptor/v2" not in features
+        or "filesystem-vault/v1" not in features
         or not isinstance(commands, list)
         or not required_commands.issubset(commands)
     ):
@@ -677,7 +677,7 @@ def schema_result() -> dict[str, Any]:
                     "approval_material", "approval_digest", "receipt_digest",
                 ],
                 "approval_material_fields": [
-                    "schema", "repository_identity", "core", "operation", "workflow_input_digest",
+                    "schema", "vault_identity", "core", "operation", "workflow_input_digest",
                     "owner_result_digest", "core_approval_digest", "core_bundle",
                 ],
                 "status": "pending",
@@ -1296,16 +1296,23 @@ def build_init_plan(preflight: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
-def repository_root() -> pathlib.Path:
-    completed = subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True, capture_output=True)
-    if completed.returncode or not completed.stdout.strip():
-        raise DecisionError("repository_not_found", "current directory is not in a Git worktree", exit_code=EXIT_NOT_FOUND)
-    root = pathlib.Path(completed.stdout.strip()).resolve()
+def vault_root(vault: str | None = None) -> pathlib.Path:
     try:
-        pathlib.Path.cwd().resolve().relative_to(root)
-    except ValueError as error:
-        raise DecisionError("repository_not_found", "cwd is outside the resolved Git worktree", exit_code=EXIT_NOT_FOUND) from error
-    return root
+        if vault is not None:
+            root = pathlib.Path(vault).expanduser().resolve(strict=True)
+            if not root.is_dir():
+                raise OSError("vault root is not a directory")
+            return root
+        cwd = pathlib.Path.cwd().resolve(strict=True)
+        for root in (cwd, *cwd.parents):
+            try:
+                (root / "context").lstat()
+            except FileNotFoundError:
+                continue
+            return root
+        return cwd
+    except (OSError, RuntimeError) as error:
+        raise DecisionError("vault_not_found", "vault must be an existing directory", exit_code=EXIT_NOT_FOUND) from error
 
 
 def _index(repo: pathlib.Path) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
@@ -2649,6 +2656,7 @@ def _add_preflight_arguments(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="decision_cli.py")
+    parser.add_argument("--vault", help="Directory containing context/; defaults to the nearest context/ ancestor or cwd.")
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init")
     init.add_argument("--json", action="store_true")
@@ -2773,7 +2781,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "draft":
         candidate = _load_json_argument(args.candidate, allow_stdin=True)
         return build_claim_result(candidate, _load_json_argument(args.attestation))
-    repo = repository_root()
+    repo = vault_root(getattr(args, "vault", None))
     if args.command == "check":
         return prepare_decision_check(
             repo,

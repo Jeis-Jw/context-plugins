@@ -15,7 +15,7 @@ revisit_when: ["area index가 반복적인 merge 병목이 되거나 실제 corp
 
 ## 결정
 
-Git worktree의 `context/` 아래 Markdown artifact를 의미 정본으로 두고 immutable internal ID를 filename과 분리한다. root·area index는 artifact에서 재생성되는 discovery projection이며 recall은 metadata로 후보를 좁힌 뒤 관련 실제 본문만 읽는다. 의미 동일성·conflict·rationale change는 hash·fingerprint·ID·index metadata가 아니라 actual body·scope·rationale로 판정한다.
+일반 vault 디렉터리의 `context/` 아래 Markdown artifact를 의미 정본으로 두고 immutable internal ID를 filename과 분리한다. root·area index는 artifact에서 재생성되는 discovery projection이며 recall은 metadata로 후보를 좁힌 뒤 관련 실제 본문만 읽는다. 의미 동일성·conflict·rationale change는 hash·fingerprint·ID·index metadata가 아니라 actual body·scope·rationale로 판정한다.
 
 ## 취지
 
@@ -30,7 +30,7 @@ Git worktree의 `context/` 아래 Markdown artifact를 의미 정본으로 두�
 
 ## 트레이드오프
 
-- index drift 검사와 fallback 경로가 필요하고 area index가 Git hot file이 될 수 있다.
+- index drift 검사와 fallback 경로가 필요하고 공유하는 area index에 동시 편집이 집중될 수 있다.
 - bounded recall의 false negative와 실제 corpus precision은 별도 운영 측정이 필요하다.
 
 ## 재평가 조건

@@ -5,10 +5,12 @@ description: When explicitly requested, register the TERM descriptor and index t
 
 # Context term init
 
+Use the same vault throughout the operation. `--vault DIR` selects an existing directory containing `context/`; otherwise use the nearest current/ancestor directory with a `context` entry, or cwd for a fresh vault. Git is not required. Core/owner/workflow CLIs take `--vault` before the subcommand; init adapters accept it as an option. Relative input paths remain caller-cwd relative.
+
 Run only when the user explicitly invokes `$context-term:init`. Never install, enable, update, downgrade, or migrate automatically.
 
 1. Check the supplied `--core-cli` against the required entrypoint suffix, matching adjacent core manifests, and compatible major; compute its actual SHA-256.
-2. Hold that digest constant while the verified core handshakes `context-core-schema/v1`, `context-common/v2`, `context-owner-descriptor/v2`, required commands, and doctor state.
+2. Hold that digest constant while the verified core handshakes `context-core-schema/v1`, `context-common/v2`, `context-owner-descriptor/v2`, `filesystem-vault/v1`, required commands, and doctor state.
 3. `term_init.py` sends descriptor v2 and its fixed index seed to core `bootstrap`, then checks ready, profile, index, and managed-policy results.
 
 ```bash

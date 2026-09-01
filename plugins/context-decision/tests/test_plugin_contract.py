@@ -80,7 +80,7 @@ class PluginContractTests(unittest.TestCase):
     def test_core_doctor_handshake_requires_the_exact_ten_field_self_report(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             completed = subprocess.run(
                 [sys.executable, str(CORE_CLI_PATH), "doctor", "--json"],
                 cwd=repo,
@@ -118,7 +118,7 @@ class PluginContractTests(unittest.TestCase):
             host = Path(temp) / "host-config"
             repo.mkdir()
             host.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             (repo / "keep.txt").write_text("repository bytes\n", encoding="utf-8")
             (host / "settings.json").write_text('{"keep":true}\n', encoding="utf-8")
             before = (digest_tree(repo), digest_tree(host))
@@ -185,7 +185,7 @@ class PluginContractTests(unittest.TestCase):
             host = root / "host-config"
             repo.mkdir()
             host.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             (repo / "keep.txt").write_text("repository bytes\n", encoding="utf-8")
             (host / "settings.json").write_text('{"keep":true}\n', encoding="utf-8")
             for case in cases:
@@ -263,7 +263,6 @@ class PluginContractTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             (repo / "keep.txt").write_text("repository bytes\n", encoding="utf-8")
             inventory, doctor = write_preflight_inputs(root, ready)
             preflight = preflight_args(ready, inventory, doctor)
@@ -402,7 +401,7 @@ class PluginContractTests(unittest.TestCase):
                     "approval_material", "approval_digest", "receipt_digest",
                 ],
                 "approval_material_fields": [
-                    "schema", "repository_identity", "core", "operation", "workflow_input_digest",
+                    "schema", "vault_identity", "core", "operation", "workflow_input_digest",
                     "owner_result_digest", "core_approval_digest", "core_bundle",
                 ],
                 "status": "pending",

@@ -16,7 +16,6 @@ class TermPluginContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp) / "repo"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             before = helpers.tree_digest(repo)
             completed = subprocess.run(
                 [sys.executable, str(helpers.INIT_PATH), "--host", "codex", "--core-cli", str(helpers.CORE_CLI_PATH), "--json"],

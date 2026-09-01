@@ -53,10 +53,12 @@ def _run_core(
     module,
     core_cli: pathlib.Path,
     *arguments: str,
+    vault: pathlib.Path | None = None,
     expected_sha256: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     module.required_core_surface(str(core_cli), expected_sha256=expected_sha256)
-    return _run([sys.executable, str(core_cli), *arguments, "--json"])
+    vault_arguments = ["--vault", str(vault)] if vault is not None and arguments[0] not in {"schema", "capabilities"} else []
+    return _run([sys.executable, str(core_cli), *vault_arguments, *arguments, "--json"])
 
 
 def _result(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
@@ -85,6 +87,7 @@ semantic input contract (outside init):
     )
     parser.add_argument("--host", choices=("codex", "claude-code"), required=True)
     parser.add_argument("--core-cli", required=True)
+    parser.add_argument("--vault", help="Directory containing context/; defaults to the nearest context/ ancestor or cwd.")
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -92,13 +95,6 @@ semantic input contract (outside init):
 def _error(code: str, message: str, *, compact: bool, details: dict[str, Any] | None = None) -> int:
     _emit({"ok": False, "error": {"code": code, "message": message, "details": details or {}}}, compact)
     return 5
-
-
-def _repository_root() -> pathlib.Path:
-    completed = _run(["git", "rev-parse", "--show-toplevel"])
-    if completed.returncode or not completed.stdout.strip():
-        raise ValueError("cwd is not in a Git worktree")
-    return pathlib.Path(completed.stdout.strip()).resolve()
 
 
 def _postcondition(
@@ -177,13 +173,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     term_cli = _load_term_cli()
     try:
+        vault = term_cli.vault_root(args.vault)
         core_cli = term_cli.required_core_surface(args.core_cli)
         core_cli_sha256 = term_cli.bytes_digest(core_cli.read_bytes())
-        handshake = _run_core(term_cli, core_cli, "schema", expected_sha256=core_cli_sha256)
+        handshake = _run_core(term_cli, core_cli, "schema", vault=vault, expected_sha256=core_cli_sha256)
         if handshake.returncode:
             return _forward(handshake)
         term_cli.validate_core_schema_handshake(_result(handshake))
-        doctor_before_command = _run_core(term_cli, core_cli, "doctor", expected_sha256=core_cli_sha256)
+        doctor_before_command = _run_core(term_cli, core_cli, "doctor", vault=vault, expected_sha256=core_cli_sha256)
         if doctor_before_command.returncode:
             return _forward(doctor_before_command)
         doctor_before = term_cli.validate_core_doctor(_result(doctor_before_command))
@@ -219,6 +216,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"@{seed}",
             "--host",
             args.host,
+            vault=vault,
             expected_sha256=core_cli_sha256,
         )
     if completed.returncode:
@@ -227,12 +225,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         bootstrap = json.loads(completed.stdout)["result"]
     except (KeyError, TypeError, json.JSONDecodeError):
         return _error("core_bootstrap_result_invalid", "context-core bootstrap result is invalid", compact=args.json)
-    post_doctor = _run_core(term_cli, core_cli, "doctor", expected_sha256=core_cli_sha256)
+    post_doctor = _run_core(term_cli, core_cli, "doctor", vault=vault, expected_sha256=core_cli_sha256)
     if post_doctor.returncode:
         return _forward(post_doctor)
     try:
         doctor = json.loads(post_doctor.stdout)["result"]
-        postcondition = _postcondition(_repository_root(), plan, doctor, term_cli.validate_core_doctor)
+        postcondition = _postcondition(vault, plan, doctor, term_cli.validate_core_doctor)
     except (term_cli.TermError, KeyError, TypeError, json.JSONDecodeError, OSError, UnicodeError, ValueError) as error:
         return _error(
             "core_bootstrap_postcondition_invalid",

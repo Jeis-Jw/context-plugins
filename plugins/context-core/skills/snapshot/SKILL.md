@@ -16,7 +16,7 @@ Follow the active-language contract in `../context/references/active-language.md
 
 Before suggesting capture, run preview and ask once in the active language with the complete rendered body. Retain its receipt path and `approval_digest` in agent state, then pass both unchanged to apply. Receipt self-digests are not approval evidence and no directory scan is allowed. Never show or request a digest, receipt path, ID, or core path. Only a direct, explicit, unconditional affirmative answer to that specific capture question is approval. A generic acknowledgement, praise, condition, edit request, or topic change is not. Never regenerate the candidate, timestamp, content, or plan after approval. Successful apply removes the receipt; a cleanup-only warning means the write succeeded and must not be retried.
 
-Use `../context/scripts/context_cli.py snapshot ...`; preview writes nothing and context-core keeps ID and path, repository identity, CAS, lock, and atomic-write guards.
+Use `../context/scripts/context_cli.py snapshot ...`; preview writes nothing and context-core keeps ID and path, vault identity, CAS, lock, and atomic-write guards.
 
 ```bash
 python3 /loaded/context-core/skills/context/scripts/context_cli.py snapshot save --title '<title>' --summary '<summary>' --captured-from conversation --attest-handoff-requested --attest-unfinished-context-present --sec-context '<context>' --sec-open-items '<open item>' --sec-next-steps '<next step>' --json

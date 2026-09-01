@@ -47,7 +47,7 @@ def write_json(path: Path, value: object) -> Path:
 
 def tree_digest(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(item for item in root.rglob("*") if item.is_file() and ".git" not in item.parts):
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
         digest.update(path.relative_to(root).as_posix().encode("utf-8"))
         digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -181,7 +181,7 @@ class SemanticTransportIntegrityTests(unittest.TestCase):
             private_temp = root / "private-temp"
             repo.mkdir()
             private_temp.mkdir(mode=0o700)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             initialize(repo)
             result, receipt_path = preview_observation_receipt(repo, private_temp)
             original = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -231,7 +231,7 @@ class SemanticTransportIntegrityTests(unittest.TestCase):
             private_temp = root / "private-temp"
             repo.mkdir()
             private_temp.mkdir(mode=0o700)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             initialize(repo)
             result, receipt_path = preview_observation_receipt(repo, private_temp)
             original = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -269,7 +269,6 @@ class SemanticTransportIntegrityTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             initialize(repo)
             unsafe_temp = repo / "private-temp"
             unsafe_temp.mkdir(mode=0o700)
@@ -335,7 +334,7 @@ class SemanticTransportIntegrityTests(unittest.TestCase):
             private_temp = root / "private-temp"
             repo.mkdir()
             private_temp.mkdir(mode=0o700)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             initialize(repo)
             result, receipt_path = preview_observation_receipt(repo, private_temp)
 
@@ -358,7 +357,7 @@ class SemanticTransportIntegrityTests(unittest.TestCase):
             private_temp = root / "private-temp"
             repo.mkdir()
             private_temp.mkdir(mode=0o700)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             initialize(repo)
             before = tree_digest(repo)
 
@@ -434,7 +433,6 @@ class SemanticTransportIntegrityTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             capabilities = write_json(root / "capabilities.json", context_cli.capabilities_result())
             results = write_json(root / "results.json", [])
             before = tree_digest(repo)
@@ -473,7 +471,6 @@ class SemanticTransportIntegrityTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repository"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             capabilities = write_json(root / "capabilities.json", context_cli.capabilities_result())
 
             for kind in ("observation", "snapshot"):
@@ -510,7 +507,6 @@ class SemanticTransportIntegrityTests(unittest.TestCase):
                 root = Path(temp)
                 repo = root / "repository"
                 repo.mkdir()
-                subprocess.run(["git", "init", "-q", str(repo)], check=True)
                 initialize(repo)
                 matching, forged = forged_owner_result(kind)
                 before = tree_digest(repo)

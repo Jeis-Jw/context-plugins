@@ -10,7 +10,7 @@ OBS is an immutable semantic claim with `authority: evidence`; never phrase it a
 1. Capture requires substantive Observation and Evidence content, using only the capability descriptor.
 2. `annotate` changes metadata only. Changed claim or evidence meaning requires a successor OBS and `supersede`; prepare both actual claims and keep reciprocal lifecycle edges in one final bundle.
 3. `invalidate` requires a substantive disproof reason; `reverify` requires fresh evidence. Age alone does not retire evidence.
-4. Keep ID and path, backlink, repository identity, CAS, lock, and atomic-write guards. Preview, prepare, and attestation write nothing.
+4. Keep ID and path, backlink, vault identity, CAS, lock, and atomic-write guards. Preview, prepare, and attestation write nothing.
 
 Follow the active-language contract in `../context/references/active-language.md`. Write user-facing responses, questions, previews, and explanatory errors in the active language. Preserve user-authored artifact prose in its original language; identifiers and machine-readable fields remain English.
 

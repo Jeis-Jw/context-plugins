@@ -1,6 +1,6 @@
 {
   "name": "context-term",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Authoritative project terminology with scoped canonical slots and signal-gated recall.",
   "author": {
     "name": "Jinwuk-Lee",

@@ -10,7 +10,7 @@ tags: ["snapshot","observation","decision","lifecycle","authority"]
 search_terms: ["SNAP staging","OBS evidence","DEC authoritative","supersede"]
 scope: "context-plugins"
 decision_key: "artifact-authority-lifecycle"
-revisit_when: ["여러 semantic owner가 실제로 동일한 lifecycle 의미를 반복하면 공통 primitive 추출을 검토한다.","Git 없는 저장 환경에서 snapshot 이력 요구가 반복되면 SNAP 보존 방식을 재평가한다."]
+revisit_when: ["여러 semantic owner가 실제로 동일한 lifecycle 의미를 반복하면 공통 primitive 추출을 검토한다.","snapshot 이력 요구가 반복되면 SNAP 보존 방식을 재평가한다."]
 ---
 
 ## 결정
@@ -34,4 +34,4 @@ SNAP은 unfinished session의 비권위 staging으로 갱신 후 discard한다. 
 ## 재평가 조건
 
 - 여러 semantic owner가 실제로 동일한 lifecycle 의미를 반복하면 공통 primitive 추출을 검토한다.
-- Git 없는 저장 환경에서 snapshot 이력 요구가 반복되면 SNAP 보존 방식을 재평가한다.
+- snapshot 이력 요구가 반복되면 SNAP 보존 방식을 재평가한다.

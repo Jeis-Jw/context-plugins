@@ -1,5 +1,17 @@
 # Repository extraction
 
+## 0.9.0 filesystem vaults
+
+Storage, approval, and installation no longer require Git. A vault is an existing directory containing `context/`. Use global `--vault DIR` before core, owner, or workflow subcommands, or the same option on addon init adapters. Without it, the nearest current/ancestor `context` directory selects the vault; with none present, init uses cwd. Input file paths still resolve relative to the caller's cwd.
+
+Existing Markdown artifacts, IDs, and indexes remain `context-common/v2` and require no migration. Core advertises `filesystem-vault/v1`; updated addon init/workflow rejects an older core lacking that feature before storage commands. Keep core and the addons using this contract together.
+
+Approval material now uses `vault_identity` with `context-vault-identity/v1` and the vault's resolved path/device/inode. Old pending bundles and receipts cannot be replayed; discard them and obtain a fresh preview and approval. Copying or moving saved context remains supported, but pending approvals never move with it. Git metadata and branch changes do not affect approval validity.
+
+The profile installer accepts ordinary downloaded directories, including archive extracts. It no longer requires a release tag or a clean checkout, and `--allow-unreleased-checkout` is removed. Profile/manifest/catalog checks and host collision guards remain.
+
+Rollback preserves saved artifact bytes. Do not reuse pending approval material after changing runtimes; the old runtime does not support `--vault` and may still require Git. The historical W2 description below is superseded by this vault contract.
+
 ## Source provenance
 
 - Source repository: `Jeis-Jw/ai-plugins`
@@ -44,7 +56,7 @@ Rollback is distribution-level: stop using or uninstall the optional addon while
 - W2 binds both core and workflow approval material to exact worktree/Git-common-dir identity, pins the distributed `context_cli.py` path suffix and SHA-256 before execution, and performs the core schema/protocol/command/feature/doctor handshake directly. This executable check is not marketplace provenance, catalog source or enabled-state attestation; caller inventory remains a low-level compatibility input.
 - W3 applies actual semantic input limits (DEC 1,200 codepoints, common primary claim 2,000 codepoints, owner input 8 KiB, full candidate envelope 16 KiB). Core and DEC `--sec-*` values use literal, `@file` and `@@literal` behavior; ASM and TERM use structured `--candidate @file` input.
 
-Frozen workflow receipts contain decision material. They remain outside the repository and Git metadata with mode `0600`; reusing one across a clone, linked worktree or same-path repository recreation fails before repository writes. The agent owns this transport lifecycle rather than asking the user to manage it.
+Frozen workflow receipts contain decision material. They remain outside the vault with mode `0600`; reusing one across a copied, moved or same-path recreated vault fails before writes. The agent owns this transport lifecycle rather than asking the user to manage it.
 
 No storage migration is required. Existing callers of `--core-inventory` and `--core-doctor` may keep using the low-level compatibility surface, but canonical addon init and DEC workflow should provide the loaded same-major `--core-cli` instead.
 
@@ -58,9 +70,9 @@ The wording and workflow changes ship as one release unit. Frozen receipt, appro
 
 `context-core`, `context-decision`, `context-assumption`, and `context-term` remain separate plugin packages. Core owns storage, indexes, transaction validation and physical writes; semantic owners keep their schemas, actual-body comparison and lifecycle meaning. The rejected topology spike copied decision into core, but none of those bytes are part of the 0.6.0 release candidate.
 
-For fresh core+decision installs, the immutable release checkout contains `profiles/core-decision.json` and `scripts/install_profile.py`. One explicit installer invocation asks the host to register that checkout and install core followed by decision at the same version and selected scope. This is distribution tooling, not a plugin dependency or runtime auto-install path. It does not initialize repositories, migrate corpus, remove old coordinates, replace an existing marketplace, or roll back partial host changes automatically.
+For fresh core+decision installs, the distribution directory contains `profiles/core-decision.json` and `scripts/install_profile.py`. One explicit installer invocation asks the host to register that directory and install core followed by decision at the same version and selected scope. This is distribution tooling, not a plugin dependency or runtime auto-install path. It does not initialize repositories, migrate corpus, remove old coordinates, replace an existing marketplace, or roll back partial host changes automatically.
 
-An enabled `context-core@jeis-ai-plugins` or `context-decision@jeis-ai-plugins`, an existing `context-plugins` marketplace pointing at another checkout, a disabled target plugin, or a mixed target version fails before the installer mutates host state. The user must explicitly disable, uninstall or update those coordinates and then rerun the installer from the exact `v0.6.0` checkout. Repository artifacts remain untouched throughout distribution migration.
+An enabled `context-core@jeis-ai-plugins` or `context-decision@jeis-ai-plugins`, an existing `context-plugins` marketplace pointing at another checkout, a disabled target plugin, or a mixed target version fails before the installer mutates host state. The user must explicitly disable, uninstall or update those coordinates and then rerun the installer from a compatible distribution directory. Repository artifacts remain untouched throughout distribution migration.
 
 ## 0.8.0 major-based package compatibility
 

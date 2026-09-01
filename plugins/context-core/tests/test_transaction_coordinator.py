@@ -29,15 +29,14 @@ sys.modules[DECISION_SPEC.name] = decision_cli
 DECISION_SPEC.loader.exec_module(decision_cli)
 
 
-def git_repo() -> tempfile.TemporaryDirectory[str]:
+def vault_dir() -> tempfile.TemporaryDirectory[str]:
     temp = tempfile.TemporaryDirectory()
-    subprocess.run(["git", "init", "-q", temp.name], check=True)
     return temp
 
 
 def tree_digest(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(p for p in root.rglob("*") if p.is_file() and ".git" not in p.parts):
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
         digest.update(path.relative_to(root).as_posix().encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -148,7 +147,7 @@ def decision_attestation(candidate: dict) -> dict:
 
 class TransactionCoordinatorTests(unittest.TestCase):
     def test_acceptance_01_init_is_idempotent(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             keep = repo / "keep.txt"
             keep.write_text("preserve existing repository content\n", encoding="utf-8")
@@ -251,7 +250,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             "partial-index-set": lambda repo: (repo / "context/observation/observation.index.md").unlink(),
         }
         for label, corrupt in corruptions.items():
-            with self.subTest(corruption=label), git_repo() as temp:
+            with self.subTest(corruption=label), vault_dir() as temp:
                 repo = Path(temp)
                 initialize(repo)
                 corrupt(repo)
@@ -263,7 +262,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
                 self.assertEqual(before, tree_digest(repo))
 
     def test_target_write_ignores_unrelated_invalid_artifact(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             polluted = repo / "context/snapshot/unrelated-broken.md"
@@ -279,7 +278,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual("invalid", context_cli.doctor_repository(repo)["repository_state"])
 
     def test_write_rechecks_duplicate_id_and_target_area_authority(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             result = observation_owner_result()
@@ -293,7 +292,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual("duplicate_id", caught.exception.code)
             self.assertEqual(before, tree_digest(repo))
 
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             root_index = repo / context_cli.ROOT_INDEX
@@ -315,7 +314,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual("area_index_mismatch", caught.exception.code)
 
     def test_explicit_init_resumes_exact_core_prefix_after_interruption(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             keep = repo / "keep.txt"
             keep.write_text("preserve\n", encoding="utf-8")
@@ -344,7 +343,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual("preserve\n", keep.read_text(encoding="utf-8"))
 
     def test_explicit_init_repairs_missing_root_index_in_populated_repository(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             (repo / context_cli.ROOT_INDEX).unlink()
@@ -358,7 +357,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual("ready", initialized["doctor"]["repository_state"])
 
     def test_explicit_init_ignores_derived_root_drift_and_refresh_fix_repairs(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             root_index = repo / context_cli.ROOT_INDEX
@@ -391,7 +390,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual(["observation", "snapshot"], [area["area"] for area in areas])
 
     def test_explicit_init_rejects_noncanonical_empty_directory_prefix(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             (repo / "context/unexpected").mkdir(parents=True)
             before = tree_digest(repo)
@@ -401,7 +400,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_area_register_resumes_exact_root_prefix_after_interruption(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             plan = decision_cli.build_init_plan()
@@ -433,7 +432,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual("ready", resumed["doctor"]["repository_state"])
 
     def test_index_seed_preconditions_are_checked_before_any_write(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             core_init = context_cli.build_init_bundle(repo)
             unexpected = repo / "context/observation/observation.index.md"
@@ -453,7 +452,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertFalse((repo / context_cli.ROOT_INDEX).exists())
             self.assertFalse((repo / "context/observation/retired").exists())
 
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             plan = decision_cli.build_init_plan()
@@ -482,7 +481,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             )
             self.assertNotIn("decision", {row["area"] for row in rows})
 
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             plan = decision_cli.build_init_plan()
@@ -500,7 +499,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual(seed_before, target.read_bytes())
 
         for populated, expected_code in ((False, "owner_descriptor_conflict"), (True, "partial_area_register")):
-            with self.subTest(populated=populated), git_repo() as temp:
+            with self.subTest(populated=populated), vault_dir() as temp:
                 repo = Path(temp)
                 initialize(repo)
                 plan = decision_cli.build_init_plan()
@@ -545,7 +544,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
                 self.assertNotIn("decision", {row["area"] for row in rows})
 
     def test_area_register_rechecks_exact_empty_directory_before_write(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             plan = decision_cli.build_init_plan()
@@ -573,7 +572,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertNotIn("decision", {row["area"] for row in rows})
 
     def test_existing_area_rejects_incompatible_descriptor_without_writes(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             plan = decision_cli.build_init_plan()
@@ -591,7 +590,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_acceptance_05_rename_identity(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             capture = context_cli.finalize_owner_result(repo, observation_owner_result())
@@ -606,7 +605,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual("context/observation/새 이름.md", index.current[0]["path"])
 
     def test_generic_rename_and_discard_support_explicit_receipt_without_default_locator(self) -> None:
-        with git_repo() as temp, tempfile.TemporaryDirectory() as outer:
+        with vault_dir() as temp, tempfile.TemporaryDirectory() as outer:
             repo = Path(temp)
             receipt_root = Path(outer) / "receipts"
             receipt_root.mkdir(mode=0o700)
@@ -645,7 +644,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertFalse((repo / "context/observation/새 이름.md").exists())
 
     def test_owner_result_becomes_final_bundle_and_only_core_applies(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             owner_result = observation_owner_result()
@@ -660,7 +659,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertTrue((repo / owner_result["artifact_drafts"][0]["path"]).exists())
 
     def test_acceptance_23_preview(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             owner_result = observation_owner_result()
@@ -677,7 +676,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual(frozen, preview["bundle"], "apply must not regenerate semantic material")
 
     def test_approval_digest_material_and_hidden_operations_fail_closed(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             preview = context_cli.finalize_owner_result(repo, observation_owner_result())
@@ -700,26 +699,26 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual("plan_preview_mismatch", hidden_error.exception.code)
             self.assertEqual(before, tree_digest(repo))
 
-    def test_bundle_is_bound_to_exact_repository_identity_but_not_unrelated_content(self) -> None:
+    def test_bundle_is_bound_to_exact_vault_identity_but_not_unrelated_content(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             first = root / "first"
             second = root / "second"
             for repo in (first, second):
-                subprocess.run(["git", "init", "-q", str(repo)], check=True)
+                repo.mkdir(parents=True, exist_ok=True)
                 initialize(repo)
             preview = context_cli.finalize_owner_result(first, observation_owner_result())
-            identity = preview["bundle"]["approval_material"]["repository_identity"]
-            self.assertEqual({"schema", "worktree", "git_common_dir"}, set(identity))
-            self.assertEqual({"path", "device", "inode"}, set(identity["worktree"]))
-            self.assertEqual({"path", "device", "inode"}, set(identity["git_common_dir"]))
-            self.assertTrue(identity["worktree"]["device"].isdigit())
-            self.assertTrue(identity["worktree"]["inode"].isdigit())
+            identity = preview["bundle"]["approval_material"]["vault_identity"]
+            self.assertEqual({"schema", "root"}, set(identity))
+            self.assertEqual("context-vault-identity/v1", identity["schema"])
+            self.assertEqual({"path", "device", "inode"}, set(identity["root"]))
+            self.assertTrue(identity["root"]["device"].isdigit())
+            self.assertTrue(identity["root"]["inode"].isdigit())
 
             second_before = tree_digest(second)
             with self.assertRaises(context_cli.ContextError) as replay:
                 context_cli.apply_bundle(second, preview["bundle"], preview["approval_digest"])
-            self.assertEqual("repository_identity_mismatch", replay.exception.code)
+            self.assertEqual("vault_identity_mismatch", replay.exception.code)
             self.assertEqual(second_before, tree_digest(second))
 
             (first / "unrelated.txt").write_text("not an approved precondition\n", encoding="utf-8")
@@ -728,59 +727,71 @@ class TransactionCoordinatorTests(unittest.TestCase):
             repeated = context_cli.apply_bundle(first, preview["bundle"], preview["approval_digest"])
             self.assertEqual([], repeated["changed_paths"])
 
-    def test_repository_identity_shape_tamper_and_same_path_recreation_fail_before_write(self) -> None:
+    def test_vault_identity_shape_tamper_and_same_path_recreation_fail_before_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             repo = root / "repository"
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             initialize(repo)
             preview = context_cli.finalize_owner_result(repo, observation_owner_result())
 
             for label, mutate in (
-                ("missing", lambda identity: identity.pop("git_common_dir")),
+                ("missing", lambda identity: identity.pop("root")),
                 ("extra", lambda identity: identity.update({"extra": "forged"})),
             ):
                 with self.subTest(label=label):
                     forged = copy.deepcopy(preview["bundle"])
-                    mutate(forged["approval_material"]["repository_identity"])
+                    mutate(forged["approval_material"]["vault_identity"])
                     forged["approval_digest"] = context_cli.canonical_digest(forged["approval_material"])
                     before = tree_digest(repo)
                     with self.assertRaises(context_cli.ContextError) as malformed:
                         context_cli.apply_bundle(repo, forged, forged["approval_digest"])
-                    self.assertEqual("repository_identity_invalid", malformed.exception.code)
+                    self.assertEqual("vault_identity_invalid", malformed.exception.code)
                     self.assertEqual(before, tree_digest(repo))
 
-            shutil.rmtree(repo)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.rename(root / "previous-vault")
+            repo.mkdir(parents=True, exist_ok=True)
             initialize(repo)
             before = tree_digest(repo)
             with self.assertRaises(context_cli.ContextError) as recreated:
                 context_cli.apply_bundle(repo, preview["bundle"], preview["approval_digest"])
-            self.assertEqual("repository_identity_mismatch", recreated.exception.code)
+            self.assertEqual("vault_identity_mismatch", recreated.exception.code)
             self.assertEqual(before, tree_digest(repo))
 
-    def test_linked_worktree_cannot_replay_approved_bundle(self) -> None:
+    def test_legacy_approval_requires_a_fresh_preview_without_writes(self) -> None:
+        with vault_dir() as temp:
+            repo = Path(temp)
+            initialize(repo)
+            preview = context_cli.finalize_owner_result(repo, observation_owner_result())
+            legacy = copy.deepcopy(preview["bundle"])
+            root = legacy["approval_material"].pop("vault_identity")["root"]
+            legacy["approval_material"]["repository_identity"] = {
+                "schema": "context-repository-identity/v1",
+                "worktree": root,
+                "git_common_dir": root,
+            }
+            legacy["approval_digest"] = context_cli.canonical_digest(legacy["approval_material"])
+            before = tree_digest(repo)
+            with self.assertRaises(context_cli.ContextError) as rejected:
+                context_cli.apply_bundle(repo, legacy, legacy["approval_digest"])
+            self.assertEqual("vault_identity_invalid", rejected.exception.code)
+            self.assertIn("new approval preview", str(rejected.exception))
+            self.assertEqual(before, tree_digest(repo))
+
+    def test_copied_vault_cannot_replay_approved_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             source = root / "source"
-            linked = root / "linked"
-            subprocess.run(["git", "init", "-q", str(source)], check=True)
+            copied = root / "copied"
+            source.mkdir(parents=True, exist_ok=True)
             initialize(source)
-            subprocess.run(["git", "-C", str(source), "add", "context"], check=True)
-            subprocess.run(
-                [
-                    "git", "-C", str(source), "-c", "user.name=Context Test", "-c",
-                    "user.email=context@example.invalid", "commit", "-qm", "initialize context",
-                ],
-                check=True,
-            )
-            subprocess.run(["git", "-C", str(source), "worktree", "add", "-q", "--detach", str(linked), "HEAD"], check=True)
+            shutil.copytree(source, copied)
             preview = context_cli.finalize_owner_result(source, observation_owner_result())
-            before = tree_digest(linked)
+            before = tree_digest(copied)
             with self.assertRaises(context_cli.ContextError) as replay:
-                context_cli.apply_bundle(linked, preview["bundle"], preview["approval_digest"])
-            self.assertEqual("repository_identity_mismatch", replay.exception.code)
-            self.assertEqual(before, tree_digest(linked))
+                context_cli.apply_bundle(copied, preview["bundle"], preview["approval_digest"])
+            self.assertEqual("vault_identity_mismatch", replay.exception.code)
+            self.assertEqual(before, tree_digest(copied))
 
     def test_core_control_transitions_reject_forged_file_operations(self) -> None:
         def forge_file_create(bundle: dict) -> dict:
@@ -839,7 +850,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             "policy_install": (True, lambda repo: context_cli.build_policy_bundle(repo, "CLAUDE.md")),
         }
         for transition, (initialized, build) in cases.items():
-            with self.subTest(transition=transition), git_repo() as temp:
+            with self.subTest(transition=transition), vault_dir() as temp:
                 repo = Path(temp)
                 if initialized:
                     initialize(repo)
@@ -894,7 +905,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
                         self.assertFalse((repo / "outside/nested.txt").exists())
 
     def test_acceptance_24_digest(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             preview = context_cli.finalize_owner_result(repo, observation_owner_result())
@@ -923,7 +934,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_acceptance_38_crash_resume(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             context_cli.apply_bundle(
@@ -952,7 +963,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual([], repeated["changed_paths"])
 
     def test_decision_supersede_preview_matches_applied_repository_index(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             decision_init = decision_cli.build_init_plan()
@@ -1007,7 +1018,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual(applied, regenerated)
 
     def test_owner_area_allowlist_and_seed_requirements_fail_closed(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             invalid = observation_owner_result()
@@ -1021,7 +1032,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual("index_seed_required", seed_error.exception.code)
 
     def test_exact_precondition_blocks_changed_target(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             capture = context_cli.finalize_owner_result(repo, observation_owner_result())
@@ -1034,7 +1045,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_index_fix_is_immediate_and_document_authoritative(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             artifact = repo / "context/observation/out-of-band.md"
@@ -1062,14 +1073,15 @@ class TransactionCoordinatorTests(unittest.TestCase):
             )
             self.assertEqual(["ctx_550e8400e29b41d4a716446655440001"], [row["id"] for row in area_index.current])
 
-    def test_schema_runs_without_repository_and_has_no_root_override(self) -> None:
+    def test_schema_runs_without_vault_and_supports_root_override(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             completed = subprocess.run(["python3", str(CLI_PATH), "schema", "--json"], cwd=temp, text=True, capture_output=True)
             self.assertEqual(0, completed.returncode, completed.stderr)
             result = json.loads(completed.stdout)
             self.assertTrue(result["ok"])
             self.assertEqual("context-common/v2", result["result"]["protocol"])
-            self.assertNotIn("--root", completed.stdout)
+            self.assertTrue(result["result"]["root_override"])
+            self.assertIn("filesystem-vault/v1", result["result"]["features"])
             self.assertNotIn("ambiguous", result["result"]["exit_codes"])
 
 

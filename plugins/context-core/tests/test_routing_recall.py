@@ -152,7 +152,7 @@ def repository_bytes(repo: Path) -> dict[str, bytes]:
     return {
         path.relative_to(repo).as_posix(): path.read_bytes()
         for path in sorted(repo.rglob("*"))
-        if path.is_file() and ".git" not in path.parts
+        if path.is_file()
     }
 
 
@@ -162,7 +162,6 @@ class RoutingRecallTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repo"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             before = repository_bytes(repo)
 
             exact = exact_candidate_batch(context_cli.MAX_CANDIDATE_BYTES)
@@ -200,7 +199,6 @@ class RoutingRecallTests(unittest.TestCase):
             root = Path(temp)
             repo = root / "repo"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
             before = repository_bytes(repo)
             valid = {
                 "schema": "context-capture-batch/v1",

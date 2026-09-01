@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PHASE0 = ROOT / "tests/context-v1/phase0/phase0_contract.py"
 PLUGIN_NAMES = ("context-core", "context-decision", "context-assumption", "context-term")
-RELEASE_VERSION = "0.8.0"
+RELEASE_VERSION = "0.9.0"
 OWNER_SKILLS = {
     "context-core": "context",
     "context-decision": "decision",
@@ -108,7 +108,7 @@ class DistributionProofTests(unittest.TestCase):
                 host = Path(temp) / "host-config"
                 repo.mkdir()
                 host.mkdir()
-                subprocess.run(["git", "init", "-q", str(repo)], check=True)
+                repo.mkdir(parents=True, exist_ok=True)
                 (repo / "keep.txt").write_text("repository bytes\n", encoding="utf-8")
                 (host / "config.json").write_text('{"keep":true}\n', encoding="utf-8")
                 byte_before = (digest_tree(repo), digest_tree(host))
@@ -147,7 +147,7 @@ class DistributionProofTests(unittest.TestCase):
             host = Path(temp) / "host"
             repo.mkdir()
             host.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             (repo / "keep.txt").write_text("keep\n", encoding="utf-8")
             (host / "config.json").write_text("{}\n", encoding="utf-8")
             before = (digest_tree(repo), digest_tree(host))
@@ -183,7 +183,6 @@ class DistributionProofTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", temp], check=True)
             with self.assertRaises(context_cli.ContextError) as caught:
                 context_cli.recall_repository(repo)
             self.assertEqual("context_root_missing", caught.exception.code)
@@ -340,21 +339,28 @@ class DistributionProofTests(unittest.TestCase):
 
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         for token in (
-            RELEASE_VERSION,
-            "context-assumption",
-            "context-term",
-            "There is no bundle or meta-plugin",
-            "tag has not been created or pushed",
-            "Fresh install and cache lifecycle passed",
-            "marketplace publication",
+            "## What is it?",
+            "## Why use it?",
+            "## Install",
+            "## How to use it",
+            "codex plugin marketplace add Jeis-Jw/context-plugins",
+            "codex plugin add context-core@context-plugins",
+            "codex plugin add context-decision@context-plugins",
+            "claude plugin marketplace add Jeis-Jw/context-plugins --scope user",
+            "claude plugin install context-core@context-plugins --scope user",
+            "claude plugin install context-decision@context-plugins --scope user",
+            "$context-decision:init",
             "Apache License 2.0",
         ):
             self.assertIn(token, readme)
-        self.assertIn("v0.8.0", readme)
-        self.assertIn("--branch v0.8.0", readme)
-        self.assertIn("scripts/install_profile.py --host codex", readme)
-        self.assertIn("scripts/install_profile.py --host claude-code --scope user", readme)
-        self.assertNotIn("--ref main", readme)
+        for developer_only_token in (
+            "git clone",
+            "scripts/install_profile.py",
+            "bundle or meta-plugin",
+            "Developer preview",
+            "Verified status",
+        ):
+            self.assertNotIn(developer_only_token, readme)
         profile = read_json(ROOT / "profiles/core-decision.json")
         self.assertEqual("context-plugin-profile/v2", profile["schema"])
         self.assertEqual(RELEASE_VERSION, profile["version"])
@@ -415,12 +421,7 @@ class DistributionProofTests(unittest.TestCase):
                 if not isinstance(node, ast.Call):
                     continue
                 call = ast.unparse(node.func)
-                self.assertNotIn(call, {"os.system", "subprocess.Popen"})
-                if call == "subprocess.run":
-                    self.assertTrue(node.args and isinstance(node.args[0], (ast.List, ast.Tuple)))
-                    command = node.args[0].elts[0]
-                    self.assertIsInstance(command, ast.Constant)
-                    self.assertEqual("git", command.value)
+                self.assertNotIn(call, {"os.system", "subprocess.Popen", "subprocess.run"})
 
         for script in scripts[1:]:
             semantic_source = script.read_text(encoding="utf-8")
@@ -488,11 +489,16 @@ class DistributionProofTests(unittest.TestCase):
             self.assertNotIn("Delete it manually", text, path)
             self.assertNotIn("Delete the receipt manually", text, path)
             self.assertNotIn("사용자가 직접 삭제", text, path)
-            self.assertTrue(
-                "direct, explicit, unconditional" in text
-                or "직접적·명시적·무조건적" in text,
-                path,
-            )
+            if path == ROOT / "README.md":
+                self.assertIn("clear, direct approval of that preview", text)
+            elif path == ROOT / "README.ko.md":
+                self.assertIn("방금 확인한 내용의 저장을 분명하게 승인", text)
+            else:
+                self.assertTrue(
+                    "direct, explicit, unconditional" in text
+                    or "직접적·명시적·무조건적" in text,
+                    path,
+                )
 
         policy_paths = sorted(ROOT.glob("plugins/*/rules/*.md"))
         approval_surfaces = [*skill_paths, *readmes, *policy_paths, ROOT / "AGENTS.md"]
@@ -602,8 +608,23 @@ class DistributionProofTests(unittest.TestCase):
                 self.assertIn(token, prompt_text)
 
         root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        for token in ("complete preview", "direct, explicit, unconditional", "indexed artifact bodies", "20 bodies", "end-to-end model tokens", "O(1)"):
+        for token in (
+            "AI coding agents",
+            "project-owned memory",
+            "context/",
+            "does not automatically save your entire conversation",
+            "agent chat, not in the terminal",
+            "clear, direct approval of that preview",
+        ):
             self.assertIn(token, root_readme)
+        for developer_only_token in (
+            "indexed artifact bodies",
+            "end-to-end model tokens",
+            "O(1)",
+            "scripts/install_profile.py",
+            "git clone",
+        ):
+            self.assertNotIn(developer_only_token, root_readme)
         decision_readme = (ROOT / "plugins/context-decision/README.md").read_text(encoding="utf-8")
         for token in ("complete rendered preview", "direct, explicit, unconditional", "zero indexed bodies", "20 bodies", "end-to-end model tokens", "O(1)"):
             self.assertIn(token, decision_readme)
@@ -623,23 +644,8 @@ class DistributionProofTests(unittest.TestCase):
             self.assertNotIn(stale_license_claim, release_notes)
         for token in ("W1", "W2", "W3", "not a token-savings measurement"):
             self.assertIn(token, release_notes)
-        for token in ("W1-W3", "context-common/v2", "linked worktree", "@file", "@@literal"):
+        for token in ("W1-W3", "context-common/v2", "vault_identity", "--vault", "@file", "@@literal"):
             self.assertIn(token, migration)
-        for token in (
-            "2026-08-26",
-            "299 passed, 242 subtests",
-            "Phase 0",
-            "15 passed, 27 subtests each",
-            "0.149.0-alpha.4.1",
-            "Claude Code `2.1.89`",
-            "All four plugins installed and loaded",
-            "Actual model behavior",
-            "Unverified",
-            "not a token-savings claim",
-            "same major",
-        ):
-            self.assertIn(token, root_readme)
-
         korean_readme = (ROOT / "README.ko.md").read_text(encoding="utf-8")
         baseline_prompt_chars = 3_147
         prompt_values = [
@@ -655,19 +661,26 @@ class DistributionProofTests(unittest.TestCase):
             f"from {baseline_prompt_chars:,} to {actual_prompt_chars:,} characters, "
             f"a {reduction_percent:.1f}% character reduction"
         )
-        self.assertIn(english_measurement, root_readme)
         self.assertIn(english_measurement, release_notes)
-        self.assertIn(
-            f"{baseline_prompt_chars:,}자에서 {actual_prompt_chars:,}자로 {reduction_percent:.1f}% 감소",
-            korean_readme,
-        )
-        for token in ("complete preview", "직접적·명시적·무조건적", "`알겠어`", "context-common/v2"):
+        for token in (
+            "AI 코딩 에이전트",
+            "프로젝트 전용 기억",
+            "context/",
+            "대화 전체를 자동으로 저장하지 않습니다",
+            "터미널이 아니라 에이전트와의 대화창",
+            "방금 확인한 내용의 저장을 분명하게 승인",
+        ):
             self.assertIn(token, korean_readme)
-        self.assertIn("`0.8.0`은 `main`에 준비되어 있지만", korean_readme)
-        self.assertIn("`v0.8.0` tag는 아직 생성·push되지 않았습니다", korean_readme)
-        self.assertIn("독립 package", korean_readme)
-        self.assertIn("scripts/install_profile.py --host codex", korean_readme)
-        self.assertNotIn("tag와 release commit은 아직 생성·push되지 않았", korean_readme)
+        for developer_only_token in (
+            "indexed artifact bodies",
+            "end-to-end model tokens",
+            "O(1)",
+            "scripts/install_profile.py",
+            "git clone",
+            "Bundle이나 meta-plugin",
+            "검증 상태",
+        ):
+            self.assertNotIn(developer_only_token, korean_readme)
 
     def test_public_help_exposes_capture_limits_and_core_trust(self) -> None:
         environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
@@ -681,7 +694,7 @@ class DistributionProofTests(unittest.TestCase):
                 capture_output=True,
             )
             self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
-            for token in ("outside the repository", "0600", "approval_digest", "receipt_digest"):
+            for token in ("outside the vault", "0600", "approval_digest", "receipt_digest"):
                 self.assertIn(token, completed.stdout)
 
         preview_help = subprocess.run(
@@ -731,7 +744,7 @@ class DistributionProofTests(unittest.TestCase):
         for token in (
             "entrypoint suffix", "same-major", "actual core digest", "context-common/v2", "required commands",
             "owner-descriptor feature", "doctor state", "@file", "@@literal", "1,200", "2,000", "8 KiB",
-            "16 KiB", "0600", "outside the repository", "approval_digest",
+            "16 KiB", "0600", "outside the vault", "approval_digest",
         ):
             self.assertIn(token, decision_init)
         self.assertIn("successful apply or reject removes the default receipt", decision_init)

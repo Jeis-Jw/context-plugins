@@ -11,7 +11,7 @@ This skill is the `context-assumption/v1` semantic owner and never writes reposi
 - Bind attestation only to `assumption_present -> /owner_inputs/assumption/assumption` and `unverified_ok -> /owner_inputs/assumption/unverified_ok` on the exact candidate. Decline OBS or DEC claims and requested-kind-only inputs.
 - Use metadata-first `search --signal assumption-relevant`, then selected actual-body `read`, only when a new, confirmed, refuted, or changed assumption can affect the current answer.
 - `confirm` requires evidence references. `refute` requires a reason, evidence references, and explicit impacted decisions. `supersede` requires both actual Assumption bodies to express the same semantic claim. `annotate` may change only meaning-preserving metadata.
-- Keep at most eight candidates and a 16 KiB canonical batch. Validate through v2 `batch validate` before handing the result to context-core preview. Frozen receipt, repository identity, core SHA, CAS, lock, and atomic-write checks remain unchanged.
+- Keep at most eight candidates and a 16 KiB canonical batch. Validate through v2 `batch validate` before handing the result to context-core preview. Frozen receipt, vault identity, core SHA, CAS, lock, and atomic-write checks remain unchanged.
 
 Follow context-core's active-language contract. An explicit user language choice wins; otherwise use the host preference, then the established conversation language, then English. OS locale is not authoritative, and code, filenames, quotations, or one foreign term do not switch language. Use the active language for user-facing responses, questions, previews, and explanatory errors. Keep machine-readable surfaces in English and preserve artifact prose without semantic translation.
 

@@ -1,5 +1,12 @@
 # Release notes
 
+## 0.9.0 (developer preview; tag not published)
+
+- Context storage and approval no longer depend on Git, repositories, worktrees, or Git metadata. `--vault DIR` selects a directory containing `context/`; automatic selection uses the nearest current/ancestor `context` entry, or cwd for fresh initialization.
+- Approval stays bound to the actual vault directory, frozen content, runtime digest, CAS, and lock. Previously generated pending receipts need a fresh preview and approval; existing saved artifacts are unchanged.
+- Addon initialization and workflows require the `filesystem-vault/v1` capability. The profile installer works from ordinary downloaded files without a tag or clean checkout.
+- Historical repository-identity requirements in older release entries are superseded by this contract.
+
 ## 0.8.0 (developer preview; tag not published)
 
 - Package versions now use major as the compatibility boundary, minor for functional changes, and patch for small fixes. The same rule applies to `0.x`, so `0.*` packages pass the package-version gate together.
@@ -64,4 +71,4 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ## Release boundary
 
-This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.8.0` remain owner-gated.
+This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.9.0` remain owner-gated.

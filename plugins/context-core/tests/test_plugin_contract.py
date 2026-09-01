@@ -23,7 +23,7 @@ SPEC.loader.exec_module(context_cli)
 
 def tree_digest(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(p for p in root.rglob("*") if p.is_file() and ".git" not in p.parts):
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
         digest.update(path.relative_to(root).as_posix().encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -41,7 +41,6 @@ class PluginContractTests(unittest.TestCase):
             for state in ("absent", "partial", "ready", "invalid"):
                 repo = root / state
                 repo.mkdir()
-                subprocess.run(["git", "init", "-q", str(repo)], check=True)
                 repositories[state] = repo
             (repositories["partial"] / "context").mkdir()
             for state in ("ready", "invalid"):
@@ -54,7 +53,7 @@ class PluginContractTests(unittest.TestCase):
                     doctor = context_cli.doctor_repository(repo)
                     self.assertEqual(expected_fields, set(doctor))
                     self.assertEqual(expected_state, doctor["repository_state"])
-                    self.assertEqual("0.8.0", doctor["plugin_version"])
+                    self.assertEqual("0.9.0", doctor["plugin_version"])
                     self.assertEqual(str(CLI_PATH.resolve()), doctor["entrypoint"])
                     self.assertEqual(context_cli.PROTOCOL, doctor["protocol"])
                     self.assertEqual([context_cli.PROTOCOL], doctor["supported_protocols"])
@@ -150,7 +149,6 @@ class PluginContractTests(unittest.TestCase):
     def test_explicit_init_installs_active_host_policy_and_preserves_external_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", temp], check=True)
             target = repo / "CLAUDE.md"
             outside = "# Existing policy\n\nKeep this text.\n"
             target.write_text(outside, encoding="utf-8")
@@ -185,7 +183,6 @@ class PluginContractTests(unittest.TestCase):
     def test_policy_create_uses_readable_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", temp], check=True)
 
             context_cli.bootstrap_repository(repo, host="codex")
 
@@ -195,7 +192,6 @@ class PluginContractTests(unittest.TestCase):
     def test_acceptance_34_policy_install(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", temp], check=True)
             target = repo / "AGENTS.md"
             outside = b"# Existing policy\n\nKeep these bytes.\n"
             target.write_bytes(outside)
@@ -223,7 +219,6 @@ class PluginContractTests(unittest.TestCase):
     def test_policy_rejects_non_root_target_and_broken_markers(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", temp], check=True)
             with self.assertRaises(context_cli.ContextError):
                 context_cli.build_policy_bundle(repo, "docs/AGENTS.md")
             (repo / "CLAUDE.md").write_text(context_cli.POLICY_BEGIN + "\n", encoding="utf-8")
@@ -242,7 +237,6 @@ class PluginContractTests(unittest.TestCase):
     def test_init_rejects_non_utf8_policy_before_storage_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
-            subprocess.run(["git", "init", "-q", temp], check=True)
             target = repo / "AGENTS.md"
             original = b"\xff\xfe\x00existing"
             target.write_bytes(original)

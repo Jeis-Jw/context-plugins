@@ -54,10 +54,12 @@ def _run_core(
     module,
     core_cli: pathlib.Path,
     *arguments: str,
+    vault: pathlib.Path | None = None,
     expected_sha256: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     module.required_core_surface(str(core_cli), expected_sha256=expected_sha256)
-    return _run([sys.executable, str(core_cli), *arguments, "--json"])
+    vault_arguments = ["--vault", str(vault)] if vault is not None and arguments[0] not in {"schema", "capabilities"} else []
+    return _run([sys.executable, str(core_cli), *vault_arguments, *arguments, "--json"])
 
 
 def _result(completed: subprocess.CompletedProcess[str], code: str, message: str) -> dict[str, Any]:
@@ -85,13 +87,14 @@ capture contract (not consumed by init):
   Semantic body values support literal text, @file, and @@literal. DEC decision is
   limited to 1,200 codepoints, common primary claims to 2,000 codepoints, canonical
   owner input to 8 KiB, and the full candidate envelope to 16 KiB. The DEC workflow
-  writes its sensitive mode-0600 receipt outside the repository. The agent retains the
+  writes its sensitive mode-0600 receipt outside the vault. The agent retains the
   approval_digest internally, and successful apply or reject removes the default receipt;
   users are never asked to locate, enter, or delete either transport detail.
 """,
     )
     parser.add_argument("--host", choices=("codex", "claude-code"), required=True)
     parser.add_argument("--core-cli", required=True)
+    parser.add_argument("--vault", help="Directory containing context/; defaults to the nearest context/ ancestor or cwd.")
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -100,14 +103,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     decision_cli = _load_decision_cli()
     try:
+        vault = decision_cli.vault_root(args.vault)
         core_cli = decision_cli.required_core_surface(args.core_cli)
         core_cli_sha256 = decision_cli.bytes_digest(core_cli.read_bytes())
-        schema_command = _run_core(decision_cli, core_cli, "schema", expected_sha256=core_cli_sha256)
+        schema_command = _run_core(decision_cli, core_cli, "schema", vault=vault, expected_sha256=core_cli_sha256)
         if schema_command.returncode != 0:
             return _forward(schema_command)
         schema = _result(schema_command, "core_handshake_invalid", "context-core schema output is invalid")
         decision_cli.validate_core_schema_handshake(schema)
-        doctor_command = _run_core(decision_cli, core_cli, "doctor", expected_sha256=core_cli_sha256)
+        doctor_command = _run_core(decision_cli, core_cli, "doctor", vault=vault, expected_sha256=core_cli_sha256)
         if doctor_command.returncode != 0:
             return _forward(doctor_command)
         doctor = _result(doctor_command, "core_handshake_invalid", "context-core doctor output is invalid")
@@ -158,6 +162,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"@{seed}",
             "--host",
             args.host,
+            vault=vault,
             expected_sha256=core_cli_sha256,
         )
     if completed.returncode != 0:

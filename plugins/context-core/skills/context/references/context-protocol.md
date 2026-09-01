@@ -4,7 +4,9 @@ This is the public, host-independent storage, recall, and write contract impleme
 
 ## Canonical storage and identity
 
-- The Git worktree's `context/` directory is the only storage root; there is no `--root` override.
+- A vault is an ordinary directory containing `context/`. No Git executable, metadata, repository, or worktree is required.
+- All storage CLIs accept global `--vault DIR` before the subcommand; addon init adapters accept the same option. `DIR` must be an existing directory. Without it, use the nearest current/ancestor directory containing a `context` entry, or the current directory when none exists. An invalid or symlinked `context` entry is not skipped in favor of an ancestor. Explicit selection never falls back to another vault.
+- Input file paths remain relative to the caller's working directory. Use the same vault for owner operations, preview, and apply. `schema` and `capabilities` remain independent of vault selection; core advertises `filesystem-vault/v1`, which addons require before invoking storage commands.
 - Markdown artifacts are canonical. `context.index.md` and `<area>.index.md` are deterministic projections.
 - Artifact IDs are `ctx_` plus 32 lowercase UUIDv4 hex characters. Filename, title, path, and lifecycle changes do not change the ID.
 - Frontmatter is a one-line-per-field JSON-compatible YAML subset. Bodies use fixed ordered H2 sections for each artifact schema.
@@ -44,16 +46,16 @@ The managed policy requires one audit per conversation delta, silence when there
 
 - A semantic owner returns complete drafts/effects and a proposed `context-owner-plan/v1`; it performs no physical write.
 - `transaction preview` seals target preconditions, material, derived index rebuild, and owner/area authorization into `context-mutation-bundle/v1`.
-- `approval_digest` is the canonical SHA-256 of the complete approval material. The material includes `context-repository-identity/v1`, with exact resolved worktree and Git common-directory paths and decimal device/inode strings. Extra or missing identity fields are invalid.
-- Apply verifies the digest and current repository identity before any write. A clone, linked worktree, or same-path recreated repository cannot replay a bundle. HEAD and unrelated content are intentionally not bound; exact target CAS still protects affected bytes.
-- Only context-core writes, under a repository-realpath lock, with atomic operations and deterministic index rebuild.
+- `approval_digest` is the canonical SHA-256 of the complete approval material. Its `vault_identity` is exactly `{schema:"context-vault-identity/v1",root:{path,device,inode}}`, with the resolved absolute vault path and decimal device/inode strings. Extra or missing identity fields are invalid.
+- Apply verifies the digest and current vault identity before any write. A copied, moved, or same-path recreated vault needs a new preview. Unrelated files and optional version-control metadata are not bound; exact target CAS still protects affected bytes. Previously generated approval bundles and receipts with the old identity must be discarded and previewed again; saved Markdown artifacts require no migration.
+- Only context-core writes, under a vault-realpath lock, with atomic operations and deterministic index rebuild.
 - Hidden operations, missing seeds, altered material, changed target preconditions, path escapes, and symlink segments fail before writes.
 
 ### Core workflow receipt
 
 - `context-core-workflow-receipt/v1` has exactly seven fields: `schema`, immutable `status:pending`, offset-aware `created_at`, `plan_id`, `core`, `plan_bundle`, and `receipt_digest`. `plan_id` is filename/projection metadata and must equal `plan_bundle.approval_material.plan.plan_id`; it is not semantic identity. `core` is exactly `{path,sha256}` and `plan_bundle` is the exact existing mutation bundle. Candidate IDs and a duplicate core bundle are forbidden.
 - `receipt_digest` is canonical SHA-256 over the other six fields and detects receipt damage only. Approval uses a distinct workflow digest over exactly `{core,plan_bundle}` returned by preview and retained outside the receipt in agent state. `transaction apply --receipt-file ... --approved-digest ...` requires that independent value, then verifies current core path/SHA and passes only the validated nested `plan_bundle.approval_digest` to core apply. A receipt self-digest is never approval evidence.
-- Flag-based OBS/SNAP capture writes one frozen receipt to `tempdir/context-core/<plan_id>.json`; the directory is mode `0700`, the regular file is `0600`, and the prospective path is validated outside both repository and Git metadata before any directory creation. An explicit path never creates the default directory. Receipt targets, direct parents, traversal, symlinks, modes, and inode identity are checked fail-closed.
+- Flag-based OBS/SNAP capture writes one frozen receipt to `tempdir/context-core/<plan_id>.json`; the directory is mode `0700`, the regular file is `0600`, and the prospective path is validated outside the vault before any directory creation. An explicit path never creates the default directory. Receipt targets, direct parents, traversal, symlinks, modes, and inode identity are checked fail-closed.
 - Receipt selection is only the exact path retained by the agent from preview; core never scans a directory or chooses a newest file. Surface tri-state is: no receipt option with `--attestation @file` returns the legacy bundle, the complete built-in flag pair uses the private default receipt, and explicit `--receipt-file` uses only that path. Existing `--plan-bundle @file` apply remains available.
 - OBS flags map to `reusable_observation → /owner_inputs/observation/observation` and `evidence_present → /owner_inputs/observation/evidence/0`. SNAP maps `handoff_requested → /owner_inputs/snapshot/current_context` and `unfinished_context_present → /owner_inputs/snapshot/open_items/0`. Partial, absent, or mixed file/flag attestation fails before receipt or repository writes.
 - Successful receipt apply deletes the receipt. Cleanup-only failure returns `applied:true` plus `receipt_cleanup_failed`; a fully applied receipt is rejected on retry without writes. Core adds no receipt locator, keep, reject, or TTL lifecycle.

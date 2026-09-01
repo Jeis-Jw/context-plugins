@@ -19,7 +19,7 @@ def pair(result: dict) -> tuple[str, str]:
 
 class MutationPlanTests(unittest.TestCase):
     def test_acceptance_33_addon_init(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             before = helpers.tree_digest(repo)
             result = decision_cli.build_init_plan()
@@ -51,7 +51,7 @@ class MutationPlanTests(unittest.TestCase):
         self.assertFalse(decision_cli.schema_result()["physical_write"])
 
     def test_validation_receipt_and_plan_validation_bind_owner_result(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             helpers.write_decision_area(repo)
             result = helpers.claim_result()
@@ -82,7 +82,7 @@ class MutationPlanTests(unittest.TestCase):
             self.assertEqual("owner_validation_invalid", caught.exception.code)
 
     def test_all_owner_operations_are_filesystem_noops(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             active = helpers.claim_result()
             helpers.write_decision_area(repo, current=[pair(active)])
@@ -113,7 +113,7 @@ class MutationPlanTests(unittest.TestCase):
             self.assertEqual(before, helpers.tree_digest(repo))
 
     def test_supersede_rejects_successor_draft_detached_from_candidate(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             active = helpers.claim_result()
             helpers.write_decision_area(repo, current=[pair(active)])
@@ -143,7 +143,7 @@ class MutationPlanTests(unittest.TestCase):
             self.assertEqual(before, helpers.tree_digest(repo))
 
     def test_cli_core_free_static_surfaces_do_not_modify_repository(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             before = helpers.tree_digest(repo)
             for command in (("schema", "--json"), ("capabilities", "--json")):

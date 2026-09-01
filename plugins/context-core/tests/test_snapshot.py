@@ -22,15 +22,14 @@ sys.modules[SPEC.name] = context_cli
 SPEC.loader.exec_module(context_cli)
 
 
-def git_repo() -> tempfile.TemporaryDirectory[str]:
+def vault_dir() -> tempfile.TemporaryDirectory[str]:
     temp = tempfile.TemporaryDirectory()
-    subprocess.run(["git", "init", "-q", temp.name], check=True)
     return temp
 
 
 def tree_digest(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(path for path in root.rglob("*") if path.is_file() and ".git" not in path.parts):
+    for path in sorted(path for path in root.rglob("*") if path.is_file()):
         digest.update(path.relative_to(root).as_posix().encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -111,7 +110,7 @@ class SnapshotTests(unittest.TestCase):
             private_temp = root / "private-temp"
             repo.mkdir()
             private_temp.mkdir(mode=0o700)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             initialize(repo)
             before = tree_digest(repo)
 
@@ -185,7 +184,7 @@ class SnapshotTests(unittest.TestCase):
             private_temp = root / "private-temp"
             repo.mkdir()
             private_temp.mkdir(mode=0o700)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             initialize(repo)
             proof = root / "attestation.json"
             proof.write_text("{}", encoding="utf-8")
@@ -218,7 +217,7 @@ class SnapshotTests(unittest.TestCase):
             private_temp = root / "private-temp"
             repo.mkdir()
             private_temp.mkdir(mode=0o700)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            repo.mkdir(parents=True, exist_ok=True)
             initialize(repo)
             common = [
                 "snapshot", "save",
@@ -245,7 +244,7 @@ class SnapshotTests(unittest.TestCase):
                     self.assertFalse((private_temp / "context-core").exists())
 
     def test_acceptance_11_named_snapshots(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             before = tree_digest(repo)
@@ -264,7 +263,7 @@ class SnapshotTests(unittest.TestCase):
             self.assertEqual("path_exists", caught.exception.code)
 
     def test_acceptance_12_update_merge(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             create = snapshot_preview(repo, "인증 handoff")
@@ -302,7 +301,7 @@ class SnapshotTests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_snapshot_freshness_is_read_only(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             create = snapshot_preview(repo, "anchor 없는 handoff")
@@ -316,7 +315,7 @@ class SnapshotTests(unittest.TestCase):
             self.assertEqual(before, tree_digest(repo))
 
     def test_acceptance_13_discard(self) -> None:
-        with git_repo() as temp:
+        with vault_dir() as temp:
             repo = Path(temp)
             initialize(repo)
             create = snapshot_preview(repo, "버릴 handoff")

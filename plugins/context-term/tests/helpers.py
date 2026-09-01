@@ -31,7 +31,7 @@ core_cli = load("context_term_test_core", CORE_CLI_PATH)
 
 def tree_digest(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(item for item in root.rglob("*") if item.is_file() and ".git" not in item.parts):
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
         digest.update(path.relative_to(root).as_posix().encode("utf-8"))
         digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -105,7 +105,7 @@ def semantic_candidate(kind: str) -> dict:
 
 
 def init_repo(repo: Path) -> None:
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    repo.mkdir(parents=True, exist_ok=True)
     core_cli.bootstrap_repository(repo, term_cli.owner_descriptor(), term_cli.term_index_seed(), host="codex")
 
 
@@ -126,7 +126,7 @@ def write_preflight(root: Path, state: str = "ready", *, entrypoint: Path | None
     inventory = root / "inventory.json"
     doctor = root / "doctor.json"
     inventory.write_text(json.dumps({"plugins": [{"marketplace": "context-plugins", "plugin": "context-core", "source": "Jeis-Jw/context-plugins", "enabled": True, "protocols": ["context-common/v2"], "entrypoint": str((entrypoint or CORE_CLI_PATH).resolve())}]}), encoding="utf-8")
-    doctor.write_text(json.dumps({"schema": "context-core-doctor/v1", "owner": "context-core", "supported_protocols": ["context-common/v2"], "repository_state": state, "root": "context/", "issues": [], "warnings": [], "plugin_version": "0.8.0", "entrypoint": str((entrypoint or CORE_CLI_PATH).resolve()), "protocol": "context-common/v2"}), encoding="utf-8")
+    doctor.write_text(json.dumps({"schema": "context-core-doctor/v1", "owner": "context-core", "supported_protocols": ["context-common/v2"], "repository_state": state, "root": "context/", "issues": [], "warnings": [], "plugin_version": "0.9.0", "entrypoint": str((entrypoint or CORE_CLI_PATH).resolve()), "protocol": "context-common/v2"}), encoding="utf-8")
     return inventory, doctor
 
 

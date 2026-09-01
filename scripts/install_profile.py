@@ -110,33 +110,6 @@ def validate_release_surface(profile: dict[str, Any], root: pathlib.Path = ROOT)
                 raise InstallProfileError(f"{catalog_path} is not aligned to {name} version {plugin_versions[name]}.")
 
 
-def verify_immutable_checkout(
-    profile: dict[str, Any],
-    root: pathlib.Path = ROOT,
-    *,
-    allow_unreleased_checkout: bool = False,
-) -> None:
-    if allow_unreleased_checkout:
-        return
-    tag = f"v{profile['version']}"
-    tag_result = subprocess.run(
-        ["git", "-C", str(root), "tag", "--points-at", "HEAD"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    status_result = subprocess.run(
-        ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if tag_result.returncode != 0 or tag not in tag_result.stdout.splitlines():
-        raise InstallProfileError(f"Run this installer from the immutable {tag} checkout.")
-    if status_result.returncode != 0 or status_result.stdout.strip():
-        raise InstallProfileError(f"The {tag} checkout has modified tracked files; use a clean checkout.")
-
-
 def _decode_json_output(completed: subprocess.CompletedProcess[str], label: str) -> Any:
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip() or "host command failed"
@@ -245,7 +218,7 @@ def build_install_plan(
         raise InstallProfileError(f"Multiple {marketplace} marketplaces are configured.")
     if matching_marketplaces and not _same_local_marketplace(matching_marketplaces[0], root):
         raise InstallProfileError(
-            f"{marketplace} already points to another checkout. Remove or update it explicitly, then retry from v{version}."
+            f"{marketplace} already points to another directory. Remove or update it explicitly, then retry from the intended compatible distribution directory."
         )
 
     binary = "codex" if host == "codex" else "claude"
@@ -311,11 +284,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", choices=HOSTS, required=True)
     parser.add_argument("--scope", default="user", help="Claude Code scope: user, project, or local. Codex uses user.")
     parser.add_argument("--dry-run", action="store_true", help="Inspect the host and print the commands without changing it.")
-    parser.add_argument(
-        "--allow-unreleased-checkout",
-        action="store_true",
-        help="Maintainer-only: bypass the immutable release-tag check.",
-    )
     return parser
 
 
@@ -324,7 +292,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         profile = load_profile()
         validate_release_surface(profile)
-        verify_immutable_checkout(profile, allow_unreleased_checkout=args.allow_unreleased_checkout)
         marketplaces, installed = inspect_host(args.host)
         commands = build_install_plan(profile, args.host, args.scope, marketplaces, installed)
         run_plan(commands, dry_run=args.dry_run)

@@ -5,6 +5,8 @@ description: When explicitly requested, verify a same-major context-core and ini
 
 # Init
 
+Use the same vault throughout the operation. `--vault DIR` selects an existing directory containing `context/`; otherwise use the nearest current/ancestor directory with a `context` entry, or cwd for a fresh vault. Git is not required. Core/owner/workflow CLIs take `--vault` before the subcommand; init adapters accept it as an option. Relative input paths remain caller-cwd relative.
+
 Resolve this loaded `SKILL.md`, its sibling `scripts/decision_init.py`, and the separately loaded core entrypoint. Invoke the adapter exactly once:
 
 ```bash
@@ -18,7 +20,7 @@ python3 "$INIT_ENTRYPOINT" \
 
 Claude Code may use `${CLAUDE_PLUGIN_ROOT}` only when supplied by the host; Codex uses the loaded skill catalog. Never infer from cwd, scan caches, or substitute another runtime.
 
-The adapter verifies the path suffix, matching adjacent core manifests, and compatible major, then binds the actual SHA-256 for the operation and handshakes `context-core-schema/v1`, `context-common/v2`, required commands, `context-owner-descriptor/v2`, and doctor state. Missing, mismatched, or incompatible inputs cause zero subprocess, repository, or host-configuration writes. It passes `partial/invalid/ready` or bootstrap-required absent state to core, which owns repairability.
+The adapter verifies the path suffix, matching adjacent core manifests, and compatible major, then binds the actual SHA-256 for the operation and handshakes `context-core-schema/v1`, `context-common/v2`, required commands, `context-owner-descriptor/v2`, `filesystem-vault/v1`, and doctor state. Missing, mismatched, or incompatible inputs cause zero subprocess, repository, or host-configuration writes. It passes `partial/invalid/ready` or bootstrap-required absent state to core, which owns repairability.
 
 The fixed descriptor and index seed go to `context_cli.py bootstrap`; core alone applies `core_init|area_register|policy_install`, preserves bytes outside the managed block, and converges retries.
 

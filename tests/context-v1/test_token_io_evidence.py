@@ -439,7 +439,6 @@ class TokenIOEvidenceTests(unittest.TestCase):
         preview_bytes = encoded(preview)
         self.assertLessEqual(preview_bytes, 32 * 1024)
         with tempfile.TemporaryDirectory() as temp:
-            subprocess.run(["git", "init", "-q", temp], check=True)
             result = context_cli._bundle_result(Path(temp), preview, {}, [])
             self.assertEqual(preview, result["approval_preview"])
             self.assertEqual(semantic_content, result["bundle"]["approval_material"]["preview"]["artifacts"][0]["content"])
@@ -455,7 +454,6 @@ class TokenIOEvidenceTests(unittest.TestCase):
             "effects": [],
         }
         with tempfile.TemporaryDirectory() as temp:
-            subprocess.run(["git", "init", "-q", temp], check=True)
             with self.assertRaises(context_cli.ContextError) as caught:
                 context_cli._bundle_result(Path(temp), preview, {}, [])
             self.assertEqual("approval_preview_too_large", caught.exception.code)

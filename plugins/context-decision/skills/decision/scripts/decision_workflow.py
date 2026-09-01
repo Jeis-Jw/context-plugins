@@ -87,9 +87,9 @@ def _run_core(
     expected_sha256: str | None = None,
 ) -> dict[str, Any]:
     decision_cli.required_core_surface(str(core_cli), expected_sha256=expected_sha256)
+    vault_arguments = [] if arguments[0] in {"schema", "capabilities"} else ["--vault", str(repo)]
     completed = subprocess.run(
-        [sys.executable, str(core_cli), *arguments, "--json"],
-        cwd=repo,
+        [sys.executable, str(core_cli), *vault_arguments, *arguments, "--json"],
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         text=True,
         capture_output=True,
@@ -112,47 +112,26 @@ def _run_core(
     return payload["result"]
 
 
-def _git_common_dir(repo: pathlib.Path) -> pathlib.Path:
-    repository = repo.resolve(strict=True)
-    completed = subprocess.run(
-        ["git", "rev-parse", "--git-common-dir"],
-        cwd=repository,
-        text=True,
-        capture_output=True,
-    )
-    if completed.returncode != 0:
-        raise WorkflowError("repository_unavailable", "git common directory could not be resolved", exit_code=3)
-    value = pathlib.Path(completed.stdout.strip())
-    return value.resolve(strict=True) if value.is_absolute() else (repository / value).resolve(strict=True)
-
-
-def _repository_identity(repo: pathlib.Path) -> dict[str, Any]:
-    worktree = repo.resolve(strict=True)
-    common = _git_common_dir(worktree)
-    worktree_stat = worktree.stat()
-    common_stat = common.stat()
+def _vault_identity(repo: pathlib.Path) -> dict[str, Any]:
+    try:
+        root = repo.resolve(strict=True)
+        metadata = root.stat()
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise OSError("vault root is not a directory")
+    except (OSError, RuntimeError) as error:
+        raise WorkflowError("vault_not_found", "vault directory could not be resolved", exit_code=3) from error
     return {
-        "schema": "context-repository-identity/v1",
-        "worktree": {
-            "path": str(worktree),
-            "device": str(worktree_stat.st_dev),
-            "inode": str(worktree_stat.st_ino),
-        },
-        "git_common_dir": {
-            "path": str(common),
-            "device": str(common_stat.st_dev),
-            "inode": str(common_stat.st_ino),
-        },
+        "schema": "context-vault-identity/v1",
+        "root": {"path": str(root), "device": str(metadata.st_dev), "inode": str(metadata.st_ino)},
     }
 
 
-def _assert_receipt_outside_repository(path: pathlib.Path, repo: pathlib.Path) -> None:
-    repository = repo.resolve(strict=True)
-    git_dir = _git_common_dir(repository)
-    if path == repository or repository in path.parents or path == git_dir or git_dir in path.parents:
+def _assert_receipt_outside_vault(path: pathlib.Path, repo: pathlib.Path) -> None:
+    root = repo.resolve(strict=True)
+    if path == root or root in path.parents:
         raise WorkflowError(
             "receipt_path_invalid",
-            "transient receipt must be outside the repository and Git metadata",
+            "transient receipt must be outside the vault",
             {"path": str(path)},
             5,
         )
@@ -164,7 +143,7 @@ def _default_receipt_dir(repo: pathlib.Path) -> pathlib.Path:
     except OSError as error:
         raise WorkflowError("receipt_directory_invalid", "default receipt root is unavailable", exit_code=5) from error
     directory = temp_root / RECEIPT_DIRECTORY_NAME
-    _assert_receipt_outside_repository(directory, repo)
+    _assert_receipt_outside_vault(directory, repo)
     created = False
     try:
         os.mkdir(directory, 0o700)
@@ -218,7 +197,7 @@ def _default_receipt_dir(repo: pathlib.Path) -> pathlib.Path:
             {"path": str(directory)},
             5,
         )
-    _assert_receipt_outside_repository(resolved, repo)
+    _assert_receipt_outside_vault(resolved, repo)
     return resolved
 
 
@@ -239,7 +218,7 @@ def _receipt_path(value: str | pathlib.Path, repo: pathlib.Path, *, must_exist: 
     except OSError as error:
         raise WorkflowError("receipt_path_invalid", "receipt parent is unavailable", {"path": str(requested.parent)}, 3) from error
     path = parent / requested.name
-    _assert_receipt_outside_repository(path, repo)
+    _assert_receipt_outside_vault(path, repo)
     if must_exist:
         try:
             metadata = os.lstat(path)
@@ -351,7 +330,7 @@ def _load_receipt(path: pathlib.Path) -> tuple[dict[str, Any], tuple[int, int], 
         raise WorkflowError("receipt_invalid", "workflow receipt digest is invalid", exit_code=5)
     approval_material = receipt.get("approval_material")
     approval_fields = {
-        "schema", "repository_identity", "core", "operation", "workflow_input_digest",
+        "schema", "vault_identity", "core", "operation", "workflow_input_digest",
         "owner_result_digest", "core_approval_digest", "core_bundle",
     }
     if (
@@ -366,7 +345,7 @@ def _load_receipt(path: pathlib.Path) -> tuple[dict[str, Any], tuple[int, int], 
     core = approval_material.get("core")
     bundle = approval_material.get("core_bundle")
     core_digest = approval_material.get("core_approval_digest")
-    repository_identity = approval_material.get("repository_identity")
+    vault_identity = approval_material.get("vault_identity")
     if (
         not isinstance(core, dict)
         or set(core) != {"path", "sha256"}
@@ -378,7 +357,7 @@ def _load_receipt(path: pathlib.Path) -> tuple[dict[str, Any], tuple[int, int], 
         or bundle.get("approval_digest") != core_digest
         or core_digest != decision_cli.canonical_digest(bundle.get("approval_material"))
         or not isinstance(bundle.get("approval_material"), dict)
-        or bundle["approval_material"].get("repository_identity") != repository_identity
+        or bundle["approval_material"].get("vault_identity") != vault_identity
         or not all(
             isinstance(approval_material.get(field), str)
             and approval_material[field].startswith("sha256:")
@@ -453,7 +432,7 @@ def _receipt_binding_matches(
     approval_material = receipt["approval_material"]
     core = approval_material["core"]
     return (
-        approval_material["repository_identity"] == _repository_identity(repo)
+        approval_material["vault_identity"] == _vault_identity(repo)
         and core["path"] == str(core_cli)
         and core["sha256"] == _file_digest(core_cli)
     )
@@ -579,8 +558,8 @@ def _select_default_receipt(
 
 def _require_receipt_binding(receipt: dict[str, Any], repo: pathlib.Path, core_cli: pathlib.Path) -> None:
     approval_material = receipt["approval_material"]
-    if approval_material["repository_identity"] != _repository_identity(repo):
-        raise WorkflowError("repository_identity_mismatch", REPREVIEW_MESSAGE, exit_code=5)
+    if approval_material["vault_identity"] != _vault_identity(repo):
+        raise WorkflowError("vault_identity_mismatch", REPREVIEW_MESSAGE, exit_code=5)
     core = approval_material["core"]
     if core["path"] != str(core_cli) or core["sha256"] != _file_digest(core_cli):
         raise WorkflowError("core_surface_changed", REPREVIEW_MESSAGE, exit_code=5)
@@ -726,7 +705,7 @@ def _prepare_operation_inputs(
 
 
 def preview(args: argparse.Namespace) -> dict[str, Any]:
-    repo = decision_cli.repository_root().resolve()
+    repo = decision_cli.vault_root(getattr(args, "vault", None))
     explicit_receipt_path = (
         _receipt_path(args.receipt_file, repo, must_exist=False)
         if args.receipt_file is not None
@@ -796,7 +775,7 @@ def preview(args: argparse.Namespace) -> dict[str, Any]:
         raise WorkflowError("core_surface_changed", "context-core surface changed during preview; retry", exit_code=5)
     approval_material: dict[str, Any] = {
         "schema": APPROVAL_SCHEMA,
-        "repository_identity": bundle["approval_material"].get("repository_identity"),
+        "vault_identity": bundle["approval_material"].get("vault_identity"),
         "core": {"path": str(core_cli), "sha256": core_cli_sha256},
         "operation": operation,
         "workflow_input_digest": decision_cli.canonical_digest(workflow_input),
@@ -831,7 +810,7 @@ def preview(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def apply(args: argparse.Namespace) -> dict[str, Any]:
-    repo = decision_cli.repository_root().resolve()
+    repo = decision_cli.vault_root(getattr(args, "vault", None))
     core_cli = _core_cli(args.core_cli)
     if not isinstance(args.approved_digest, str) or not args.approved_digest:
         raise WorkflowError(
@@ -886,7 +865,7 @@ def apply(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def reject(args: argparse.Namespace) -> dict[str, Any]:
-    repo = decision_cli.repository_root().resolve()
+    repo = decision_cli.vault_root(getattr(args, "vault", None))
     core_cli = _core_cli(args.core_cli) if args.core_cli is not None else None
     if args.receipt_file is not None:
         receipt_path = _receipt_path(args.receipt_file, repo, must_exist=True)
@@ -904,8 +883,8 @@ def reject(args: argparse.Namespace) -> dict[str, Any]:
         directory = _default_receipt_dir(repo)
         receipt_path, receipt, receipt_identity = _select_default_receipt(repo, core_cli, directory)
 
-    if receipt["approval_material"]["repository_identity"] != _repository_identity(repo):
-        raise WorkflowError("repository_identity_mismatch", REPREVIEW_MESSAGE, exit_code=5)
+    if receipt["approval_material"]["vault_identity"] != _vault_identity(repo):
+        raise WorkflowError("vault_identity_mismatch", REPREVIEW_MESSAGE, exit_code=5)
     if core_cli is not None:
         _require_receipt_binding(receipt, repo, core_cli)
     try:
@@ -927,6 +906,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Create and apply a frozen, approval-gated DEC capture.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("--vault", help="Directory containing context/; defaults to the nearest context/ ancestor or cwd.")
     sub = parser.add_subparsers(dest="command", required=True)
     preview_parser = sub.add_parser(
         "preview",
@@ -944,7 +924,7 @@ limits:
 receipt and approval:
   The canonical path creates a mode-0600 receipt below the private mode-0700
   tempdir/context-decision directory. --receipt-file retains the explicit low-level
-  path outside the repository and Git metadata. approval_digest binds repository
+  path outside the vault. approval_digest binds vault
   identity, pinned core path/SHA, workflow/result digests, and the nested bundle;
   receipt_digest detects damage to the frozen envelope.
 """,
@@ -988,15 +968,15 @@ receipt and approval:
         description="Apply the unchanged frozen receipt after exact user approval.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""With no receipt locator, apply selects only one fresh pending receipt bound to
-the current repository identity and core SHA. Zero or multiple matches fail closed.
+the current vault identity and core SHA. Zero or multiple matches fail closed.
 The agent must forward --approved-digest unchanged from preview stdout; the receipt's
 self-digests are not an independent approval channel. --receipt-file remains available
 for explicit low-level selection.
 Success removes the receipt unless --keep-receipt is set. Cleanup failure reports a
 warning after the already successful apply and never retries the repository write.
 
-An explicit receipt remains a mode-0600 sensitive file outside the repository and Git
-metadata. approval_digest binds the frozen material; receipt_digest detects damage.
+An explicit receipt remains a mode-0600 sensitive file outside the vault.
+approval_digest binds the frozen material; receipt_digest detects damage.
 """,
     )
     apply_parser.add_argument("--core-cli", required=True)
@@ -1062,7 +1042,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "receipt_selection_ambiguous",
             "receipt_selection_none",
             "receipt_unavailable",
-            "repository_identity_mismatch",
+            "vault_identity_mismatch",
         }:
             payload["error"]["message"] = REPREVIEW_MESSAGE
         elif error.code == "core_surface_mismatch":

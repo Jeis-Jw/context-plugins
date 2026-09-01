@@ -4,11 +4,11 @@
 
 ## Supported developer-preview path
 
-1. From the immutable `v0.8.0` checkout, run the root `core-decision` profile installer once. It installs missing profile plugins and accepts enabled same-major installations as compatible.
+1. Run the root `core-decision` profile installer once from the downloaded plugin files. It installs missing profile plugins and accepts enabled same-major installations as compatible.
 2. Reload the host or open a new session.
-3. Run `$context-decision:init` once in the target Git repository.
+3. Run `$context-decision:init` once in the target vault directory.
 
-There is no bundle or meta-plugin, and decision code is not embedded in core. The root installer is explicit distribution tooling; this plugin never changes host installation state. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.8.0` tag is not published yet; tag creation and publication remain owner-gated.
+There is no bundle or meta-plugin, and decision code is not embedded in core. The root installer is explicit distribution tooling; this plugin never changes host installation state. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.9.0` tag is not published yet; tag creation and publication remain owner-gated.
 
 Core and decision package versions are compatible when their major versions match. Minor versions add or change functionality and patch versions contain small fixes; for the current `0.x` line, any `0.*` pair passes the package-version gate. The runtime handshake below still rejects a same-major implementation whose actual surface is incompatible.
 
@@ -19,7 +19,7 @@ Before any core subprocess, canonical init and workflow verify the absolute entr
 - `schema=context-core-schema/v1`
 - `protocol=context-common/v2`
 - required doctor, bootstrap, and transaction preview/apply commands
-- `context-owner-descriptor/v2`
+- `context-owner-descriptor/v2` and `filesystem-vault/v1`
 - the exact doctor field shape and current repository state
 
 This verifies the executable compatibility contract. It does **not** attest marketplace provenance, catalog source, installation scope, or host enabled state. Inventory and doctor files remain available only for low-level compatibility operations; canonical init and the DEC workflow do not ask users to provide them.
@@ -44,7 +44,7 @@ The agent prepares one complete rendered preview before asking whether to record
 
 Users never see or enter digests, temporary-file locations, internal IDs, or core paths. The CLI still receives caller-provided semantic fields and attestations; it serializes them but never invents evidence or judgment.
 
-The workflow freezes repository identity, pinned runtime, semantic result, nested core bundle, CAS, and lock bindings before asking and never regenerates them after approval. Clone replay, linked-worktree replay, same-path repository recreation, tampering, runtime changes, and wrong approval material fail before repository writes.
+The workflow freezes vault identity, pinned runtime, semantic result, nested core bundle, CAS, and lock bindings before asking and never regenerates them after approval. Replay in a copied or moved vault, same-path directory recreation, tampering, runtime changes, and wrong approval material fail before repository writes.
 
 Inline `--sec-*` values are literals by default. `@file` reads a named regular UTF-8 file and `@@literal` preserves one leading `@`; path-like plain text stays literal. Missing, symlinked, or oversized files fail before receipt or repository writes.
 
@@ -64,6 +64,6 @@ A healthy index miss opens zero indexed bodies; missing or stale index recovery 
 
 Existing DEC bytes and `context-common/v2` remain compatible. ASM and TERM are optional experimental owners and are not installed, enabled, initialized, or migrated automatically.
 
-Version `0.8.0` introduces the major-based package compatibility policy and keeps protocol/capability handshakes plus operation-bound actual runtime digests as the fail-closed execution boundary.
+Version `0.9.0` introduces the major-based package compatibility policy and keeps protocol/capability handshakes plus operation-bound actual runtime digests as the fail-closed execution boundary.
 
 See the [owner protocol](./skills/decision/references/decision-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).

@@ -17,7 +17,7 @@ def draft_pair(result: dict) -> tuple[str, str]:
 
 class DecisionConflictTests(unittest.TestCase):
     def test_acceptance_26_duplicate_slot(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             existing = helpers.claim_result()
             helpers.write_decision_area(repo, current=[draft_pair(existing)])
@@ -39,7 +39,7 @@ class DecisionConflictTests(unittest.TestCase):
                 physical.exception.details["current"],
             )
 
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             helpers.write_decision_area(repo)
             first = helpers.claim_result()
@@ -54,7 +54,7 @@ class DecisionConflictTests(unittest.TestCase):
             self.assertEqual("decision_slot_conflict", virtual.exception.code)
 
     def test_acceptance_46_actual_body_semantic_check(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             existing = helpers.claim_result()
             helpers.write_decision_area(repo, current=[draft_pair(existing)])
@@ -109,7 +109,7 @@ class DecisionConflictTests(unittest.TestCase):
             self.assertEqual(check["comparison_input"]["current"][0]["id"], cli_result["comparison_input"]["current"][0]["id"])
 
     def test_check_conditionally_includes_actual_revisit_body_and_follows_changes(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             initial_value = helpers.candidate()
             initial_value["owner_inputs"]["decision"]["revisit_when"] = [
@@ -184,7 +184,7 @@ class DecisionConflictTests(unittest.TestCase):
             )
 
     def test_check_does_not_invent_revisit_section_when_absent(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             existing = helpers.claim_result()
             helpers.write_decision_area(repo, current=[draft_pair(existing)])
@@ -207,7 +207,7 @@ class DecisionConflictTests(unittest.TestCase):
             )
 
     def test_discovery_only_check_is_lexical_and_cannot_conclude_no_conflict(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             existing = helpers.claim_result()
             helpers.write_decision_area(repo, current=[draft_pair(existing)])
@@ -382,7 +382,7 @@ class DecisionConflictTests(unittest.TestCase):
         self.assertEqual(1, opened.call_count)
 
     def test_acceptance_27_scope_overlap(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             existing = helpers.claim_result()
             existing_path, existing_content = draft_pair(existing)
@@ -410,7 +410,7 @@ class DecisionConflictTests(unittest.TestCase):
             self.assertEqual(decision_cli.canonical_digest({key: value for key, value in receipt.items() if key != "receipt_digest"}), receipt["receipt_digest"])
 
     def test_same_batch_overlap_requires_virtual_read_precondition(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             helpers.write_decision_area(repo)
             child = helpers.claim_result()
@@ -437,7 +437,7 @@ class DecisionConflictTests(unittest.TestCase):
             self.assertEqual("conflict_read_precondition_required", caught.exception.code)
 
     def test_receipt_binds_exact_ordered_prior_chain(self) -> None:
-        with helpers.git_repo() as temp:
+        with helpers.vault_dir() as temp:
             repo = helpers.Path(temp)
             helpers.write_decision_area(repo)
             first = helpers.claim_result()
