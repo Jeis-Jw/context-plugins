@@ -614,6 +614,16 @@ class DistributionProofTests(unittest.TestCase):
         self.assertIn("semantic owner끼리는 서로를 요구하지 않는다", policy)
         self.assertNotIn("repository root의 `context/`", policy)
 
+    def test_public_component_keeps_internal_context_out_of_release_repository(self) -> None:
+        policy = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        ignore_rules = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        self.assertFalse((ROOT / "context").exists())
+        self.assertIn("/context/", ignore_rules)
+        self.assertIn("public component 예외", policy)
+        self.assertIn("상위 `context-manager` vault", policy)
+        self.assertIn("공개 repository에 `context/`를 만들거나 commit하지 않는다", policy)
+        self.assertIn("consumer vault는 이 경계와 무관하다", policy)
+
     def test_semantic_plugins_accept_same_major_core_and_reject_other_major(self) -> None:
         expected = read_json(ROOT / "tests/context-v1/fixtures/host-inventory/required-plugin.json")
         self.assertEqual("skills/context/scripts/context_cli.py", expected["entrypoint"])

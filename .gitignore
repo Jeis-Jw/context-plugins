@@ -13,6 +13,9 @@ htmlcov/
 *.local.*
 .obsidian/
 
+# Internal development context lives in the parent context-manager vault.
+/context/
+
 # Local orchestration/runtime state
 .studio/
 .task-worker/

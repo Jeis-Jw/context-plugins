@@ -2,6 +2,7 @@
 
 - 이 저장소는 `context-manager`의 독립 plugin component이며 `context-core`, `context-decision`, `context-assumption`, `context-term`, `context-intent`, `context-document`를 소유한다.
 - public product/runtime contract는 root README, plugin README, `skills/**/references/*.md`, executable schema와 tests가 소유한다.
+- 이 저장소는 public component 예외를 적용한다. 내부 개발 intent·decision·observation·handoff는 상위 `context-manager` vault에서 `context-plugins` scope로 관리하며 이 공개 repository에 `context/`를 만들거나 commit하지 않는다. plugin 사용자가 자기 프로젝트에 만드는 consumer vault는 이 경계와 무관하다.
 - 이 저장소에는 `wiki/`를 만들지 않는다. durable project context는 선택된 filesystem vault root의 `context/`에 저장한다. Git은 공유와 버전 관리를 위한 선택 사항이며 context runtime의 전제가 아니다.
 - `context-core`는 storage, index, routing, approval과 physical write를 소유하고 semantic owner는 자기 artifact의 의미, comparison과 lifecycle을 소유한다.
 - 의미 동일성·conflict·rationale change는 hash, ID나 index metadata가 아니라 실제 body, scope와 rationale로 판단한다.
