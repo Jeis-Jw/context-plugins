@@ -21,3 +21,5 @@ The semantic CLI only reads its canonical area and produces drafts and validatio
 Explicit `$context-document:init` registers only this owner through an already available same-major `context-core`. It does not install, import, or enable other plugins and is not part of the `core-decision` profile.
 
 Version `0.10.0` is developer preview. No tag or marketplace publication is implied.
+
+Version `0.11.0` adds the canonical single-command inline preview plus approved apply workflow and diagnostic compatible-core candidate paths. No tag or marketplace publication is implied.

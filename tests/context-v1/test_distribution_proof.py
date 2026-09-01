@@ -26,7 +26,7 @@ PLUGIN_NAMES = (
     "context-intent",
     "context-document",
 )
-RELEASE_VERSION = "0.10.0"
+RELEASE_VERSION = "0.11.0"
 OWNER_SKILLS = {
     "context-core": "context",
     "context-decision": "decision",
@@ -213,6 +213,15 @@ class DistributionProofTests(unittest.TestCase):
         self.assertEqual(list(PLUGIN_NAMES), [item["name"] for item in codex_marketplace["plugins"]])
         claude_entries = {item["name"]: item for item in claude_marketplace["plugins"]}
         codex_entries = {item["name"]: item for item in codex_marketplace["plugins"]}
+        expected_release_set = {
+            "schema": "context-plugin-release-set/v1",
+            "version": RELEASE_VERSION,
+            "runtime_compatibility": "same-major-plus-runtime-handshake",
+            "automatic_update": False,
+            "members": {name: RELEASE_VERSION for name in PLUGIN_NAMES},
+        }
+        self.assertEqual(expected_release_set, claude_marketplace["metadata"]["release_set"])
+        self.assertEqual(expected_release_set, codex_marketplace["metadata"]["release_set"])
 
         for name in PLUGIN_NAMES:
             root = ROOT / "plugins" / name
@@ -296,8 +305,22 @@ class DistributionProofTests(unittest.TestCase):
                         schema_owner = schema["result"]["owner_descriptor"]["owner"]
                     self.assertEqual(name, schema_owner)
                     self.assertFalse(schema["result"]["physical_write"])
-                if name == "context-decision":
-                    workflow_entrypoint = cached / "skills/decision/scripts/decision_workflow.py"
+                if name in {"context-assumption", "context-term", "context-intent", "context-document"}:
+                    workflow_surface = schema["result"]["workflow_surface"]
+                    self.assertEqual(
+                        f"{OWNER_SKILLS[name]}_workflow.py",
+                        workflow_surface["entrypoint"],
+                    )
+                    self.assertEqual(["preview", "apply"], workflow_surface["commands"])
+                    self.assertEqual(["inline"], workflow_surface["preview_input_modes"])
+                    self.assertEqual("awaiting_approval", workflow_surface["preview_state"])
+                    self.assertEqual(
+                        "derived_from_verified_core_manifests_and_doctor",
+                        workflow_surface["preflight"],
+                    )
+                if name != "context-core":
+                    skill = OWNER_SKILLS[name]
+                    workflow_entrypoint = cached / f"skills/{skill}/scripts/{skill}_workflow.py"
                     self.assertTrue(workflow_entrypoint.is_file())
                     workflow_help = subprocess.run(
                         [sys.executable, str(workflow_entrypoint), "preview", "--help"],
@@ -396,9 +419,14 @@ class DistributionProofTests(unittest.TestCase):
         ):
             self.assertNotIn(developer_only_token, readme)
         profile = read_json(ROOT / "profiles/core-decision.json")
-        self.assertEqual("context-plugin-profile/v2", profile["schema"])
+        self.assertEqual("context-plugin-profile/v3", profile["schema"])
         self.assertEqual(RELEASE_VERSION, profile["version"])
         self.assertEqual("same-major", profile["compatibility"])
+        self.assertEqual(f"context-plugins/{RELEASE_VERSION}", profile["release_set"])
+        self.assertEqual(
+            {"context-core": RELEASE_VERSION, "context-decision": RELEASE_VERSION},
+            profile["minimum_versions"],
+        )
         self.assertEqual(
             ["context-core@context-plugins", "context-decision@context-plugins"],
             profile["plugins"],

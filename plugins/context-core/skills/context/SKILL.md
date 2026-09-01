@@ -17,7 +17,7 @@ Follow [the active-language contract](references/active-language.md): active lan
 
 1. Recall metadata only if prior context can change the judgment. Escalate only as needed: silent index check; selected body reads on a real match; user mention only if a finding changes the action; question only when an answer is required. A healthy miss causes no body read.
 2. Let the semantic owner compare actual claims, sections, scope, and rationale. Hashes, IDs, and metadata are not semantic evidence. Report conflict or rationale change before the primary conclusion, then hold the affected action until the user answers: keep means it is not performed; supersede permits it only after that explicit choice. A satisfied revisit condition authorizes reassessment, not implementation; durable capture has separate approval.
-3. Finish the request first; propose mature context once per milestone. Use loaded capabilities and documented sibling entrypoints. Never scan caches, start owner processes, substitute runtimes, or read their implementation; inspect implementation source only after an unexplained interface failure.
+3. Finish the request first; propose mature context once per milestone. Use loaded capabilities and sibling entrypoints. Never scan caches normally or substitute runtimes. Doctor only lists sibling cache versions; inspect implementation source only after an unexplained interface failure.
 4. Preserve the limits: eight candidates, 2,000-codepoint common claims, 8 KiB owner input, and a 16 KiB batch envelope.
 5. Core alone writes after validating owner results, lifecycle, indexes, target bytes, vault identity, CAS, lock, and the frozen bundle.
 

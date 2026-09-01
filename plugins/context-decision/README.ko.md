@@ -75,3 +75,5 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 0.9.0은 package version 호환성을 major 기준으로 바꾸고, protocol·capability handshake와 operation-bound actual runtime digest를 fail-closed 실행 경계로 유지합니다. `v0.9.0` tag와 publication은 아직 완료되지 않았습니다.
 
 0.10.0은 standalone decision과 legacy artifact bytes를 유지하면서 optional typed relation input을 추가합니다. tag나 publication을 의미하지 않습니다.
+
+0.11.0은 release set을 정렬하고 handshake 실패 뒤에만 호환 core 후보를 안내하며 revisit·복수 relation 입력 도움말을 명확히 합니다. DEC semantics와 저장 bytes는 변경하지 않으며 tag나 publication을 의미하지 않습니다.

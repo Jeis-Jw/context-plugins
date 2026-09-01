@@ -110,7 +110,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if schema_command.returncode != 0:
             return _forward(schema_command)
         schema = _result(schema_command, "core_handshake_invalid", "context-core schema output is invalid")
-        decision_cli.validate_core_schema_handshake(schema)
+        decision_cli.validate_core_schema_handshake(schema, core_cli_value=str(core_cli))
         doctor_command = _run_core(decision_cli, core_cli, "doctor", vault=vault, expected_sha256=core_cli_sha256)
         if doctor_command.returncode != 0:
             return _forward(doctor_command)

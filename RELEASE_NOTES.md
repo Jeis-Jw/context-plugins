@@ -1,5 +1,19 @@
 # Release notes
 
+## 0.11.0 (developer preview; tag not published)
+
+- Make OBS preview state unambiguous: `observation preview` is canonical, `capture` remains a deprecated alias, and both JSON surfaces return envelope-level and result-level `applied: false` plus `state: awaiting_approval`. Human output states that approval and `transaction apply` are still required.
+- Add one-command inline preview wrappers for INTENT, TERM, ASM, and DOCUMENT, followed by one unchanged approved apply command. The wrappers derive the verified core manifest inventory and doctor state instead of requiring caller-authored candidate, attestation, inventory, or doctor JSON.
+- Declare one exact six-plugin `context-plugin-release-set/v1` in both marketplace catalogs. Profile v3 keeps same-major runtime compatibility but fails closed below the 0.11.0 minimum and never updates automatically.
+- On core path, manifest, schema, or command incompatibility, semantic adapters list manifest-validated same-major sibling core candidates for diagnosis only. They never select or execute a candidate automatically. Core doctor warns when its loaded catalog pin is behind a newer same-major cached version.
+- Clarify that `--revisit-on` accepts only a calendar date while `--sec-revisit` carries condition text. Comma-packed relation IDs now fail with guidance to repeat the typed relation flag.
+- Preserve `context-common/v2`, stored artifact bytes, approval binding, vault identity, CAS, locking, atomic writes, no-Git operation, and independent semantic-owner packages.
+
+### Reproducible verification
+
+- Python 3.13: `python3 -m pytest -q` → 351 passed, 579 subtests.
+- Python 3.11: nine changed-surface `unittest` modules → 103 passed. This environment has no Python 3.11 `pytest` package, so a full 3.11 collection is not claimed.
+
 ## 0.10.0 (developer preview; tag not published)
 
 - Add additive `typed-relations/v1` validation. Storage remains `relations: { key: [ctx_id...] }`; `<predicate>:<target-kind>` targets must exist with that kind during preview, apply revalidation, refresh, and doctor. Legacy keys without `:` remain compatible.
@@ -81,4 +95,4 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ## Release boundary
 
-This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.10.0` remain owner-gated.
+This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.11.0` remain owner-gated.

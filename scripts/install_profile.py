@@ -16,7 +16,7 @@ from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROFILE_PATH = ROOT / "profiles/core-decision.json"
-PROFILE_SCHEMA = "context-plugin-profile/v2"
+PROFILE_SCHEMA = "context-plugin-profile/v3"
 EXPECTED_PLUGINS = (
     "context-core@context-plugins",
     "context-decision@context-plugins",
@@ -53,20 +53,32 @@ def load_profile(path: pathlib.Path = PROFILE_PATH) -> dict[str, Any]:
     profile = _read_json(path)
     if not isinstance(profile, dict):
         raise InstallProfileError("The install profile must be a JSON object.")
-    expected_keys = {"schema", "name", "version", "compatibility", "marketplace", "plugins", "init"}
+    expected_keys = {
+        "schema", "name", "version", "compatibility", "release_set", "minimum_versions",
+        "marketplace", "plugins", "init",
+    }
     if set(profile) != expected_keys:
-        raise InstallProfileError("The install profile fields do not match context-plugin-profile/v2.")
+        raise InstallProfileError("The install profile fields do not match context-plugin-profile/v3.")
     if profile["schema"] != PROFILE_SCHEMA or profile["name"] != "core-decision":
         raise InstallProfileError("The install profile identity is invalid.")
     if profile["marketplace"] != "context-plugins":
         raise InstallProfileError("The install profile marketplace is invalid.")
     if profile["compatibility"] != "same-major":
         raise InstallProfileError("The install profile compatibility policy is invalid.")
+    if profile["release_set"] != f"context-plugins/{profile['version']}":
+        raise InstallProfileError("The install profile release set is invalid.")
     plugins = profile["plugins"]
     if not isinstance(plugins, list) or not all(isinstance(selector, str) for selector in plugins):
         raise InstallProfileError("The install profile plugin list is invalid.")
     if tuple(plugins) != EXPECTED_PLUGINS:
         raise InstallProfileError("The supported profile must keep core and decision as separate plugins.")
+    expected_names = {selector.split("@", 1)[0] for selector in plugins}
+    minimum_versions = profile["minimum_versions"]
+    if not isinstance(minimum_versions, dict) or set(minimum_versions) != expected_names:
+        raise InstallProfileError("The install profile minimum-version set is invalid.")
+    for name, minimum in minimum_versions.items():
+        if _version_parts(minimum)[0] != _version_parts(profile["version"])[0]:
+            raise InstallProfileError(f"{name} minimum version uses a different major.")
     if profile["init"] != "$context-decision:init":
         raise InstallProfileError("The install profile init selector is invalid.")
     _version_parts(profile["version"])
@@ -96,6 +108,10 @@ def validate_release_surface(profile: dict[str, Any], root: pathlib.Path = ROOT)
             raise InstallProfileError(
                 f"{name} major version {version} is incompatible with profile {profile_version}."
             )
+        if _version_parts(version) < _version_parts(profile["minimum_versions"][name]):
+            raise InstallProfileError(
+                f"{name} version {version} is below release-set minimum {profile['minimum_versions'][name]}."
+            )
         plugin_versions[name] = version
 
     for catalog_path in (".claude-plugin/marketplace.json", ".agents/plugins/marketplace.json"):
@@ -103,11 +119,26 @@ def validate_release_surface(profile: dict[str, Any], root: pathlib.Path = ROOT)
         entries = catalog.get("plugins") if isinstance(catalog, dict) else None
         if not isinstance(entries, list):
             raise InstallProfileError(f"{catalog_path} has no plugin catalog.")
+        release_set = catalog.get("metadata", {}).get("release_set") if isinstance(catalog, dict) else None
+        expected_release_set = {
+            "schema": "context-plugin-release-set/v1",
+            "version": profile_version,
+            "runtime_compatibility": "same-major-plus-runtime-handshake",
+            "automatic_update": False,
+        }
+        if (
+            not isinstance(release_set, dict)
+            or any(release_set.get(key) != value for key, value in expected_release_set.items())
+            or not isinstance(release_set.get("members"), dict)
+        ):
+            raise InstallProfileError(f"{catalog_path} has an invalid release-set declaration.")
         by_name = {entry.get("name"): entry for entry in entries if isinstance(entry, dict)}
         for selector in profile["plugins"]:
             name = selector.split("@", 1)[0]
             if by_name.get(name, {}).get("version") != plugin_versions[name]:
                 raise InstallProfileError(f"{catalog_path} is not aligned to {name} version {plugin_versions[name]}.")
+            if release_set["members"].get(name) != plugin_versions[name]:
+                raise InstallProfileError(f"{catalog_path} release set is not aligned to {name} version {plugin_versions[name]}.")
 
 
 def _decode_json_output(completed: subprocess.CompletedProcess[str], label: str) -> Any:
@@ -254,6 +285,15 @@ def build_install_plan(
                 raise InstallProfileError(
                     f"{selector} version {current_version} has an incompatible major version; this profile requires major {_version_parts(version)[0]}."
                 )
+            name = selector.split("@", 1)[0]
+            minimum = profile["minimum_versions"][name]
+            if _version_parts(current_version) < _version_parts(minimum):
+                candidate = root / "plugins" / name
+                raise InstallProfileError(
+                    f"{selector} version {current_version} is below compatible release-set minimum {minimum}. "
+                    f"Compatible candidate path: {candidate.resolve()}. Update it explicitly, reload the host, and retry; "
+                    "no automatic update was attempted."
+                )
             continue
         command = [binary, "plugin", "add" if host == "codex" else "install", selector]
         if host == "codex":
@@ -279,7 +319,7 @@ def run_plan(commands: Sequence[Sequence[str]], *, dry_run: bool = False) -> Non
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Install missing core-decision plugins and accept enabled same-major versions."
+        description="Install missing core-decision plugins and fail closed below the release-set minimum."
     )
     parser.add_argument("--host", choices=HOSTS, required=True)
     parser.add_argument("--scope", default="user", help="Claude Code scope: user, project, or local. Codex uses user.")

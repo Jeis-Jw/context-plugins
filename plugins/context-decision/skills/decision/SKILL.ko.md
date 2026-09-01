@@ -19,7 +19,7 @@ description: 선택 신호가 있을 때 Current DEC 실제 본문을 비교하�
 
 ## Capture
 
-일반 capture는 sibling `scripts/decision_workflow.py preview --inline`에 semantic field와 세 `--attest-*` 판단을 준다. Candidate ID와 `captured_from:conversation`은 자동이다. Loaded core의 sibling `scripts/context_cli.py`를 쓰고 cache를 탐색하지 않는다. Host inventory나 core doctor를 미리 실행하지 않는다. Preview가 직접 handshake한다. 문서화된 entrypoint를 바로 호출하고 설명되지 않는 interface failure 뒤에만 script source를 읽는다.
+Capture는 sibling `scripts/decision_workflow.py preview --inline`에 semantic field와 세 `--attest-*` 판단을 준다. Candidate ID와 capture source는 자동이다. Host inventory나 core doctor를 미리 실행하지 않는다. 실패 후보 경로는 진단용이며 자동 실행·대체하지 않는다. 문서화된 entrypoint를 호출하고 설명되지 않는 interface failure 뒤에만 script source를 읽는다.
 
 Preview는 private frozen receipt 하나를 만든다. Active language로 완성된 렌더링 본문을 보여주며 한 번만 묻는다. preview stdout의 `approval_digest`를 session에 보관해 그대로 전달하고 digest·receipt 경로·내부 ID·core 경로 등 transport detail은 노출하거나 요구하지 않는다. 해당 질문에 대한 직접적·명시적·무조건적 긍정만 승인이다. 단순 확인·칭찬·조건·수정 요청·화제 전환은 승인이 아니다. 모호하면 한 번만 확인하며 승인 뒤 재생성하지 않는다.
 

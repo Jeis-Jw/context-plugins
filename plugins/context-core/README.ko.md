@@ -55,3 +55,5 @@ vault는 `context/`를 담는 일반 디렉터리이며 Git은 공유·버전관
 0.9.0은 package 호환성 경계를 major로 두고 minor는 기능 변화, patch는 작은 수정에 사용합니다. 같은-major package도 protocol·capability handshake가 맞지 않으면 fail-closed합니다. `v0.9.0` tag와 publication은 아직 완료되지 않았습니다.
 
 0.10.0은 filesystem-vault와 approval model을 바꾸지 않고 typed relation 검증과 optional INTENT/DOCUMENT owner 등록 surface를 추가합니다. tag나 publication을 의미하지 않습니다.
+
+0.11.0은 OBS preview의 미적용 상태를 명시하고, 공용 inline owner workflow transport와 same-major cache pin 진단을 추가합니다. approval과 저장 artifact bytes는 변경하지 않으며 tag나 publication을 의미하지 않습니다.

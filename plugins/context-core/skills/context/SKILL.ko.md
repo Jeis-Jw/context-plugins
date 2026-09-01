@@ -11,7 +11,7 @@ description: 새 대화 delta를 audit하고 답을 바꿀 맥락만 recall해 �
 
 1. 이전 맥락이 판단을 바꿀 때만 metadata-first로 recall한다. 개입은 필요한 단계까지만 높인다: 조용한 index 확인, 실제 match일 때 선택 본문 읽기, 발견이 현재 행동을 바꿀 때만 사용자 언급, 답이 필요할 때만 질문. healthy miss는 body를 읽지 않는다.
 2. semantic owner가 실제 claim·section·scope·rationale를 비교한다. hash·ID·metadata는 의미 근거가 아니다. conflict 또는 rationale change는 primary 결론 전에 알리고 답이 올 때까지 영향받는 행동을 보류한다. keep이면 수행하지 않고 supersede면 그 명시적 선택 뒤에만 진행한다. 충족된 재평가 조건은 재평가 권한이지 구현 권한이 아니며 durable capture 승인은 별도다.
-3. 원 요청을 먼저 마치고 성숙한 후보만 milestone당 한 번 제안한다. loaded capability와 문서화된 sibling entrypoint를 사용한다. cache·owner process·대체 runtime이나 구현 source를 탐색하지 않고, 설명되지 않는 interface failure 뒤에만 구현을 읽는다.
+3. 원 요청을 먼저 마치고 성숙한 후보만 milestone당 제안한다. sibling entrypoint를 쓴다. 정상 경로는 cache를 보거나 runtime을 바꾸지 않는다. doctor는 cache version을 나열할 뿐 실행하지 않는다. 설명되지 않는 interface failure 뒤에만 구현을 읽는다.
 4. candidate 8개, common claim 2,000 codepoint, owner input 8 KiB, batch 16 KiB 상한을 유지한다.
 5. core만 owner result, lifecycle, index, target bytes, vault identity, CAS, lock과 frozen bundle을 검증한 뒤 실제로 쓴다.
 

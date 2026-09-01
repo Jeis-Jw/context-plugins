@@ -1,6 +1,6 @@
 {
   "name": "context-intent",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Authoritative desired directions with scoped slots and optional success criteria.",
   "author": {
     "name": "Jinwuk-Lee",

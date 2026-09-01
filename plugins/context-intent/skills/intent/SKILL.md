@@ -17,6 +17,8 @@ This skill is the `context-intent/v1` semantic owner and never writes vault byte
 
 Only context-core may preview, approve, lock, CAS, or persist a result. Present the complete rendered body when asking for capture approval and never regenerate it after approval.
 
+The canonical capture path is sibling `scripts/intent_workflow.py preview --host <host> --core-cli <loaded-core-cli> --inline ...`, followed after approval by its `apply` command. The wrapper derives verified manifest inventory and doctor state directly; do not create candidate, attestation, inventory, or doctor JSON files manually. Retain its `receipt_file` and `approval_digest` only in agent state.
+
 Follow context-core's active language contract for user-facing text and keep machine fields English. Before suggesting capture, run preview and ask once with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply, but never expose or request it, a receipt path, an internal ID, or a core path. Approval requires a direct, explicit, unconditional answer to that specific capture question. A generic acknowledgement, condition, edit request, or topic change is not approval. Never regenerate content or plan after approval.
 
 See [intent-protocol.md](references/intent-protocol.md).

@@ -626,7 +626,12 @@ class TransactionCoordinatorTests(unittest.TestCase):
                 )
                 self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
                 result = json.loads(preview.stdout)["result"]
-                self.assertEqual({"approval_preview", "approval_digest", "receipt_file"}, set(result))
+                self.assertEqual(
+                    {"approval_preview", "approval_digest", "receipt_file", "applied", "state"},
+                    set(result),
+                )
+                self.assertFalse(result["applied"])
+                self.assertEqual("awaiting_approval", result["state"])
                 applied = subprocess.run(
                     [
                         sys.executable, str(CLI_PATH), "transaction", "apply",

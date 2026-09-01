@@ -15,6 +15,6 @@ python3 "${INIT_SKILL_FILE%/SKILL.md}/scripts/intent_init.py" \
   --json
 ```
 
-The adapter verifies the absolute core entrypoint, matching same-major manifests, schema, protocol, required commands, descriptor feature, filesystem-vault feature, and doctor state. It passes the descriptor and fixed seed to verified core bootstrap, then checks the exact registration. Temporary transport files are its only writes.
+The adapter verifies the absolute core entrypoint, matching same-major manifests, schema, protocol, required commands, descriptor feature, filesystem-vault feature, and doctor state. It passes the descriptor and fixed seed to verified core bootstrap, then checks the exact registration. Temporary transport files are its only writes. On failure, listed manifest-validated sibling core paths are diagnostic only; never substitute or execute one automatically, and start a new session after an explicit choice.
 
 Follow context-core's active language contract for user-facing text and keep machine fields English. Before suggesting ordinary capture, run preview and ask once with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply, but never expose or request it, a receipt path, an internal ID, or a core path. Approval requires a direct, explicit, unconditional answer to that specific capture question. A generic acknowledgement, condition, edit request, or topic change is not approval. Never regenerate content or plan after approval.

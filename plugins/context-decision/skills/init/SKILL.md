@@ -18,7 +18,7 @@ python3 "$INIT_ENTRYPOINT" \
   --json
 ```
 
-Claude Code may use `${CLAUDE_PLUGIN_ROOT}` only when supplied by the host; Codex uses the loaded skill catalog. Never infer from cwd, scan caches, or substitute another runtime.
+Claude Code may use `${CLAUDE_PLUGIN_ROOT}` only when supplied by the host; Codex uses the loaded skill catalog. Never infer from cwd, scan caches on the success path, or substitute another runtime. After a compatibility failure, the adapter may list manifest-validated sibling cache candidates for diagnosis only; choose one explicitly and start a new session before execution.
 
 The adapter verifies the path suffix, matching adjacent core manifests, and compatible major, then binds the actual SHA-256 for the operation and handshakes `context-core-schema/v1`, `context-common/v2`, required commands, `context-owner-descriptor/v2`, `filesystem-vault/v1`, and doctor state. Missing, mismatched, or incompatible inputs cause zero subprocess, repository, or host-configuration writes. It passes `partial/invalid/ready` or bootstrap-required absent state to core, which owns repairability.
 

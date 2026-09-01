@@ -179,7 +179,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         handshake = _run_core(intent_cli, core_cli, "schema", vault=vault, expected_sha256=core_cli_sha256)
         if handshake.returncode:
             return _forward(handshake)
-        intent_cli.validate_core_schema_handshake(_result(handshake))
+        intent_cli.validate_core_schema_handshake(_result(handshake), core_cli_value=str(core_cli))
         doctor_before_command = _run_core(intent_cli, core_cli, "doctor", vault=vault, expected_sha256=core_cli_sha256)
         if doctor_before_command.returncode:
             return _forward(doctor_before_command)

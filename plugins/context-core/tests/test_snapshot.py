@@ -131,7 +131,12 @@ class SnapshotTests(unittest.TestCase):
 
             self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
             result = json.loads(preview.stdout)["result"]
-            self.assertEqual({"approval_preview", "approval_digest", "receipt_file"}, set(result))
+            self.assertEqual(
+                {"approval_preview", "approval_digest", "receipt_file", "applied", "state"},
+                set(result),
+            )
+            self.assertFalse(result["applied"])
+            self.assertEqual("awaiting_approval", result["state"])
             self.assertEqual(before, tree_digest(repo))
             receipt_path = Path(result["receipt_file"])
             self.assertEqual(0o700, stat.S_IMODE(receipt_path.parent.stat().st_mode))

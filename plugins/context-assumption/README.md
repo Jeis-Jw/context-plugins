@@ -56,3 +56,5 @@ Runtime responses, questions, previews, and explanatory guidance follow the acti
 Version `0.9.0` keeps ASM as an optional semantic-owner package outside the `core-decision` installation profile and adopts same-major core compatibility. The `v0.9.0` tag and marketplace publication are still pending.
 
 Version `0.10.0` aligns the six-plugin distribution version; ASM semantics and stored bytes are unchanged. No tag or publication is implied.
+
+Version `0.11.0` adds the canonical inline preview/apply workflow and diagnostic compatible-core candidate paths. ASM semantics and stored bytes are unchanged. No tag or publication is implied.

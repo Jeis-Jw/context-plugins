@@ -5,44 +5,58 @@
     "url": "https://github.com/Jeis-Jw"
   },
   "metadata": {
-    "description": "Developer-preview marketplace for filesystem-vault, approval-gated durable project context."
+    "description": "Developer-preview marketplace for filesystem-vault, approval-gated durable project context.",
+    "release_set": {
+      "schema": "context-plugin-release-set/v1",
+      "version": "0.11.0",
+      "runtime_compatibility": "same-major-plus-runtime-handshake",
+      "automatic_update": false,
+      "members": {
+        "context-core": "0.11.0",
+        "context-decision": "0.11.0",
+        "context-assumption": "0.11.0",
+        "context-term": "0.11.0",
+        "context-intent": "0.11.0",
+        "context-document": "0.11.0"
+      }
+    }
   },
   "plugins": [
     {
       "name": "context-core",
       "source": "./plugins/context-core",
       "description": "Shared-context runtime for proactive scoped recall, approval-gated capture suggestions, handoffs, evidence, and coordinated writes.",
-      "version": "0.10.0"
+      "version": "0.11.0"
     },
     {
       "name": "context-decision",
       "source": "./plugins/context-decision",
       "description": "Decision continuity with pre-decision body comparison, rationale-change and conflict notices, and approval-gated capture.",
-      "version": "0.10.0"
+      "version": "0.11.0"
     },
     {
       "name": "context-assumption",
       "source": "./plugins/context-assumption",
       "description": "Provisional project assumptions with evidence-bound confirmation, refutation, and supersession.",
-      "version": "0.10.0"
+      "version": "0.11.0"
     },
     {
       "name": "context-term",
       "source": "./plugins/context-term",
       "description": "Authoritative project terminology with scoped canonical slots and signal-gated recall.",
-      "version": "0.10.0"
+      "version": "0.11.0"
     },
     {
       "name": "context-intent",
       "source": "./plugins/context-intent",
       "description": "Authoritative desired directions with scoped slots and optional success criteria.",
-      "version": "0.10.0"
+      "version": "0.11.0"
     },
     {
       "name": "context-document",
       "source": "./plugins/context-document",
       "description": "Authoritative living documents with stable scoped slots and same-ID content replacement.",
-      "version": "0.10.0"
+      "version": "0.11.0"
     }
   ]
 }

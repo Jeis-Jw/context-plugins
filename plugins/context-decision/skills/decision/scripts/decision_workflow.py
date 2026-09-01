@@ -728,7 +728,11 @@ def preview(args: argparse.Namespace) -> dict[str, Any]:
     schema = _run_core(core_cli, repo, "schema", expected_sha256=core_cli_sha256)
     decision_values = candidate.get("owner_inputs", {}).get("decision", {}) if candidate is not None else {}
     require_typed_relations = any(decision_values.get(field) for field in decision_cli.TYPED_RELATION_INPUTS)
-    decision_cli.validate_core_schema_handshake(schema, require_typed_relations=require_typed_relations)
+    decision_cli.validate_core_schema_handshake(
+        schema,
+        require_typed_relations=require_typed_relations,
+        core_cli_value=str(core_cli),
+    )
     doctor = _run_core(core_cli, repo, "doctor", expected_sha256=core_cli_sha256)
     preflight = _require_ready_core(args.host, core_cli, doctor)
     if operation == "capture":
@@ -954,16 +958,17 @@ receipt and approval:
     preview_parser.add_argument("--sec-alternatives", action="append", default=[])
     preview_parser.add_argument("--sec-constraints", action="append", default=[])
     preview_parser.add_argument("--sec-tradeoffs", action="append", default=[])
-    preview_parser.add_argument("--sec-revisit", action="append", default=[])
-    preview_parser.add_argument("--revisit-on")
+    preview_parser.add_argument("--sec-revisit", action="append", default=[], help="Revisit condition text; repeat for multiple conditions.")
+    preview_parser.add_argument("--revisit-on", help="Calendar date only (YYYY-MM-DD); condition text: --sec-revisit.")
     preview_parser.add_argument("--source-ref", action="append", default=[])
     preview_parser.add_argument("--tag", action="append", default=[])
     preview_parser.add_argument("--search-term", action="append", default=[])
     preview_parser.add_argument("--informed-by", action="append", default=[])
-    preview_parser.add_argument("--serves-intent", dest="serves_intents", action="append", default=[])
-    preview_parser.add_argument("--informed-by-observation", dest="informed_by_observations", action="append", default=[])
-    preview_parser.add_argument("--informed-by-assumption", dest="informed_by_assumptions", action="append", default=[])
-    preview_parser.add_argument("--affects-document", dest="affects_documents", action="append", default=[])
+    relation_help = "One ctx_ id per flag; repeat the flag for multiple ids (no comma list)."
+    preview_parser.add_argument("--serves-intent", dest="serves_intents", action="append", default=[], help=relation_help)
+    preview_parser.add_argument("--informed-by-observation", dest="informed_by_observations", action="append", default=[], help=relation_help)
+    preview_parser.add_argument("--informed-by-assumption", dest="informed_by_assumptions", action="append", default=[], help=relation_help)
+    preview_parser.add_argument("--affects-document", dest="affects_documents", action="append", default=[], help=relation_help)
     preview_parser.add_argument("--attest-explicit-choice", action="store_true")
     preview_parser.add_argument("--attest-scope-identified", action="store_true")
     preview_parser.add_argument("--attest-commitment-present", action="store_true")

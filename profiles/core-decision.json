@@ -1,8 +1,13 @@
 {
-  "schema": "context-plugin-profile/v2",
+  "schema": "context-plugin-profile/v3",
   "name": "core-decision",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "compatibility": "same-major",
+  "release_set": "context-plugins/0.11.0",
+  "minimum_versions": {
+    "context-core": "0.11.0",
+    "context-decision": "0.11.0"
+  },
   "marketplace": "context-plugins",
   "plugins": [
     "context-core@context-plugins",

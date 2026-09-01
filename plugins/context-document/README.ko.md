@@ -21,3 +21,5 @@ semantic CLI는 canonical area를 읽고 draft와 validation receipt만 만듭�
 명시적 `$context-document:init`은 이미 사용할 수 있는 same-major `context-core`를 통해 이 owner만 등록합니다. 다른 plugin을 install·import·enable하지 않으며 `core-decision` profile에도 포함되지 않습니다.
 
 `0.10.0`은 developer preview이며 tag나 marketplace publication을 의미하지 않습니다.
+
+`0.11.0`은 단일 inline preview와 승인 후 apply 경로, 진단용 호환 core 후보 안내를 추가합니다. tag나 marketplace publication을 의미하지 않습니다.

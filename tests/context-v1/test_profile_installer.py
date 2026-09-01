@@ -32,9 +32,14 @@ installer = load_installer()
 class ProfileInstallerTests(unittest.TestCase):
     def test_acceptance_68_profile_installer_keeps_core_and_decision_separate(self) -> None:
         profile = installer.load_profile()
-        self.assertEqual("context-plugin-profile/v2", profile["schema"])
-        self.assertEqual("0.10.0", profile["version"])
+        self.assertEqual("context-plugin-profile/v3", profile["schema"])
+        self.assertEqual("0.11.0", profile["version"])
         self.assertEqual("same-major", profile["compatibility"])
+        self.assertEqual("context-plugins/0.11.0", profile["release_set"])
+        self.assertEqual(
+            {"context-core": "0.11.0", "context-decision": "0.11.0"},
+            profile["minimum_versions"],
+        )
         self.assertEqual(
             ["context-core@context-plugins", "context-decision@context-plugins"],
             profile["plugins"],
@@ -77,21 +82,33 @@ class ProfileInstallerTests(unittest.TestCase):
         profile = installer.load_profile()
         marketplaces = [{"name": "context-plugins", "root": str(ROOT.resolve())}]
         installed = [
-            {"pluginId": selector, "version": "0.10.0", "enabled": True}
+            {"pluginId": selector, "version": "0.11.0", "enabled": True}
             for selector in profile["plugins"]
         ]
         self.assertEqual([], installer.build_install_plan(profile, "codex", "user", marketplaces, installed))
 
-    def test_same_major_mixed_versions_are_accepted_and_missing_plugins_are_installed(self) -> None:
+    def test_same_major_at_or_above_minimum_is_accepted_and_missing_plugin_is_installed(self) -> None:
         profile = installer.load_profile()
         marketplaces = [{"name": "context-plugins", "root": str(ROOT.resolve())}]
         installed = [
-            {"pluginId": "context-core@context-plugins", "version": "0.6.0", "enabled": True},
+            {"pluginId": "context-core@context-plugins", "version": "0.12.0", "enabled": True},
         ]
         self.assertEqual(
             [["codex", "plugin", "add", "context-decision@context-plugins", "--json"]],
             installer.build_install_plan(profile, "codex", "user", marketplaces, installed),
         )
+
+    def test_same_major_below_release_set_minimum_fails_with_candidate_path(self) -> None:
+        profile = installer.load_profile()
+        marketplaces = [{"name": "context-plugins", "root": str(ROOT.resolve())}]
+        installed = [
+            {"pluginId": "context-core@context-plugins", "version": "0.6.0", "enabled": True},
+        ]
+        with self.assertRaisesRegex(
+            installer.InstallProfileError,
+            r"below compatible release-set minimum 0\.11\.0.*Compatible candidate path:.*no automatic update",
+        ):
+            installer.build_install_plan(profile, "codex", "user", marketplaces, installed)
 
     def test_different_major_or_disabled_plugin_is_rejected(self) -> None:
         profile = installer.load_profile()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -57,6 +58,12 @@ TYPED_RELATION_INPUTS = {
     "informed_by_assumptions": "informed_by:assumption",
     "affects_documents": "affects:document",
 }
+TYPED_RELATION_FLAGS = {
+    "serves_intents": "--serves-intent",
+    "informed_by_observations": "--informed-by-observation",
+    "informed_by_assumptions": "--informed-by-assumption",
+    "affects_documents": "--affects-document",
+}
 RELATION_ACTIONS = {
     "new": "Ask about capture after the decision becomes explicit.",
     "same": "Cite the existing DEC without creating another one.",
@@ -95,6 +102,29 @@ class DecisionError(Exception):
 
     def envelope(self) -> dict[str, Any]:
         return {"ok": False, "error": {"code": self.code, "message": self.message, "details": self.details}}
+
+
+def compatible_core_candidates(value: str | None = None, *, minimum_version: str = "0.9.0") -> list[dict[str, str]]:
+    helper = pathlib.Path(__file__).with_name("core_compatibility.py")
+    spec = importlib.util.spec_from_file_location("context_decision_core_compatibility", helper)
+    if spec is None or spec.loader is None:
+        return []
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        return module.discover_core_candidates(
+            __file__, value, compatible_major=CORE_COMPATIBLE_MAJOR, minimum_version=minimum_version
+        )
+    except (AttributeError, ImportError, OSError, RuntimeError, SyntaxError, TypeError, ValueError):
+        return []
+
+
+def _core_failure_details(value: str | None = None, **details: Any) -> dict[str, Any]:
+    return {
+        **details,
+        "compatible_core_candidates": compatible_core_candidates(value),
+        "candidate_policy": "diagnostic_only_no_automatic_substitution",
+    }
 
 
 def _canonical_section_name(name: str, *, observation: bool = False) -> str:
@@ -238,8 +268,8 @@ def required_core_surface(value: str, *, expected_sha256: str | None = None) -> 
     except (OSError, RuntimeError) as error:
         raise DecisionError(
             "core_surface_unavailable",
-            "the compatible context-core public CLI is unavailable",
-            {"required_plugin": dict(REQUIRED_PLUGIN)},
+            "the compatible context-core public CLI is unavailable; choose a listed candidate and start a new session",
+            _core_failure_details(value, required_plugin=dict(REQUIRED_PLUGIN)),
             EXIT_CONFLICT,
         ) from error
     suffix = pathlib.PurePosixPath(REQUIRED_PLUGIN["entrypoint"]).parts
@@ -250,15 +280,22 @@ def required_core_surface(value: str, *, expected_sha256: str | None = None) -> 
     ):
         raise DecisionError(
             "core_surface_mismatch",
-            "context-core entrypoint path differs from the public compatibility contract",
-            {
-                "required_entrypoint": REQUIRED_PLUGIN["entrypoint"],
-                "observed_path": str(resolved),
-                "observed_sha256": digest,
-            },
+            "context-core entrypoint path differs from the public compatibility contract; choose a listed candidate and start a new session",
+            _core_failure_details(
+                value,
+                required_entrypoint=REQUIRED_PLUGIN["entrypoint"],
+                observed_path=str(resolved),
+                observed_sha256=digest,
+            ),
             EXIT_CONFLICT,
         )
-    core_surface_version(resolved)
+    try:
+        core_surface_version(resolved)
+    except DecisionError as error:
+        if error.code == "core_surface_mismatch":
+            error.message += "; choose a listed candidate and start a new session"
+            error.details = _core_failure_details(value, **error.details)
+        raise
     if expected_sha256 is not None and digest != expected_sha256:
         raise DecisionError(
             "core_surface_changed",
@@ -269,7 +306,12 @@ def required_core_surface(value: str, *, expected_sha256: str | None = None) -> 
     return resolved
 
 
-def validate_core_schema_handshake(value: Any, *, require_typed_relations: bool = False) -> dict[str, Any]:
+def validate_core_schema_handshake(
+    value: Any,
+    *,
+    require_typed_relations: bool = False,
+    core_cli_value: str | None = None,
+) -> dict[str, Any]:
     required_commands = {"doctor", "bootstrap", "transaction preview", "transaction apply"}
     required_features = {"context-owner-descriptor/v2", "filesystem-vault/v1"}
     if require_typed_relations:
@@ -288,11 +330,12 @@ def validate_core_schema_handshake(value: Any, *, require_typed_relations: bool 
     ):
         raise DecisionError(
             "core_incompatible",
-            "context-core schema, protocol, feature, or required command handshake is incompatible",
+            "context-core schema, protocol, feature, or required command handshake is incompatible; choose a listed candidate and start a new session",
             {
                 "required_plugin": dict(REQUIRED_PLUGIN),
                 "required_commands": sorted(required_commands),
                 "required_features": sorted(required_features),
+                **_core_failure_details(core_cli_value),
             },
             EXIT_CONFLICT,
         )
@@ -785,6 +828,18 @@ def validate_candidate(candidate: dict[str, Any]) -> tuple[str, str, dict[str, A
         _validate_date(values["revisit_on"], "revisit_on")
     for field in TYPED_RELATION_INPUTS:
         if field in values:
+            raw_identifiers = values[field]
+            if isinstance(raw_identifiers, list) and any(
+                isinstance(identifier, str) and "," in identifier
+                for identifier in raw_identifiers
+            ):
+                flag = TYPED_RELATION_FLAGS[field]
+                raise DecisionError(
+                    "candidate_invalid",
+                    f"{field} accepts one context id per {flag}; repeat the flag for multiple ids instead of using commas",
+                    {"field": field, "flag": flag, "multiple_values": "repeat_flag"},
+                    EXIT_CONFLICT,
+                )
             identifiers = _bounded_list(values[field], field, maximum=12, item_maximum=36)
             if len(identifiers) != len(set(identifiers)):
                 raise DecisionError("candidate_invalid", f"{field} contains duplicate context ids", {"field": field})
@@ -2693,16 +2748,17 @@ def _add_capture_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--sec-alternatives", action="append", required=True)
     parser.add_argument("--sec-constraints", action="append", default=[])
     parser.add_argument("--sec-tradeoffs", action="append", default=[])
-    parser.add_argument("--sec-revisit", action="append", default=[])
-    parser.add_argument("--revisit-on")
+    parser.add_argument("--sec-revisit", action="append", default=[], help="Revisit condition text; repeat for multiple conditions.")
+    parser.add_argument("--revisit-on", help="Calendar date in YYYY-MM-DD form only; use --sec-revisit for condition text.")
     parser.add_argument("--source-ref", action="append", default=[])
     parser.add_argument("--tag", action="append", default=[])
     parser.add_argument("--search-term", action="append", default=[])
     parser.add_argument("--informed-by", action="append", default=[])
-    parser.add_argument("--serves-intent", dest="serves_intents", action="append", default=[])
-    parser.add_argument("--informed-by-observation", dest="informed_by_observations", action="append", default=[])
-    parser.add_argument("--informed-by-assumption", dest="informed_by_assumptions", action="append", default=[])
-    parser.add_argument("--affects-document", dest="affects_documents", action="append", default=[])
+    relation_help = "One ctx_ id per flag; repeat the flag for multiple ids (no comma list)."
+    parser.add_argument("--serves-intent", dest="serves_intents", action="append", default=[], help=relation_help)
+    parser.add_argument("--informed-by-observation", dest="informed_by_observations", action="append", default=[], help=relation_help)
+    parser.add_argument("--informed-by-assumption", dest="informed_by_assumptions", action="append", default=[], help=relation_help)
+    parser.add_argument("--affects-document", dest="affects_documents", action="append", default=[], help=relation_help)
 
 
 def _add_preflight_arguments(parser: argparse.ArgumentParser) -> None:

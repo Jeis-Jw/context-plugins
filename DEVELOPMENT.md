@@ -42,7 +42,7 @@ PYTHONPATH=tests/context-v1/phase0 python3 -m pytest -q tests/context-v1/phase0
 
 ### Core+decision profile installer
 
-`profiles/core-decision.json`은 core와 decision의 설치 좌표와 compatible major를 선언하는 배포 profile이며 두 plugin package나 semantic ownership을 합치지 않습니다. `scripts/install_profile.py`는 사용자가 내려받은 plugin 디렉터리에서 명시적으로 실행할 때만 host marketplace를 등록하고 빠진 plugin 설치 명령만 순서대로 호출합니다. 이미 활성화된 같은-major plugin은 update하지 않습니다. Plugin runtime에서는 host inventory 탐색이나 install/enable/update를 수행하지 않습니다.
+`profiles/core-decision.json` v3는 core와 decision의 설치 좌표, compatible major, release-set minimum을 선언하는 배포 profile이며 두 plugin package나 semantic ownership을 합치지 않습니다. `scripts/install_profile.py`는 사용자가 내려받은 plugin 디렉터리에서 명시적으로 실행할 때만 host marketplace를 등록하고 빠진 plugin 설치 명령만 순서대로 호출합니다. 이미 활성화된 같은-major plugin이 minimum 이상이면 update하지 않고, minimum 미만이면 호환 source 후보를 안내하며 중단합니다. Plugin runtime에서는 install/enable/update를 수행하지 않습니다.
 
 `--dry-run`으로 host 변경 없이 설치 계획을 검증할 수 있습니다. Git 실행파일·metadata·tag·clean checkout을 요구하지 않으며 archive로 받은 파일도 사용할 수 있습니다. Profile·manifest·catalog 일치 검증은 유지하고, old provider·다른 등록 경로·disabled plugin·different major는 자동 정리하지 않고 중단합니다.
 
@@ -58,14 +58,16 @@ Package version은 major를 호환성 경계, minor를 기능 추가·변경, pa
 
 이 실행 파일 계약은 marketplace provenance, catalog source 또는 host enabled state를 attestation하지 않습니다. Caller-created inventory/doctor는 low-level compatibility mode의 입력일 뿐 canonical init/workflow의 신뢰 근거가 아닙니다.
 
+Handshake가 실패하면 semantic adapter는 exact sibling cache layout에서 manifest와 public entrypoint가 일치하는 same-major core 후보만 진단용으로 나열합니다. `doctor`도 loaded catalog pin보다 최신인 same-major cache 후보를 경고할 수 있습니다. 어느 경로도 후보를 자동 선택·실행·대체하지 않습니다.
+
 ## Distribution identity
 
 - Marketplace: `context-plugins`
 - Core selector: `context-core@context-plugins`
 - Source: `Jeis-Jw/context-plugins`
 - Protocol: `context-common/v2`
-- Current repository version: `0.10.0`
-- Optional release tag: `v0.10.0` (not created or pushed; owner approval required)
+- Current repository version: `0.11.0`
+- Optional release tag: `v0.11.0` (not created or pushed; owner approval required)
 
 ## Provenance
 
@@ -75,4 +77,4 @@ Package version은 major를 호환성 경계, minor를 기능 추가·변경, pa
 
 이 저장소에는 root [`LICENSE`](./LICENSE)의 Apache License 2.0이 적용됩니다.
 
-라이선스 선택은 완료됐지만 `v0.10.0` tag 생성·push와 marketplace publication은 여전히 각각 별도 owner gate입니다. 라이선스 적용, 검증 또는 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.
+라이선스 선택은 완료됐지만 `v0.11.0` tag 생성·push와 marketplace publication은 여전히 각각 별도 owner gate입니다. 라이선스 적용, 검증 또는 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import hashlib
+import importlib.util
 import json
 import pathlib
 import re
@@ -61,6 +62,29 @@ class DocumentError(Exception):
 
     def envelope(self) -> dict[str, Any]:
         return {"ok": False, "error": {"code": self.code, "message": self.message, "details": self.details}}
+
+
+def compatible_core_candidates(value: str | None = None, *, minimum_version: str = "0.9.0") -> list[dict[str, str]]:
+    helper = pathlib.Path(__file__).with_name("core_compatibility.py")
+    spec = importlib.util.spec_from_file_location("context_document_core_compatibility", helper)
+    if spec is None or spec.loader is None:
+        return []
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        return module.discover_core_candidates(
+            __file__, value, compatible_major=CORE_COMPATIBLE_MAJOR, minimum_version=minimum_version
+        )
+    except (AttributeError, ImportError, OSError, RuntimeError, SyntaxError, TypeError, ValueError):
+        return []
+
+
+def _core_failure_details(value: str | None = None, **details: Any) -> dict[str, Any]:
+    return {
+        **details,
+        "compatible_core_candidates": compatible_core_candidates(value),
+        "candidate_policy": "diagnostic_only_no_automatic_substitution",
+    }
 
 
 def _canonical_section_name(name: str) -> str:
@@ -219,7 +243,12 @@ def required_core_surface(value: str, *, expected_sha256: str | None = None) -> 
         resolved = supplied.resolve(strict=True)
         digest = bytes_digest(resolved.read_bytes())
     except (OSError, RuntimeError) as error:
-        raise DocumentError("core_surface_unavailable", "the compatible context-core public CLI is unavailable", {"required_plugin": dict(REQUIRED_PLUGIN)}, EXIT_CONFLICT) from error
+        raise DocumentError(
+            "core_surface_unavailable",
+            "the compatible context-core public CLI is unavailable; choose a listed candidate and start a new session",
+            _core_failure_details(value, required_plugin=dict(REQUIRED_PLUGIN)),
+            EXIT_CONFLICT,
+        ) from error
     suffix = pathlib.PurePosixPath(REQUIRED_PLUGIN["entrypoint"]).parts
     if (
         not supplied.is_absolute()
@@ -228,17 +257,28 @@ def required_core_surface(value: str, *, expected_sha256: str | None = None) -> 
     ):
         raise DocumentError(
             "core_surface_mismatch",
-            "context-core entrypoint path differs from the public compatibility contract",
-            {"required_entrypoint": REQUIRED_PLUGIN["entrypoint"], "observed_path": str(resolved), "observed_sha256": digest},
+            "context-core entrypoint path differs from the public compatibility contract; choose a listed candidate and start a new session",
+            _core_failure_details(
+                value,
+                required_entrypoint=REQUIRED_PLUGIN["entrypoint"],
+                observed_path=str(resolved),
+                observed_sha256=digest,
+            ),
             EXIT_CONFLICT,
         )
-    core_surface_version(resolved)
+    try:
+        core_surface_version(resolved)
+    except DocumentError as error:
+        if error.code == "core_surface_mismatch":
+            error.message += "; choose a listed candidate and start a new session"
+            error.details = _core_failure_details(value, **error.details)
+        raise
     if expected_sha256 is not None and digest != expected_sha256:
         raise DocumentError("core_surface_changed", "context-core entrypoint changed during the operation", {"observed_sha256": digest}, EXIT_CONFLICT)
     return resolved
 
 
-def validate_core_schema_handshake(value: Any) -> dict[str, Any]:
+def validate_core_schema_handshake(value: Any, *, core_cli_value: str | None = None) -> dict[str, Any]:
     required_commands = {"doctor", "bootstrap", "transaction preview", "transaction apply"}
     features = value.get("features") if isinstance(value, dict) else None
     commands = value.get("commands") if isinstance(value, dict) else None
@@ -252,7 +292,12 @@ def validate_core_schema_handshake(value: Any) -> dict[str, Any]:
         or not isinstance(commands, list)
         or not required_commands.issubset(commands)
     ):
-        raise DocumentError("core_incompatible", "context-core schema, protocol, feature, or required command handshake is incompatible", {"required_plugin": dict(REQUIRED_PLUGIN), "required_commands": sorted(required_commands)}, EXIT_CONFLICT)
+        raise DocumentError(
+            "core_incompatible",
+            "context-core schema, protocol, feature, or required command handshake is incompatible; choose a listed candidate and start a new session",
+            _core_failure_details(core_cli_value, required_plugin=dict(REQUIRED_PLUGIN), required_commands=sorted(required_commands)),
+            EXIT_CONFLICT,
+        )
     return value
 
 
@@ -391,6 +436,13 @@ def schema_result() -> dict[str, Any]:
         "authority": "authoritative",
         "owner_descriptor": owner_descriptor(),
         "features": [REQUIRED_FEATURE, "exact-rfc6901-claim-binding", "scope-document-key-slot", "stable-id-update"],
+        "workflow_surface": {
+            "entrypoint": "document_workflow.py",
+            "commands": ["preview", "apply"],
+            "preview_input_modes": ["inline"],
+            "preflight": "derived_from_verified_core_manifests_and_doctor",
+            "preview_state": "awaiting_approval",
+        },
         "physical_write": False,
     }
 

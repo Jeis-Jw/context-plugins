@@ -55,3 +55,5 @@ runtime 응답, 질문, preview와 설명형 안내는 active language를 따릅
 `0.9.0`에서 TERM은 `core-decision` 설치 profile 밖의 optional semantic-owner package이며 same-major core 호환성을 사용합니다. `v0.9.0` tag와 marketplace publication은 아직 완료되지 않았습니다.
 
 `0.10.0`은 six-plugin distribution version을 맞추며 TERM semantics와 저장 bytes는 변경하지 않습니다. tag나 publication을 의미하지 않습니다.
+
+`0.11.0`은 canonical inline preview/apply workflow와 진단용 호환 core 후보 안내를 추가합니다. TERM semantics와 저장 bytes는 변경하지 않으며 tag나 publication을 의미하지 않습니다.

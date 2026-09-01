@@ -19,6 +19,8 @@ Before suggesting capture, run preview and ask once in the active language with 
 Use `../context/scripts/context_cli.py observation ...`; context-core remains the only writer.
 
 ```bash
-python3 /loaded/context-core/skills/context/scripts/context_cli.py observation capture --title '<title>' --summary '<summary>' --captured-from workspace --attest-reusable-observation --attest-evidence-present --sec-observation '<claim>' --sec-evidence '<evidence>' --json
+python3 /loaded/context-core/skills/context/scripts/context_cli.py observation preview --title '<title>' --summary '<summary>' --captured-from workspace --attest-reusable-observation --attest-evidence-present --sec-observation '<claim>' --sec-evidence '<evidence>' --json
 python3 /loaded/context-core/skills/context/scripts/context_cli.py transaction apply --receipt-file '<agent-retained result.receipt_file>' --approved-digest '<agent-retained result.approval_digest>' --json
 ```
+
+`observation capture` remains a deprecated compatibility alias. Both preview names return `applied:false` and `state:"awaiting_approval"`; neither records an OBS before `transaction apply` succeeds.

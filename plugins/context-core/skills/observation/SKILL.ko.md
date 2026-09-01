@@ -17,6 +17,8 @@ OBS는 `authority: evidence`인 immutable semantic claim이다. DEC처럼 따를
 CLI는 `../context/scripts/context_cli.py observation ...`을 사용하고 물리 write는 context-core만 수행한다.
 
 ```bash
-python3 /loaded/context-core/skills/context/scripts/context_cli.py observation capture --title '<제목>' --summary '<요약>' --captured-from workspace --attest-reusable-observation --attest-evidence-present --sec-observation '<관찰>' --sec-evidence '<근거>' --json
+python3 /loaded/context-core/skills/context/scripts/context_cli.py observation preview --title '<제목>' --summary '<요약>' --captured-from workspace --attest-reusable-observation --attest-evidence-present --sec-observation '<관찰>' --sec-evidence '<근거>' --json
 python3 /loaded/context-core/skills/context/scripts/context_cli.py transaction apply --receipt-file '<agent가 유지한 result.receipt_file>' --approved-digest '<agent가 유지한 result.approval_digest>' --json
 ```
+
+`observation capture`는 deprecated compatibility alias로 유지한다. 두 preview 명령 모두 `applied:false`, `state:"awaiting_approval"`을 반환하며 `transaction apply`가 성공하기 전에는 OBS가 기록되지 않는다.

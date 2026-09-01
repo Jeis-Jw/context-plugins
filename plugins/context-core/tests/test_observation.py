@@ -138,8 +138,16 @@ class ObservationTests(unittest.TestCase):
             )
 
             self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
-            result = json.loads(preview.stdout)["result"]
-            self.assertEqual({"approval_preview", "approval_digest", "receipt_file"}, set(result))
+            response = json.loads(preview.stdout)
+            self.assertFalse(response["applied"])
+            self.assertEqual("awaiting_approval", response["state"])
+            result = response["result"]
+            self.assertEqual(
+                {"approval_preview", "approval_digest", "receipt_file", "applied", "state"},
+                set(result),
+            )
+            self.assertFalse(result["applied"])
+            self.assertEqual("awaiting_approval", result["state"])
             self.assertEqual(before, tree_digest(repo), "preview must be repository byte-noop")
             receipt_path = Path(result["receipt_file"])
             self.assertEqual((private_temp / "context-core").resolve(), receipt_path.parent)
@@ -187,6 +195,73 @@ class ObservationTests(unittest.TestCase):
                 if path.name != "observation.index.md"
             ]
             self.assertEqual(1, len(artifacts))
+
+    def test_preview_command_names_the_non_applied_state_explicitly(self) -> None:
+        self.assertEqual(
+            {
+                "ok": True,
+                "applied": False,
+                "state": "awaiting_approval",
+                "result": {"applied": False, "state": "awaiting_approval"},
+            },
+            context_cli.schema_result()["preview_success"],
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repository"
+            repo.mkdir()
+            initialize(repo)
+            completed = run_cli(
+                repo,
+                "observation", "preview",
+                "--title", "Preview state",
+                "--summary", "Preview does not imply storage.",
+                "--captured-from", "workspace",
+                "--attest-reusable-observation",
+                "--attest-evidence-present",
+                "--sec-observation", "Preview 응답만으로 미기록 상태를 판단할 수 있다.",
+                "--sec-evidence", "artifact 목록은 preview 직후 비어 있다.",
+                "--json",
+            )
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+            response = json.loads(completed.stdout)
+            self.assertFalse(response["applied"])
+            self.assertEqual("awaiting_approval", response["state"])
+            result = response["result"]
+            self.assertFalse(result["applied"])
+            self.assertEqual("awaiting_approval", result["state"])
+            artifacts = [
+                path
+                for path in (repo / "context/observation").glob("*.md")
+                if path.name != "observation.index.md"
+            ]
+            self.assertEqual([], artifacts)
+
+    def test_human_preview_warns_and_capture_help_marks_the_alias_deprecated(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repository"
+            repo.mkdir()
+            initialize(repo)
+            completed = run_cli(
+                repo,
+                "observation", "preview",
+                "--title", "Human preview state",
+                "--summary", "Human output must not imply storage.",
+                "--captured-from", "workspace",
+                "--attest-reusable-observation",
+                "--attest-evidence-present",
+                "--sec-observation", "Human output states that the observation is not recorded.",
+                "--sec-evidence", "The final output line names the required apply step.",
+            )
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+            self.assertTrue(
+                completed.stdout.rstrip().endswith(
+                    "Not recorded yet — approval and transaction apply are required."
+                )
+            )
+            alias_help = run_cli(repo, "observation", "capture", "--help")
+            self.assertEqual(0, alias_help.returncode, alias_help.stdout + alias_help.stderr)
+            self.assertIn("Deprecated alias", alias_help.stdout)
+            self.assertIn("does not record the OBS", alias_help.stdout)
 
     def test_attestation_file_and_observation_flags_are_mutually_exclusive(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

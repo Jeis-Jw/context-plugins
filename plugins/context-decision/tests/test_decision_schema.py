@@ -237,6 +237,17 @@ class DecisionSchemaTests(unittest.TestCase):
         )
         self.assertEqual("context-owner-descriptor/v1", decision_cli.build_init_plan()["owner_descriptor"]["schema"])
 
+    def test_comma_joined_typed_relation_explains_repeat_flag_contract(self) -> None:
+        value = candidate()
+        value["owner_inputs"]["decision"]["informed_by_observations"] = [
+            "ctx_550e8400e29b41d4a716446655440012,ctx_550e8400e29b41d4a716446655440013"
+        ]
+        with self.assertRaises(decision_cli.DecisionError) as caught:
+            decision_cli.validate_candidate(value)
+        self.assertEqual("candidate_invalid", caught.exception.code)
+        self.assertIn("repeat the flag", caught.exception.message)
+        self.assertEqual("--informed-by-observation", caught.exception.details["flag"])
+
     def test_removed_artifact_fields_are_readable_and_lazy_cleaned(self) -> None:
         content = claim_result()["artifact_drafts"][0]["content"]
         for field in ("claim_fingerprint", "source_claim_fingerprint"):
@@ -346,7 +357,7 @@ class DecisionSchemaTests(unittest.TestCase):
 
     def test_decision_owner_is_stdlib_only_and_has_no_write_primitive(self) -> None:
         module = ast.parse(CLI_PATH.read_text(encoding="utf-8"))
-        allowed = {"__future__", "argparse", "datetime", "hashlib", "json", "os", "pathlib", "re", "stat", "subprocess", "sys", "typing", "unicodedata", "uuid"}
+        allowed = {"__future__", "argparse", "datetime", "hashlib", "importlib", "json", "os", "pathlib", "re", "stat", "subprocess", "sys", "typing", "unicodedata", "uuid"}
         imported = set()
         banned_attributes = {"write_text", "write_bytes", "mkdir", "rename", "unlink", "rmdir", "touch"}
         seen_banned = set()

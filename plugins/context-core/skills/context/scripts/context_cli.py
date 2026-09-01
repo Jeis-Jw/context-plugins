@@ -2735,7 +2735,14 @@ def _bundle_result(repo: pathlib.Path, preview: dict[str, Any], plan: dict[str, 
     approval_material = {"vault_identity": vault_identity(repo), "preview": preview, "plan": plan}
     digest = canonical_digest(approval_material)
     bundle = {"schema": "context-mutation-bundle/v1", "approval_material": approval_material, "approval_digest": digest, "materials": materials}
-    return {"bundle": bundle, "approval_preview": preview, "approval_digest": digest, "applied": False, "noop": False}
+    return {
+        "bundle": bundle,
+        "approval_preview": preview,
+        "approval_digest": digest,
+        "applied": False,
+        "state": "awaiting_approval",
+        "noop": False,
+    }
 
 
 def _core_identity() -> dict[str, str]:
@@ -2958,6 +2965,8 @@ def freeze_bundle_receipt(
         "approval_preview": preview_result["approval_preview"],
         "approval_digest": _workflow_approval_digest(core, bundle),
         "receipt_file": str(path),
+        "applied": False,
+        "state": "awaiting_approval",
     }
 
 
@@ -6514,12 +6523,75 @@ def _doctor_self_report() -> dict[str, str]:
     return {"plugin_version": version, "entrypoint": str(entrypoint), "protocol": PROTOCOL}
 
 
+def _cached_core_release_warning(entrypoint: pathlib.Path) -> list[dict[str, Any]]:
+    """Compare the loaded catalog pin with exact sibling cache versions, without executing one."""
+
+    try:
+        resolved = entrypoint.resolve(strict=True)
+        plugin_root = resolved.parents[3]
+        container = plugin_root.parent if plugin_root.parent.name == "context-core" else plugin_root
+        roots = [plugin_root]
+        if container != plugin_root:
+            metadata = os.lstat(container)
+            if stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode):
+                roots.extend(
+                    child
+                    for child in container.iterdir()
+                    if not child.is_symlink() and child.is_dir()
+                )
+        candidates: list[tuple[tuple[int, int, int], str, pathlib.Path]] = []
+        for root in roots:
+            try:
+                versions: set[str] = set()
+                for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
+                    manifest_path = root / relative
+                    metadata = os.lstat(manifest_path)
+                    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                        raise OSError("unsafe manifest")
+                    manifest = _strict_json_loads(manifest_path.read_text(encoding="utf-8"))
+                    if not isinstance(manifest, dict) or manifest.get("name") != "context-core":
+                        raise OSError("invalid manifest identity")
+                    version = manifest.get("version")
+                    if not isinstance(version, str):
+                        raise OSError("invalid manifest version")
+                    versions.add(version)
+                if len(versions) != 1:
+                    continue
+                version = versions.pop()
+                match = re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version)
+                candidate_entrypoint = root / "skills/context/scripts/context_cli.py"
+                if match is None or candidate_entrypoint.is_symlink() or not candidate_entrypoint.is_file():
+                    continue
+                candidates.append((tuple(int(part) for part in match.groups()), version, candidate_entrypoint.resolve(strict=True)))
+            except (OSError, RuntimeError, UnicodeError, json.JSONDecodeError, ContextError):
+                continue
+        loaded = next((item for item in candidates if item[2] == resolved), None)
+        if loaded is None or not candidates:
+            return []
+        compatible = [item for item in candidates if item[0][0] == loaded[0][0]]
+        latest = max(compatible, key=lambda item: (item[0], str(item[2])))
+        if latest[0] <= loaded[0]:
+            return []
+        return [{
+            "code": "catalog_pin_behind_cache",
+            "plugin": "context-core",
+            "catalog_version": loaded[1],
+            "cache_latest_version": latest[1],
+            "compatible_candidate": str(latest[2]),
+            "compatibility_basis": "same-major manifests and public entrypoint layout; runtime handshake required",
+            "candidate_policy": "diagnostic_only_no_automatic_substitution",
+        }]
+    except (OSError, RuntimeError, UnicodeError, json.JSONDecodeError, ContextError):
+        return []
+
+
 def _doctor_result(
     repository_state: str,
     *,
     issues: list[dict[str, Any]] | None = None,
     warnings: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    release_warnings = _cached_core_release_warning(pathlib.Path(__file__))
     return {
         "schema": "context-core-doctor/v1",
         "owner": "context-core",
@@ -6527,7 +6599,7 @@ def _doctor_result(
         "repository_state": repository_state,
         "root": "context/",
         "issues": issues or [],
-        "warnings": warnings or [],
+        "warnings": [*(warnings or []), *release_warnings],
         **_doctor_self_report(),
     }
 
@@ -6553,14 +6625,20 @@ def doctor_repository(repo: pathlib.Path) -> dict[str, Any]:
 def schema_result() -> dict[str, Any]:
     return {
         "schema": "context-core-schema/v1", "protocol": PROTOCOL, "storage_root": "context/", "root_override": True,
-        "features": ["context-owner-descriptor/v2", "filesystem-vault/v1", "typed-relations/v1"],
+        "features": ["context-owner-descriptor/v2", "filesystem-vault/v1", "typed-relations/v1", "owner-inline-workflow/v1"],
         "id": "ctx_<lowercase-uuidv4-hex>", "json_success": {"ok": True, "result": {}},
+        "preview_success": {
+            "ok": True,
+            "applied": False,
+            "state": "awaiting_approval",
+            "result": {"applied": False, "state": "awaiting_approval"},
+        },
         "json_error": {"ok": False, "error": {"code": "string", "message": "string", "details": {}}},
         "exit_codes": {"usage_schema_filename": 2, "not_found": 3, "conflict": 5, "integrity_index": 6},
         "commands": [
             "schema", "capabilities", "doctor", "init", "bootstrap", "draft", "lifecycle prepare", "area register",
             "transaction preview", "transaction apply", "recall", "snapshot save/update/list/search/load/discard",
-            "observation capture/read/search/annotate/reverify/invalidate/supersede/discard", "rename", "discard", "refresh",
+            "observation preview/capture/read/search/annotate/reverify/invalidate/supersede/discard", "rename", "discard", "refresh",
         ],
         "receipt": {
             "schema": CORE_RECEIPT_SCHEMA,
@@ -6913,25 +6991,33 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--json", action="store_true")
     observation = sub.add_parser("observation")
     observation_sub = observation.add_subparsers(dest="observation_command", required=True)
-    observation_capture = observation_sub.add_parser("capture")
-    observation_capture.add_argument("--title", required=True)
-    observation_capture.add_argument("--summary", required=True)
-    observation_capture.add_argument("--filename")
-    observation_capture.add_argument("--captured-from", choices=("conversation", "workspace", "manual", "import"), required=True)
-    observation_capture.add_argument("--attestation")
-    observation_capture.add_argument("--attest-reusable-observation", action="store_true")
-    observation_capture.add_argument("--attest-evidence-present", action="store_true")
-    observation_capture.add_argument("--receipt-file")
-    observation_capture.add_argument("--sec-observation", required=True)
-    observation_capture.add_argument("--sec-evidence", required=True)
-    observation_capture.add_argument("--sec-impact")
-    observation_capture.add_argument("--sec-handling")
-    observation_capture.add_argument("--sec-followup")
-    observation_capture.add_argument("--kind-hint", choices=("decision",))
-    observation_capture.add_argument("--source-ref", action="append", default=[])
-    observation_capture.add_argument("--tag", action="append", default=[])
-    observation_capture.add_argument("--search-term", action="append", default=[])
-    observation_capture.add_argument("--json", action="store_true")
+    for command_name, command_help in (
+        ("preview", "Build and freeze an OBS approval preview without recording it."),
+        ("capture", "Deprecated alias for 'observation preview'; does not record the OBS."),
+    ):
+        observation_preview = observation_sub.add_parser(
+            command_name,
+            help=command_help,
+            description=command_help,
+        )
+        observation_preview.add_argument("--title", required=True)
+        observation_preview.add_argument("--summary", required=True)
+        observation_preview.add_argument("--filename")
+        observation_preview.add_argument("--captured-from", choices=("conversation", "workspace", "manual", "import"), required=True)
+        observation_preview.add_argument("--attestation")
+        observation_preview.add_argument("--attest-reusable-observation", action="store_true")
+        observation_preview.add_argument("--attest-evidence-present", action="store_true")
+        observation_preview.add_argument("--receipt-file")
+        observation_preview.add_argument("--sec-observation", required=True)
+        observation_preview.add_argument("--sec-evidence", required=True)
+        observation_preview.add_argument("--sec-impact")
+        observation_preview.add_argument("--sec-handling")
+        observation_preview.add_argument("--sec-followup")
+        observation_preview.add_argument("--kind-hint", choices=("decision",))
+        observation_preview.add_argument("--source-ref", action="append", default=[])
+        observation_preview.add_argument("--tag", action="append", default=[])
+        observation_preview.add_argument("--search-term", action="append", default=[])
+        observation_preview.add_argument("--json", action="store_true")
     observation_read = observation_sub.add_parser("read")
     observation_read.add_argument("--id", required=True)
     observation_read.add_argument("--section", action="append", default=[])
@@ -7108,7 +7194,7 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 args.receipt_file,
             )
     if args.command == "observation":
-        if args.observation_command == "capture":
+        if args.observation_command in {"preview", "capture"}:
             owner_inputs = {
                 "observation": _load_body_argument(args.sec_observation),
                 "evidence": _body_to_items(args.sec_evidence),
@@ -7200,7 +7286,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         args = parser.parse_args(argv)
         result = _dispatch(args)
         envelope = {"ok": True, "result": result}
-        print(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")) if getattr(args, "json", False) else json.dumps(result, ensure_ascii=False, indent=2))
+        if result.get("state") == "awaiting_approval" and result.get("applied") is False:
+            envelope.update({"applied": False, "state": "awaiting_approval"})
+        if getattr(args, "json", False):
+            print(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")))
+        else:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            if result.get("state") == "awaiting_approval" and result.get("applied") is False:
+                print("Not recorded yet — approval and transaction apply are required.")
         return 0
     except ContextError as error:
         print(json.dumps(error.envelope(), ensure_ascii=False, separators=(",", ":")), file=sys.stdout)

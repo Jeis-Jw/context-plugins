@@ -8,7 +8,7 @@ Run the root `core-decision` profile installer once from the downloaded plugin f
 
 For a core-only setup, `$context-core:init` remains available. It creates the canonical root, SNAP and OBS indexes and the active host policy. Re-running init after a ready result is a filesystem no-op.
 
-The `v0.10.0` tag is not published yet. See the repository root README for the owner-gated tag, publication, and license status.
+The `v0.11.0` tag is not published yet. See the repository root README for the owner-gated tag, publication, and license status.
 
 ## Runtime contract
 
@@ -59,5 +59,7 @@ Markdown artifacts are canonical; `context.index.md` and area indexes are determ
 Version `0.9.0` uses major versions as the package compatibility boundary, minor versions for functional changes, and patch versions for small fixes. Protocol and capability handshakes remain authoritative even for same-major packages.
 
 Version `0.10.0` adds typed relation validation and optional INTENT/DOCUMENT owner registration surfaces without changing the filesystem-vault or approval model. No tag or publication is implied.
+
+Version `0.11.0` makes OBS preview state explicit, provides the shared inline owner workflow transport, and adds a diagnostic same-major cache-pin warning without changing approval or stored artifact bytes. No tag or publication is implied.
 
 See the [storage protocol](./skills/context/references/context-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).

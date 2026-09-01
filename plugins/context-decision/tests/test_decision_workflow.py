@@ -70,6 +70,14 @@ def vault_identity(repo: Path) -> dict:
 
 
 class DecisionWorkflowTests(unittest.TestCase):
+    def test_preview_help_distinguishes_date_condition_and_repeated_relation_flags(self) -> None:
+        completed = run(ROOT, WORKFLOW, "preview", "--help")
+        self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+        help_text = " ".join(completed.stdout.split())
+        self.assertIn("Calendar date only (YYYY-MM-DD)", help_text)
+        self.assertIn("condition text: --sec-revisit", help_text)
+        self.assertIn("repeat the flag for multiple ids", help_text)
+
     def _workflow_environment(self, root: Path) -> tuple[dict[str, str], Path]:
         temp_root = root / "private-temp"
         temp_root.mkdir(mode=0o700)

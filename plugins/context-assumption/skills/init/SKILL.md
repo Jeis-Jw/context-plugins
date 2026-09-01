@@ -21,7 +21,7 @@ python3 "${INIT_SKILL_FILE%/SKILL.md}/scripts/assumption_init.py" \
   --json
 ```
 
-The ASM adapter has no write primitive beyond temporary descriptor and seed transport. It passes `absent|partial|invalid|ready` to the verified core; a mismatch produces zero subprocess, receipt, or repository writes.
+The ASM adapter has no write primitive beyond temporary descriptor and seed transport. It passes `absent|partial|invalid|ready` to the verified core; a mismatch produces zero subprocess, receipt, or repository writes. Listed manifest-validated sibling core paths are diagnostic only; never substitute or execute one automatically, and start a new session after an explicit choice.
 
 Follow context-core's active-language contract. An explicit user language choice wins; otherwise use the host preference, then established conversation language, then English. OS locale is not authoritative. Use the active language for user-facing setup guidance and explanatory errors; keep machine-readable surfaces in English.
 

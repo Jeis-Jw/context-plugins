@@ -19,7 +19,7 @@ DEC is standalone; Intent is optional. Typed inputs are `serves:intent`, `inform
 
 ## Capture
 
-Run sibling `scripts/decision_workflow.py preview --inline` with semantic fields and three `--attest-*` judgments. Candidate ID and `captured_from:conversation` are automatic. Use sibling Core CLI; never scan caches. Do not pre-run host inventory or core doctor: preview handles them. Call documented entrypoints; inspect script source only after an unexplained interface failure.
+Run sibling `scripts/decision_workflow.py preview --inline` with semantic fields and three `--attest-*` judgments. Candidate ID and capture source are automatic. Do not pre-run host inventory or core doctor. Failure candidate paths are diagnostic only; never auto-execute or substitute. Call documented entrypoints; inspect script source only after an unexplained interface failure.
 
 Preview creates one private frozen receipt. Ask once in the active language with the complete rendered body. Keep preview stdout's `approval_digest` in session and pass it unchanged; never expose or request the digest, receipt path, internal ID, core path, or other transport details. Approval is semantic and language-independent: only a direct, explicit, unconditional affirmative to that specific capture question qualifies. Acknowledgement, praise, a condition, edit request, or topic change does not. Confirm ambiguity once; never regenerate after approval.
 
