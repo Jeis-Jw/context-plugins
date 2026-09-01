@@ -17,10 +17,10 @@ This skill is the `context-document/v1` semantic owner and never writes vault by
 - Do not add taxonomy, subtypes, supersede lifecycle, backlink indexes, or inverse relations.
 - Treat each slot as one default-read budget. Split a larger design into stable chapter slots such as `design-skeleton`, `design-envelope`, and `design-rules`; do not enlarge one slot.
 
-Only context-core may preview, approve, lock, CAS, or persist a result. Present the complete rendered body when asking for approval and never regenerate it after approval.
+Only context-core may prepare, lock, CAS, or persist a result. Semantic approval happens in the conversation; never regenerate approved meaning.
 
 The canonical capture path is sibling `scripts/document_workflow.py preview --host <host> --core-cli <loaded-core-cli> --inline ...`, followed after approval by its `apply` command. The wrapper derives verified manifest inventory and doctor state directly; do not create candidate, attestation, inventory, or doctor JSON files manually. Retain its `receipt_file` and `approval_digest` only in agent state.
 
-Follow context-core's active language contract for user-facing text and keep machine fields English. Before suggesting capture or update, run preview and ask once with the complete rendered body. Pass preview stdout's `approval_digest` unchanged to apply, but never expose or request it, a receipt path, an internal ID, or a core path. Approval requires a direct, explicit, unconditional answer to that specific capture question. A generic acknowledgement, condition, edit request, or topic change is not approval. Never regenerate content or plan after approval.
+Follow context-core's active language contract for user-facing text and keep machine fields English. A direct, explicit, unconditional user statement that settles the document payload, scope, and lifecycle effect is semantic approval. Ask only about unresolved meaning; a generic acknowledgement, condition, edit request, or topic change is not approval. Do not show the rendered file body or ask a second storage question. After approval, run internal preview, verify no semantic delta, and pass stdout's `approval_digest` unchanged to apply in the same response. Keep the digest, receipt path, internal ID, and core path private. If a delta appears, hold the write and confirm only that delta. Never regenerate after approval.
 
 See [document-protocol.md](references/document-protocol.md).

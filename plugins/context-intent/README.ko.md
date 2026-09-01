@@ -24,3 +24,5 @@ semantic CLI는 canonical area를 읽고 draft와 validation receipt만 만듭�
 `0.10.0`은 developer preview이며 tag나 marketplace publication을 의미하지 않습니다.
 
 `0.11.0`은 단일 inline preview와 승인 후 apply 경로, 진단용 호환 core 후보 안내를 추가합니다. tag나 marketplace publication을 의미하지 않습니다.
+
+`0.12.0`은 확정된 semantic content를 capture 승인으로 사용하며 rendered-file review와 별도 저장 질문을 제거합니다. 내부 preview/apply integrity는 유지하고 저장 INTENT bytes는 migration이 필요 없습니다. tag나 marketplace publication을 의미하지 않습니다.

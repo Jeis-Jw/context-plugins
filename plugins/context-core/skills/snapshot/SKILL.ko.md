@@ -12,7 +12,7 @@ SNAP은 `authority: staging`인 mutable resume context다. 결정·관찰의 권
 3. `update`는 기본 full replacement이고 일부만 바꿀 때만 `--merge`다. `load.freshness`는 warning일 뿐이다.
 4. `discard`는 SNAP 하나를 대상으로 한다. archive/history/retired 상태는 없다.
 
-기록 제안 전에 preview를 실행하고 완성된 렌더링 본문과 함께 한 번만 묻는다. receipt 경로와 `approval_digest`는 agent state에만 보존해 apply에 그대로 전달한다. receipt self-digest는 승인 근거가 아니며 directory scan도 하지 않는다. digest·receipt 경로·ID·core 경로를 사용자에게 보이거나 요구하지 않는다. capture 질문에 대한 직접적·명시적·무조건적 긍정만 승인이다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니며 승인 뒤 candidate·timestamp·content·plan을 재생성하지 않는다. 성공 시 receipt를 지우고 cleanup-only warning이면 이미 기록됐으므로 재시도하지 않는다.
+사용자가 snapshot content와 scope를 직접적·명시적·무조건적으로 확정해 handoff를 요청하면 semantic approval로 본다. 의미가 미확정일 때만 짧은 의미 질문을 한 번 하며, 단순 확인·칭찬·조건·수정 요청·화제 전환은 승인이 아니다. 저장 파일의 렌더링 본문을 보여주거나 별도 저장 승인을 묻지 않는다. 승인 뒤 내부 preview가 semantic delta를 추가하지 않는지 확인하고 receipt 경로와 `approval_digest`를 그대로 같은 응답의 apply에 전달한다. transport detail은 비공개로 유지한다. delta가 있으면 write를 보류하고 그 차이만 다시 확인한다. 승인 뒤 candidate·timestamp·content·plan을 재생성하지 않는다. receipt self-digest는 손상 검사일 뿐 승인 근거가 아니며 directory scan도 하지 않는다. 성공 시 receipt를 지우고 cleanup-only warning이면 이미 기록됐으므로 재시도하지 않는다.
 
 CLI는 `../context/scripts/context_cli.py snapshot ...`을 사용한다. preview는 write 0이고 context-core의 ID/path, vault identity, CAS, lock, atomic-write guard를 유지한다.
 

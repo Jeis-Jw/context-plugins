@@ -53,7 +53,7 @@ class PluginContractTests(unittest.TestCase):
                     doctor = context_cli.doctor_repository(repo)
                     self.assertEqual(expected_fields, set(doctor))
                     self.assertEqual(expected_state, doctor["repository_state"])
-                    self.assertEqual("0.12.0", doctor["plugin_version"])
+                    self.assertEqual("0.13.0", doctor["plugin_version"])
                     self.assertEqual(str(CLI_PATH.resolve()), doctor["entrypoint"])
                     self.assertEqual(context_cli.PROTOCOL, doctor["protocol"])
                     self.assertEqual([context_cli.PROTOCOL], doctor["supported_protocols"])
@@ -80,9 +80,11 @@ class PluginContractTests(unittest.TestCase):
             "machine-readable surfaces in canonical English",
             "Audit each user turn's new meaning once",
             "actual bodies, scope, and rationale",
-            "complete rendered body",
-            "direct, explicit, unconditional affirmative answer",
+            "rendered storage body",
+            "direct, explicit, unconditional semantic approval",
             "generic acknowledgement, praise, condition, edit request, or topic change",
+            "semantic delta",
+            "same response",
             "never regenerate after approval",
         ):
             self.assertIn(contract, policy)

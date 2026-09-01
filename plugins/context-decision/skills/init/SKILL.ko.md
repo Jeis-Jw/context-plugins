@@ -22,4 +22,4 @@ Claude Code는 host가 준 `${CLAUDE_PLUGIN_ROOT}`만 optional route로 쓰고 C
 
 Core만 `core_init|area_register|policy_install`을 적용하고 managed block 밖 byte를 보존하며 retry를 수렴시킨다.
 
-일반 durable capture는 별도다. 기록 제안 전에 preview를 실행하고 완성된 렌더링 본문과 함께 한 번만 묻는다. preview stdout의 `approval_digest`는 agent가 그대로 apply에 전달하되 digest·receipt 경로·내부 ID·core 경로를 사용자에게 보이거나 요구하지 않는다. capture 질문에 대한 직접적·명시적·무조건적 긍정만 승인이다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니며 승인 뒤 content·plan을 재생성하지 않는다.
+일반 durable capture는 rendered-file review가 아니라 semantic approval을 사용한다. 사용자가 decision·scope·lifecycle effect를 직접적·명시적·무조건적으로 확정하면 capture를 승인한 것이며, 미확정 의미만 묻는다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니다. 저장 본문을 보여주거나 별도 저장 승인을 묻지 않는다. 승인 뒤 내부 preview와 unchanged apply를 같은 응답에서 실행하고 digest·receipt 경로·내부 ID·core 경로는 비공개로 유지한다. preview에서 semantic delta가 드러나면 write를 보류하고 그 차이만 다시 확인한다. 승인 뒤 재생성하지 않는다.

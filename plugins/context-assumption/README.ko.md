@@ -56,3 +56,5 @@ runtime 응답, 질문, preview와 설명형 안내는 active language를 따릅
 `0.10.0`은 six-plugin distribution version을 맞추며 ASM semantics와 저장 bytes는 변경하지 않습니다. tag나 publication을 의미하지 않습니다.
 
 `0.11.0`은 canonical inline preview/apply workflow와 진단용 호환 core 후보 안내를 추가합니다. ASM semantics와 저장 bytes는 변경하지 않으며 tag나 publication을 의미하지 않습니다.
+
+`0.12.0`은 확정된 semantic content를 capture 승인으로 사용하며 rendered-file review와 별도 저장 질문을 제거합니다. 내부 preview/apply integrity는 유지하고 저장 ASM bytes는 migration이 필요 없습니다. tag나 publication을 의미하지 않습니다.

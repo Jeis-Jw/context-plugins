@@ -121,19 +121,19 @@ class BehaviorContractParityTests(unittest.TestCase):
     def test_hold_keep_supersede_and_revisit_boundaries_reach_every_surface(self) -> None:
         self.assert_all(
             CORE_EN,
-            ("hold the affected action", "keep means", "not performed", "supersede", "explicit choice", "reassessment, not implementation", "separate approval"),
+            ("hold the affected action", "keep means", "not performed", "supersede", "explicit choice", "reassessment, not implementation", "decision payload", "storage"),
         )
         self.assert_all(
             CORE_KO,
-            ("행동을 보류", "keep이면 수행하지", "supersede", "명시적 선택 뒤에만", "재평가 권한", "구현 권한", "승인은 별도"),
+            ("행동을 보류", "keep이면 수행하지", "supersede", "명시적 선택 뒤에만", "재평가 권한", "구현 권한", "decision payload", "저장"),
         )
         self.assert_all(
             DECISION_EN,
-            ("hold", "keep means", "not performed", "supersede", "explicit choice", "reassessment, not implementation", "separate approval"),
+            ("hold", "keep means", "not performed", "supersede", "explicit choice", "reassessment, not implementation", "decision payload", "second storage"),
         )
         self.assert_all(
             DECISION_KO,
-            ("보류", "keep이면 수행하지", "supersede", "명시적 선택 뒤에만", "재평가 권한", "구현 권한", "승인은 별도"),
+            ("보류", "keep이면 수행하지", "supersede", "명시적 선택 뒤에만", "재평가 권한", "구현 권한", "decision payload", "별도 저장"),
         )
         decision_prompt = prompts("context-decision")
         for marker in (
@@ -143,8 +143,9 @@ class BehaviorContractParityTests(unittest.TestCase):
             "Action≠evidence",
             "unrelated→no evidence",
             "relevant partial→ambiguous",
-            "Durable write needs explicit approval",
-            "transport details private",
+            "Explicit choice authorizes capture",
+            "no second storage question",
+            "transport private",
         ):
             self.assertIn(marker, decision_prompt)
 
@@ -207,16 +208,18 @@ class BehaviorContractParityTests(unittest.TestCase):
                 with self.subTest(surface=relative, marker=marker):
                     self.assertIn(marker, body)
 
-    def test_approval_write_and_transport_boundaries_remain_separate(self) -> None:
+    def test_semantic_approval_and_transport_integrity_remain_separate(self) -> None:
         for relative in (
             "plugins/context-core/skills/context/SKILL.md",
             "plugins/context-decision/skills/decision/SKILL.md",
             "plugins/context-decision/rules/decision-policy.md",
         ):
             body = read(relative)
-            for marker in ("approval_digest", "unchanged", "never expose or request"):
+            for marker in ("approval_digest", "unchanged", "semantic delta", "same response"):
                 with self.subTest(surface=relative, marker=marker):
                     self.assertIn(marker, body)
+            self.assertNotIn("complete rendered body", body)
+            self.assertNotIn("specific capture question", body)
         self.assertIn("Core alone owns final validation and writes", read("plugins/context-decision/skills/decision/SKILL.md"))
 
 

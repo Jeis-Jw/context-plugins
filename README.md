@@ -2,7 +2,7 @@
 
 [한국어](./README.ko.md)
 
-Context Plugins gives AI coding agents a small, project-owned memory. It keeps important decisions and useful context with your project, recalls them when they matter, and asks before saving anything.
+Context Plugins gives AI coding agents a small, project-owned memory. It keeps important decisions and useful context with your project, recalls them when they matter, and saves only meaning you explicitly settle or ask it to remember.
 
 ## What is it?
 
@@ -17,7 +17,7 @@ AI coding agents are helpful, but a new conversation may forget why your project
 
 Saved context is plain Markdown inside a filesystem vault’s `context/` folder. It can be reviewed and edited directly, then shared through any file-sharing or version-control workflow you already use. Git is optional and is never a runtime requirement.
 
-Context Plugins does not automatically save your entire conversation. When the agent finds something worth keeping, it shows you a preview and asks first.
+Context Plugins does not automatically save your entire conversation. When the meaning, scope, or lifecycle effect is unresolved, the agent asks about that semantic detail; it does not show the storage file as an approval preview.
 
 ## Why use it?
 
@@ -25,7 +25,7 @@ Context Plugins does not automatically save your entire conversation. When the a
 - Stop rejected ideas from returning as if they were new.
 - Let the agent warn you before new work conflicts with an existing decision.
 - Keep useful results and unfinished-work notes with the project instead of in one chat window.
-- Stay in control: nothing is permanently saved until you approve the preview.
+- Stay in control: only content you explicitly settle or ask the agent to remember is permanently saved.
 
 ## Install
 
@@ -96,13 +96,14 @@ You do not need special commands for everyday use. For example:
 - “Save this deployment result so another session can use it later.”
 - “Save where we stopped and what should be done next.”
 
-### 3. Review before saving
+### 3. Confirm the meaning
 
-When something is worth keeping, the agent shows the complete proposed content and asks whether to save it.
+You approve the substance in the conversation, not a generated Markdown file.
 
-- Only a clear, direct approval of that preview saves it.
-- If something is wrong, ask the agent to edit the preview.
-- A simple acknowledgment does not save anything.
+- A clear decision or explicit request to remember settled content authorizes saving it; there is no second document-preview question.
+- If meaning, scope, or replacement effect is unclear, the agent asks only about that unresolved point.
+- A simple acknowledgment does not approve unresolved content.
+- After saving, the agent reports the result without showing the storage document.
 
 ### 4. Continue in a later conversation
 

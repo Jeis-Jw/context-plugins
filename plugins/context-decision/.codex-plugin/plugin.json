@@ -1,6 +1,6 @@
 {
   "name": "context-decision",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Decision continuity with actual-body comparison, proactive conflict notices, and approval-gated capture.",
   "author": {
     "name": "Jinwuk-Lee",
@@ -20,7 +20,7 @@
     "defaultPrompt": [
       "One check; quote/reuse actual sections; no reread; hold; ask keep=not done/supersede",
       "Say satisfied|no evidence|ambiguous. Action≠evidence; unrelated→no evidence; relevant partial→ambiguous",
-      "Use active language; machine fields English. Durable write needs explicit approval; transport details private"
+      "Use active language; machine fields English. Explicit choice authorizes capture; no second storage question; transport private"
     ]
   }
 }

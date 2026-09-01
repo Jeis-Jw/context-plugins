@@ -1,6 +1,6 @@
 # context-core
 
-`context-core` is the filesystem/Markdown storage and recall kernel for durable project context. It owns SNAP handoffs, OBS evidence, deterministic indexes, approval previews, and every physical context write.
+`context-core` is the filesystem/Markdown storage and recall kernel for durable project context. It owns SNAP handoffs, OBS evidence, deterministic indexes, internal frozen plans, and every physical context write.
 
 ## Supported developer-preview path
 
@@ -8,7 +8,7 @@ Run the root `core-decision` profile installer once from the downloaded plugin f
 
 For a core-only setup, `$context-core:init` remains available. It creates the canonical root, SNAP, OBS, and ARCHIVE indexes and the active host policy. Re-running init after a ready result is a filesystem no-op; a pre-ARCHIVE vault receives only the missing empty ARCHIVE area.
 
-The `v0.12.0` tag is not published yet. See the repository root README for the owner-gated tag, publication, and license status.
+The `v0.13.0` tag is not published yet. See the repository root README for the owner-gated tag, publication, and license status.
 
 ## Runtime contract
 
@@ -33,11 +33,11 @@ The managed policy audits only the new semantic delta in the current response pa
 - Limits are default-read budgets: expand knowledge with more stable slots, not larger slots. ARCHIVE is the explicit exception for immutable source material: `Content` is at most 65,000 codepoints, its capture envelope is bounded to 512 KiB, and it is excluded from default recall/pack unless `--include-archive` is present.
 - These hard bounds cover body materialization/open, selected output, candidates/envelopes, and owner invocation input. Index scoring and directory enumeration may grow with the index, and end-to-end model tokens are not O(1).
 
-## Approval and vault binding
+## Semantic approval and vault binding
 
-The user sees the complete rendered preview and one natural-language capture question. A write is allowed only after a direct, explicit, unconditional affirmative answer. `알겠어` alone, a condition, an edit request, or a topic change is not approval; ambiguous praise is confirmed once.
+The user confirms the semantic payload, scope, and lifecycle effect in normal conversation. A direct, explicit, unconditional decision or record request authorizes capture without showing the rendered Markdown or asking a second storage question. If meaning remains unresolved, the agent asks only about that delta. `알겠어` alone, praise, a condition, an edit request, or a topic change is not approval of unresolved content.
 
-Transport details remain internal to the agent. Preview freezes on-disk preconditions, derived index bytes, owner authorization, and operations before the question; apply never regenerates them. Vault identity, pinned runtime, CAS, the vault-realpath lock, atomic operations, and deterministic index rebuild remain enforced. Replay in a copied or moved vault, same-path directory recreation, tampering, and changed target bytes fail before writes.
+Transport details remain internal to the agent. After semantic approval, internal preview freezes on-disk preconditions, derived index bytes, owner authorization, and operations; the agent verifies that rendering adds no semantic delta and applies the unchanged material in the same response. Vault identity, pinned runtime, CAS, the vault-realpath lock, atomic operations, and deterministic index rebuild remain enforced. Replay in a copied or moved vault, same-path directory recreation, tampering, and changed target bytes fail before writes.
 
 A denied apply, preview, recall, route, claim, or validation has zero repository and host-policy writes.
 
@@ -65,5 +65,7 @@ Version `0.10.0` adds typed relation validation and optional INTENT/DOCUMENT own
 Version `0.11.0` makes OBS preview state explicit, provides the shared inline owner workflow transport, and adds a diagnostic same-major cache-pin warning without changing approval or stored artifact bytes. No tag or publication is implied.
 
 Version `0.12.0` adds immutable ARCHIVE capture/read/search/discard, bounded OBS-to-context evidence references, and DOCUMENT freshness hygiene diagnostics while preserving the approval and filesystem-vault boundaries. No tag or publication is implied.
+
+Version `0.13.0` makes settled semantic payload, scope, and lifecycle effect the capture approval. Rendered Markdown remains an internal integrity step and is not shown as a second approval surface. Stored artifact bytes and `context-common/v2` require no migration. No tag or publication is implied.
 
 See the [storage protocol](./skills/context/references/context-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).

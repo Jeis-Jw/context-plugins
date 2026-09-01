@@ -53,11 +53,16 @@ class ActiveLanguageContractTests(unittest.TestCase):
             self.assertTrue(active_language.signal_may_switch_language(signal))
 
     def test_approval_gate_is_semantic_and_language_independent(self) -> None:
-        explicit_answers = ("Yes, save this exact preview.", "네, 이 미리보기 그대로 저장해 주세요.")
-        for answer in explicit_answers:
-            with self.subTest(answer=answer):
+        explicit_decisions = (
+            "Use Supabase for authentication and storage; this is the decision.",
+            "인증과 저장소는 Supabase를 쓰는 것으로 결정해.",
+        )
+        for decision in explicit_decisions:
+            with self.subTest(decision=decision):
                 self.assertTrue(active_language.qualifies_as_capture_approval(
-                    answers_specific_capture_question=True,
+                    semantic_payload_confirmed=True,
+                    scope_identified=True,
+                    lifecycle_effects_identified=True,
                     direct=True,
                     explicit=True,
                     unconditional=True,
@@ -74,13 +79,33 @@ class ActiveLanguageContractTests(unittest.TestCase):
         )
         for answer, override in rejected:
             inputs = {
-                "answers_specific_capture_question": True,
+                "semantic_payload_confirmed": True,
+                "scope_identified": True,
+                "lifecycle_effects_identified": True,
                 "direct": True,
                 "explicit": True,
                 "unconditional": True,
                 **override,
             }
             with self.subTest(answer=answer):
+                self.assertFalse(active_language.qualifies_as_capture_approval(**inputs))
+
+        for unresolved in (
+            {"semantic_payload_confirmed": False},
+            {"scope_identified": False},
+            {"lifecycle_effects_identified": False},
+            {"semantic_delta": True},
+        ):
+            inputs = {
+                "semantic_payload_confirmed": True,
+                "scope_identified": True,
+                "lifecycle_effects_identified": True,
+                "direct": True,
+                "explicit": True,
+                "unconditional": True,
+                **unresolved,
+            }
+            with self.subTest(unresolved=unresolved):
                 self.assertFalse(active_language.qualifies_as_capture_approval(**inputs))
 
     def test_canonical_runtime_sources_are_english_and_share_one_contract(self) -> None:

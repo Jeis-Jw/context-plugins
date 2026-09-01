@@ -26,14 +26,14 @@ PLUGIN_NAMES = (
     "context-intent",
     "context-document",
 )
-RELEASE_SET_VERSION = "0.12.0"
+RELEASE_SET_VERSION = "0.13.0"
 PLUGIN_VERSIONS = {
-    "context-core": "0.12.0",
-    "context-decision": "0.11.0",
-    "context-assumption": "0.11.0",
-    "context-term": "0.11.0",
-    "context-intent": "0.11.0",
-    "context-document": "0.12.0",
+    "context-core": "0.13.0",
+    "context-decision": "0.12.0",
+    "context-assumption": "0.12.0",
+    "context-term": "0.12.0",
+    "context-intent": "0.12.0",
+    "context-document": "0.13.0",
 }
 OWNER_SKILLS = {
     "context-core": "context",
@@ -369,8 +369,8 @@ class DistributionProofTests(unittest.TestCase):
         for token in ("context-common/v2", "partial/invalid/ready", "scan caches", "managed block"):
             self.assertIn(token, init_skill)
         for token in (
-            "actual", "conflict", "complete rendered", "preview stdout", "Core alone owns",
-            "active language", "semantic and language-independent",
+            "actual", "conflict", "semantic approval", "preview", "Core alone owns",
+            "active language", "second capture question", "same response",
         ):
             self.assertIn(token, decision_skill)
         for name in PLUGIN_NAMES[1:]:
@@ -516,7 +516,7 @@ class DistributionProofTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden_command, all_python)
 
-    def test_natural_language_approval_and_active_language_contract_are_consistent(self) -> None:
+    def test_semantic_approval_and_active_language_contract_are_consistent(self) -> None:
         skill_paths = sorted(ROOT.glob("plugins/*/skills/*/SKILL*.md"))
         canonical_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.md"))
         translated_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.ko.md"))
@@ -528,12 +528,16 @@ class DistributionProofTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertIn("`approval_digest`", text, path)
             self.assertIn("direct, explicit, unconditional", text, path)
-            self.assertIn("specific capture question", text, path)
-            self.assertIn("complete rendered body", text, path)
-            self.assertIn("receipt path", text, path)
+            self.assertIn("semantic", text.casefold(), path)
+            self.assertIn("storage question", text.casefold(), path)
+            self.assertIn("internal preview", text.casefold(), path)
+            self.assertIn("semantic delta", text.casefold(), path)
+            self.assertIn("same response", text.casefold(), path)
             self.assertIn("topic change", text, path)
             self.assertIn("regenerate", text, path)
             self.assertIn("active language", text.casefold(), path)
+            self.assertNotIn("complete rendered body", text.casefold(), path)
+            self.assertNotIn("specific capture question", text.casefold(), path)
             self.assertIsNone(re.search(r"[가-힣]", text), path)
 
         readmes = (
@@ -563,9 +567,9 @@ class DistributionProofTests(unittest.TestCase):
             self.assertNotIn("Delete the receipt manually", text, path)
             self.assertNotIn("사용자가 직접 삭제", text, path)
             if path == ROOT / "README.md":
-                self.assertIn("clear, direct approval of that preview", text)
+                self.assertIn("there is no second document-preview question", text)
             elif path == ROOT / "README.ko.md":
-                self.assertIn("방금 확인한 내용의 저장을 분명하게 승인", text)
+                self.assertIn("별도 문서 preview 없이 저장", text)
             else:
                 self.assertTrue(
                     "direct, explicit, unconditional" in text
@@ -582,9 +586,13 @@ class DistributionProofTests(unittest.TestCase):
         for path in semantic_policy_paths:
             text = path.read_text(encoding="utf-8")
             for token in (
-                "complete rendered body",
+                "semantic approval",
                 "`approval_digest`",
-                "receipt path",
+                "rendered file body",
+                "second storage question",
+                "internal preview",
+                "semantic delta",
+                "same response",
                 "internal ID",
                 "core path",
                 "direct, explicit, unconditional",
@@ -593,8 +601,8 @@ class DistributionProofTests(unittest.TestCase):
                 "condition",
                 "edit request",
                 "topic change",
-                "Confirm ambiguity once",
-                "never regenerate after approval",
+                "confirm only that delta",
+                "Never regenerate after approval",
             ):
                 self.assertIn(token.casefold(), text.casefold(), path)
         approval_surfaces = [*skill_paths, *readmes, *policy_paths, ROOT / "AGENTS.md"]
@@ -632,10 +640,11 @@ class DistributionProofTests(unittest.TestCase):
             ROOT / "plugins/context-core/.codex-plugin/plugin.json"
         )["interface"]["defaultPrompt"][2]
         for token in (
-            "Complete preview",
-            "only direct, explicit, unconditional natural-language yes approves",
+            "Semantic approval saves",
+            "no file-body preview",
+            "second storage question",
             "Keep transport private",
-            "never regenerate",
+            "semantic delta→confirm",
         ):
             self.assertIn(token, core_approval_prompt)
         for transport_detail in ("approval_digest", "repo", "SHA", "CAS", "lock"):
@@ -745,7 +754,8 @@ class DistributionProofTests(unittest.TestCase):
             "context/",
             "does not automatically save your entire conversation",
             "agent chat, not in the terminal",
-            "clear, direct approval of that preview",
+            "there is no second document-preview question",
+            "reports the result without showing the storage document",
         ):
             self.assertIn(token, root_readme)
         for developer_only_token in (
@@ -757,7 +767,7 @@ class DistributionProofTests(unittest.TestCase):
         ):
             self.assertNotIn(developer_only_token, root_readme)
         decision_readme = (ROOT / "plugins/context-decision/README.md").read_text(encoding="utf-8")
-        for token in ("complete rendered preview", "direct, explicit, unconditional", "zero indexed bodies", "20 bodies", "end-to-end model tokens", "O(1)"):
+        for token in ("does not show the rendered file body", "direct, explicit, unconditional", "semantic delta", "same response", "zero indexed bodies", "20 bodies", "end-to-end model tokens", "O(1)"):
             self.assertIn(token, decision_readme)
 
         decision_protocol = (
@@ -799,7 +809,7 @@ class DistributionProofTests(unittest.TestCase):
             "context/",
             "대화 전체를 자동으로 저장하지 않습니다",
             "터미널이 아니라 에이전트와의 대화창",
-            "방금 확인한 내용의 저장을 분명하게 승인",
+            "생성된 Markdown 파일이 아니라 대화에서 내용 자체를 확인합니다",
         ):
             self.assertIn(token, korean_readme)
         for developer_only_token in (

@@ -2305,7 +2305,7 @@ def prepare_decision_check(
         "relations": list(SEMANTIC_RELATIONS),
         "required_fields": ["relation", "related_ids", "reason"],
         "actions": dict(RELATION_ACTIONS),
-        "rule": "Judge returned actual sections, not hashes or similarity. For rationale_changed/conflict, quote every returned non-empty actual section, hold action, and ask one explicit binary question: keep = not performed; supersede only after explicit choice. Revisit permits reassessment, not implementation; durable capture needs separate approval.",
+        "rule": "Judge returned actual sections, not hashes or similarity. For rationale_changed/conflict, quote every returned non-empty actual section, hold action, and ask one explicit binary question: keep = not performed; supersede only after explicit choice. Revisit permits reassessment, not implementation. The explicit choice settles that decision payload and authorizes capture without a second storage question.",
     }
     if any("Revisit conditions" in item["sections"] for item in current):
         assessment_contract["conflict_revisit"] = {

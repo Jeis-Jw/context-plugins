@@ -58,10 +58,13 @@ def signal_may_switch_language(signal_kind: str) -> bool:
 
 def qualifies_as_capture_approval(
     *,
-    answers_specific_capture_question: bool,
+    semantic_payload_confirmed: bool,
+    scope_identified: bool,
+    lifecycle_effects_identified: bool,
     direct: bool,
     explicit: bool,
     unconditional: bool,
+    semantic_delta: bool = False,
     generic_acknowledgement: bool = False,
     praise_only: bool = False,
     edit_request: bool = False,
@@ -69,15 +72,19 @@ def qualifies_as_capture_approval(
 ) -> bool:
     """Apply the language-independent semantic approval gate.
 
-    This consumes semantic judgments rather than matching words in any language.
-    The frozen `approval_digest` binding remains enforced by context-core.
+    Approval may be established naturally in conversation; it does not require a
+    separate question over the rendered storage document. The frozen
+    `approval_digest` remains an internal integrity binding enforced by core.
     """
 
     return (
-        answers_specific_capture_question
+        semantic_payload_confirmed
+        and scope_identified
+        and lifecycle_effects_identified
         and direct
         and explicit
         and unconditional
+        and not semantic_delta
         and not generic_acknowledgement
         and not praise_only
         and not edit_request

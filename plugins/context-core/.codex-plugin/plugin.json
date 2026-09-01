@@ -1,6 +1,6 @@
 {
   "name": "context-core",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Proactive scoped recall and approval-gated context capture with coordinated writes.",
   "author": {
     "name": "Jinwuk-Lee",
@@ -21,7 +21,7 @@
     "defaultPrompt": [
       "Mechanical pathless: search one inferred subtree; no root/hidden/AGENTS/`context/`; unsafe→ask; calls/reads/mentions=0.",
       "Use active language; machine fields English. Conflict; keep=not done, supersede by choice. Recall index→body→mention→question",
-      "Complete preview: only direct, explicit, unconditional natural-language yes approves. Keep transport private; never regenerate."
+      "Semantic approval saves; no file-body preview or second storage question. Keep transport private; semantic delta→confirm."
     ]
   }
 }

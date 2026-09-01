@@ -1,5 +1,11 @@
 # Repository extraction
 
+## 0.13.0 semantic approval
+
+Capture approval now attaches to the settled semantic payload, canonical scope, and lifecycle effect expressed in conversation. The agent does not show the rendered Markdown or ask a second storage question merely to authorize persistence. If rendering introduces or changes meaning, it holds the write and confirms only that semantic delta.
+
+Internal preview, frozen receipts, `approval_digest`, runtime/vault binding, CAS, lock, atomic write, and unchanged apply remain integrity controls. `approval_digest` is a compatibility field name, not user-approval evidence. Existing `context-common/v2` artifacts and indexes require no migration; stale pending receipts should be discarded and regenerated under the current runtime. This section supersedes the user-facing complete-preview approval contract described for historical 0.6.0/0.7.1 releases.
+
 ## 0.9.0 filesystem vaults
 
 Storage, approval, and installation no longer require Git. A vault is an existing directory containing `context/`. Use global `--vault DIR` before core, owner, or workflow subcommands, or the same option on addon init adapters. Without it, the nearest current/ancestor `context` directory selects the vault; with none present, init uses cwd. Input file paths still resolve relative to the caller's cwd.
@@ -38,7 +44,7 @@ The coordinate change is a breaking distribution migration even though the stora
 
 ## Knowledge boundary
 
-The source repository's `wiki/` and `context/` corpus are not imported. This repository initializes a fresh `context/` root and decision area; any non-init DEC or OBS requires its own actual-body review, complete rendered preview, and direct user confirmation.
+The source repository's `wiki/` and `context/` corpus are not imported. This repository initializes a fresh `context/` root and decision area; any non-init DEC or OBS requires semantic confirmation of its content, scope, and lifecycle effect. Rendered storage bytes remain internal integrity material.
 
 ## 0.5.0 additive semantic owners
 

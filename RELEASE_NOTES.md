@@ -1,5 +1,20 @@
 # Release notes
 
+## 0.13.0 (developer preview; tag not published)
+
+- Replace the user-facing rendered Markdown/file-body approval preview with semantic approval of payload, canonical scope, and lifecycle effect in normal conversation. A direct, explicit, unconditional settled choice or record request authorizes capture without a second storage question.
+- Ask only about unresolved meaning. Generic acknowledgement, praise, conditions, edit requests, and topic changes do not approve unresolved content; a semantic delta introduced by rendering still stops the write for focused confirmation.
+- Keep preview, frozen receipts, `approval_digest`, pinned runtime and vault identity, CAS, lock, atomic writes, deterministic indexes, and unchanged apply as internal integrity controls. `approval_digest` remains a compatibility field name, not user-approval evidence.
+- Preserve `context-common/v2` and existing artifact/index bytes. No stored-context migration is required; pending receipts from an older runtime should be discarded and regenerated.
+- Publish release set `0.13.0` as a component-version map: `context-core` and `context-document` move to `0.13.0`; decision, assumption, term, and intent move to `0.12.0`.
+- Codex default-prompt material is now from 3,147 to 2,021 characters, a 35.8% character reduction. This is a character-count observation, not a runtime token-savings measurement.
+
+### Reproducible verification
+
+- Python 3.13: `python3 -m pytest -q` → 356 passed, 600 subtests.
+- Python 3.11: seven changed-surface `unittest` modules → 58 passed. This environment has no Python 3.11 `pytest` package, so a full 3.11 collection is not claimed.
+- Phase 0: 15 passed, 27 subtests.
+
 ## 0.12.0 (developer preview; tag not published)
 
 - Add built-in immutable `context-archive/v1` evidence with approval-gated preview/apply, dedicated read/search/discard surfaces, a 65,000-codepoint Content ceiling, and explicit-only recall through `--include-archive`.
@@ -104,4 +119,4 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ## Release boundary
 
-This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.12.0` remain owner-gated.
+This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.13.0` remain owner-gated.

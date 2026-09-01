@@ -30,9 +30,9 @@ Host는 `schema`/`capabilities`를 제외한 모든 저수준 compatibility CLI 
 
 inline `--sec-*`는 plain text가 기본이며 explicit `@file`과 leading `@` literal용 `@@literal`을 지원합니다. 일반 path-like text는 file로 추측하지 않습니다. common primary-claim protocol 상한은 2,000 codepoint이고 built-in SNAP `current_context`, OBS `observation`, DEC `decision`은 각각 owner-specific 1,200 codepoint입니다. owner input은 canonical UTF-8 8 KiB, candidate envelope는 16 KiB입니다. missing·symlink·oversized body file과 limit 초과는 receipt/repository write 전에 실제 크기 진단과 함께 실패합니다.
 
-Agent는 기록 제안 전에 complete preview의 완성된 렌더링 본문을 만들고 한 번만 묻습니다. 그 capture 질문에 대한 직접적·명시적·무조건적 긍정만 승인입니다. `알겠어` 단독, 조건, 수정 요청, 화제 전환은 승인이 아니며 모호한 평가는 한 줄로 한 번만 재확인합니다. 수정 요청은 새 preview와 새 질문으로 처리합니다.
+사용자는 Markdown serialization이 아니라 대화에서 decision의 의미를 승인합니다. decision·canonical scope·lifecycle effect를 직접적·명시적·무조건적으로 확정한 선택이 capture 승인입니다. Agent는 저장 파일의 렌더링 본문을 보여주거나 별도 저장 질문을 하지 않습니다. 의미가 미확정이면 그 semantic delta만 묻고, `알겠어` 단독·칭찬·조건·수정 요청·화제 전환은 승인이 아닙니다.
 
-사용자는 digest, 임시 파일 위치, 내부 ID나 core 경로를 보거나 입력하지 않습니다. Workflow는 질문 전에 vault identity, pinned runtime, semantic result, nested core bundle, CAS와 lock 결박을 고정하고 승인 뒤 재생성하지 않습니다. Tampering, 복사·이동된 vault·같은 경로에 재생성한 디렉터리에서의 승인 재사용, runtime 변경과 잘못된 승인 material은 repository write 전에 실패합니다.
+사용자는 digest, 임시 파일 위치, 내부 ID나 core 경로를 보거나 입력하지 않습니다. Workflow는 semantic approval 뒤 내부적으로 vault identity, pinned runtime, semantic result, nested core bundle, CAS와 lock 결박을 고정하고 렌더링이 semantic delta를 추가하지 않는지 확인한 뒤 같은 응답에서 unchanged material을 적용합니다. 승인된 의미는 재생성하지 않습니다. Tampering, 복사·이동된 vault·같은 경로에 재생성한 디렉터리, runtime 변경과 잘못된 integrity material은 repository write 전에 실패합니다.
 
 ## Product flow
 
@@ -44,7 +44,7 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 - `conflict`: 결론 전에 반환된 비어 있지 않은 실제 Decision·Rationale·Rejected alternatives·Revisit conditions를 모두 원문으로 인용하고 선택한 token을 `satisfied|no evidence|ambiguous` 중 하나로 user response에 그대로 쓴 뒤 같은 명시적 양자 질문을 함. keep이면 수행하지 않고 supersede면 그 명시적 선택 뒤에만 진행함. `satisfied`는 사용자가 저장된 조건을 직접 성립시키는 현재 사실을 제공한 경우에만 쓰며 요청된 충돌 행동 자체는 근거가 아님. 사실이 없거나 저장 조건이 아닌 다른 쟁점에 관한 사실이면 `no evidence`이고, 관련 조건 사실이 불완전하거나 충돌할 때만 `ambiguous`임
 - `new`: 조회된 범위 안에서 관련 기존 결정을 찾지 못함
 
-이 비교는 실제 본문을 대상으로 하며 문자열 hash, ID나 metadata를 의미 동일성의 근거로 사용하지 않습니다. 충족된 재평가 조건은 재평가 권한이지 구현 권한이 아니며 durable capture 승인은 별도입니다. 그 외의 성숙한 결정은 원래 답 뒤 grouped proposal에 한 번 포함합니다. dismissed·deferred 후보는 새 evidence 전까지 반복하지 않으며 승인된 final bundle만 `context-core` coordinator가 적용합니다. 이후 brief는 세 핵심 section을 함께 복원하고, 새 결정이 같은 slot을 supersede하면 이전 DEC를 history로 이동해 더는 따르지 않도록 표시합니다.
+이 비교는 실제 본문을 대상으로 하며 문자열 hash, ID나 metadata를 의미 동일성의 근거로 사용하지 않습니다. 충족된 재평가 조건은 재평가 권한이지 구현 권한이 아닙니다. 명시적 선택이 해당 decision payload와 capture를 함께 승인하므로 별도 저장 질문을 하지 않습니다. 그 외의 성숙한 결정은 원래 답 뒤 grouped proposal에 한 번 포함합니다. dismissed·deferred 후보는 새 evidence 전까지 반복하지 않으며 내부적으로 봉인된 final bundle만 `context-core` coordinator가 적용합니다. 이후 brief는 세 핵심 section을 함께 복원하고, 새 결정이 같은 slot을 supersede하면 이전 DEC를 history로 이동해 더는 따르지 않도록 표시합니다.
 
 ## Read-only spec view
 
@@ -77,3 +77,5 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 0.10.0은 standalone decision과 legacy artifact bytes를 유지하면서 optional typed relation input을 추가합니다. tag나 publication을 의미하지 않습니다.
 
 0.11.0은 release set을 정렬하고 handshake 실패 뒤에만 호환 core 후보를 안내하며 revisit·복수 relation 입력 도움말을 명확히 합니다. DEC semantics와 저장 bytes는 변경하지 않으며 tag나 publication을 의미하지 않습니다.
+
+0.12.0은 명시적으로 확정된 선택을 semantic approval로 보고 rendered-file preview를 사용자 승인 단계에서 제거합니다. 내부 frozen receipt와 unchanged apply integrity는 유지하며 저장 DEC bytes는 migration이 필요 없습니다. tag나 publication을 의미하지 않습니다.

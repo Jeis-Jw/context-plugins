@@ -59,3 +59,5 @@ Version `0.9.0` keeps TERM as an optional semantic-owner package outside the `co
 Version `0.10.0` aligns the six-plugin distribution version; TERM semantics and stored bytes are unchanged. No tag or publication is implied.
 
 Version `0.11.0` adds the canonical inline preview/apply workflow and diagnostic compatible-core candidate paths. TERM semantics and stored bytes are unchanged. No tag or publication is implied.
+
+Version `0.12.0` uses settled semantic content as capture approval without a rendered-file review or second storage question. Internal preview/apply integrity remains, and stored TERM bytes require no migration. No tag or publication is implied.

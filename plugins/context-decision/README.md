@@ -10,7 +10,7 @@ DEC remains standalone: an Intent is optional. Existing artifacts keep descripto
 2. Reload the host or open a new session.
 3. Run `$context-decision:init` once in the target vault directory.
 
-There is no bundle or meta-plugin, and decision code is not embedded in core. The root installer is explicit distribution tooling; this plugin never changes host installation state. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.11.0` tag is not published yet; tag creation and publication remain owner-gated.
+There is no bundle or meta-plugin, and decision code is not embedded in core. The root installer is explicit distribution tooling; this plugin never changes host installation state. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.12.0` tag is not published yet; tag creation and publication remain owner-gated.
 
 Core and decision package versions are compatible when their major versions match. Minor versions add or change functionality and patch versions contain small fixes; for the current `0.x` line, any `0.*` pair passes the package-version gate. The runtime handshake below still rejects a same-major implementation whose actual surface is incompatible.
 
@@ -39,15 +39,15 @@ Core audits each conversation delta once and routes here only when a choice is f
 - `conflict`: quote every returned non-empty actual Decision, Rationale, Rejected alternatives, and Revisit conditions section before the primary conclusion; state the selected condition token verbatim as `satisfied|no evidence|ambiguous` without inventing evidence, then hold and ask the same explicit binary question: keep means the action is not performed; supersede permits it only after that explicit choice. `satisfied` requires user-supplied present facts that directly establish the stored condition; the requested conflicting action itself is not evidence. Facts that are absent or concern something other than the stored condition mean `no evidence`; `ambiguous` requires relevant but incomplete or conflicting condition facts.
 - `new`: no related DEC was found in the returned candidate set; this is not a global proof.
 
-Only an explicit choice with canonical scope and commitment evidence may become a DEC candidate. A satisfied revisit condition authorizes reassessment, not implementation, and durable capture still needs separate approval. Dismissed or deferred candidates are not proposed again without new evidence.
+Only an explicit choice with canonical scope and commitment evidence may become a DEC candidate. A satisfied revisit condition authorizes reassessment, not implementation. The explicit choice itself authorizes capture of that settled decision payload; there is no second storage approval. Dismissed or deferred candidates are not proposed again without new evidence.
 
 ## Golden capture workflow
 
-The agent prepares one complete rendered preview before asking whether to record it. A write is allowed only after a direct, explicit, unconditional affirmative answer to that capture question. `알겠어` alone, a condition, an edit request, or a topic change is not approval; ambiguous praise is confirmed once. A requested edit produces a new preview and a new question.
+The user approves the decision's meaning in normal conversation, not the Markdown serialization. A direct, explicit, unconditional choice that settles the decision, canonical scope, and lifecycle effect authorizes capture. The agent does not show the rendered file body or ask a second storage question. If meaning is unresolved, it asks only about that semantic delta; `알겠어` alone, praise, a condition, an edit request, or a topic change is not approval.
 
 Users never see or enter digests, temporary-file locations, internal IDs, or core paths. The CLI still receives caller-provided semantic fields and attestations; it serializes them but never invents evidence or judgment.
 
-The workflow freezes vault identity, pinned runtime, semantic result, nested core bundle, CAS, and lock bindings before asking and never regenerates them after approval. Replay in a copied or moved vault, same-path directory recreation, tampering, runtime changes, and wrong approval material fail before repository writes.
+After semantic approval, the workflow internally freezes vault identity, pinned runtime, semantic result, nested core bundle, CAS, and lock bindings, verifies that rendering adds no semantic delta, and applies the unchanged material in the same response. It never regenerates approved meaning. Replay in a copied or moved vault, same-path directory recreation, tampering, runtime changes, and wrong integrity material fail before repository writes.
 
 Inline `--sec-*` values are literals by default. `@file` reads a named regular UTF-8 file and `@@literal` preserves one leading `@`; path-like plain text stays literal. Missing, symlinked, or oversized files fail before receipt or repository writes.
 
@@ -72,5 +72,7 @@ Version `0.9.0` introduces the major-based package compatibility policy and keep
 Version `0.10.0` adds optional typed relation inputs while preserving standalone decisions and legacy artifact bytes. No tag or publication is implied.
 
 Version `0.11.0` aligns the release set, lists compatible core candidates only after handshake failure, and clarifies revisit and repeated relation inputs. DEC semantics and stored bytes are unchanged. No tag or publication is implied.
+
+Version `0.12.0` treats an explicit settled choice as semantic approval and removes the rendered-file preview as a user-facing approval step. Internal frozen-receipt and unchanged-apply integrity remain. Stored DEC bytes require no migration. No tag or publication is implied.
 
 See the [owner protocol](./skills/decision/references/decision-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).

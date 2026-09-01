@@ -24,3 +24,5 @@ Explicit `$context-intent:init` registers only this owner through an already ava
 Version `0.10.0` is developer preview. No tag or marketplace publication is implied.
 
 Version `0.11.0` adds the canonical single-command inline preview plus approved apply workflow and diagnostic compatible-core candidate paths. No tag or marketplace publication is implied.
+
+Version `0.12.0` uses settled semantic content as capture approval without a rendered-file review or second storage question. Internal preview/apply integrity remains, and stored INTENT bytes require no migration. No tag or marketplace publication is implied.
