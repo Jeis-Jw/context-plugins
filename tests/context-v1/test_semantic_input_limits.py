@@ -128,6 +128,27 @@ def sized_decision_candidate(owner_input_bytes: int) -> dict:
 
 
 class SemanticInputLimitTests(unittest.TestCase):
+    def test_observation_evidence_uses_six_default_read_slots(self) -> None:
+        capability = core_cli.builtin_capability("observation")
+        self.assertEqual(6, capability["draft_fields"]["required"]["evidence"]["max_items"])
+        accepted = core_cli.direct_candidate(
+            "observation",
+            title="evidence slots",
+            summary="six bounded evidence slots are accepted",
+            captured_from="manual",
+            owner_inputs={"observation": "bounded evidence claim", "evidence": [f"evidence {index}" for index in range(6)]},
+        )
+        self.assertEqual(6, len(accepted["owner_inputs"]["observation"]["evidence"]))
+        with self.assertRaises(core_cli.ContextError) as rejected:
+            core_cli.direct_candidate(
+                "observation",
+                title="evidence overflow",
+                summary="seven evidence slots are rejected",
+                captured_from="manual",
+                owner_inputs={"observation": "bounded evidence claim", "evidence": [f"evidence {index}" for index in range(7)]},
+            )
+        self.assertEqual("schema_invalid", rejected.exception.code)
+
     def test_release_limit_constants_are_in_parity(self) -> None:
         for module in (core_cli, decision_cli, assumption_cli, term_cli):
             self.assertEqual(2000, module.MAX_PRIMARY_CLAIM_CODEPOINTS)

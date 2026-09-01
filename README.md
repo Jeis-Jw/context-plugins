@@ -11,6 +11,7 @@ AI coding agents are helpful, but a new conversation may forget why your project
 - **Decisions** — what you chose, why you chose it, and which alternatives you rejected
 - **Intents** — which durable direction the project is trying to serve
 - **Observations** — test results, incidents, and other facts worth reusing
+- **Archives** — immutable long-form source material adopted as evidence
 - **Documents** — living project guidance whose content stays current under one stable identity
 - **Snapshots** — where unfinished work stopped and what should happen next
 
@@ -65,11 +66,14 @@ If the marketplace is already registered, skip the first command. After installa
 
 - **Intent** is a desired direction.
 - **Observation** and **Assumption** are evidence and premises.
+- **Archive** is immutable source evidence and stays out of default recall unless explicitly included.
 - **Decision** is a chosen commitment.
 - **Rationale** explains why the decision follows from its grounds and serves the intent.
 - **Document** is living content that can be updated without changing its identity.
 
 You can use intent-only, decision-only, or document-only storage. When the relevant artifacts coexist, a decision can record `serves:intent`, `informed_by:observation`, `informed_by:assumption`, and `affects:document` references. These links do not create inverse records or make any plugin mandatory.
+
+Artifact limits are default-read budgets. Expand knowledge by adding stable slots, not by enlarging one slot. For example, split one design into `design-skeleton`, `design-envelope`, and `design-rules`. Keep frozen long-form originals in ARCHIVE and include them only on an explicit read.
 
 ## How to use it
 

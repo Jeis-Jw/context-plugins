@@ -1,6 +1,6 @@
 # context-core (한국어)
 
-`context-core`는 다음 agent나 session이 작업을 이어갈 수 있도록 승인된 handoff와 재사용 가능한 근거를 Markdown으로 보존하는 가벼운 runtime입니다. SNAP은 재개용 staging, OBS는 비권위 evidence이며, `context.index.md`와 area index로 필요한 문서만 읽습니다.
+`context-core`는 다음 agent나 session이 작업을 이어갈 수 있도록 승인된 handoff와 재사용 가능한 근거를 Markdown으로 보존하는 가벼운 runtime입니다. SNAP은 재개용 staging, OBS는 비권위 evidence, ARCHIVE는 근거로 채택한 불변 장문 원본이며, `context.index.md`와 area index로 필요한 문서만 읽습니다.
 
 ## 시작하기
 
@@ -15,7 +15,9 @@ Core-only 구성이 필요하면 다음 경로를 그대로 사용할 수 있습
 
 vault는 `context/`를 담는 일반 디렉터리이며 Git은 공유·버전관리의 선택사항입니다. 모든 CLI는 subcommand 앞의 `--vault DIR`로 저장 디렉터리를 선택할 수 있습니다. 생략하면 가장 가까운 `context/` 상위 디렉터리, 없으면 현재 디렉터리를 사용합니다. 입력 파일의 상대경로는 호출자 cwd 기준입니다.
 
-`schema`와 `capabilities`는 vault 없이 확인할 수 있고 addon은 `filesystem-vault/v1` feature를 요구합니다. `schema.features`의 `context-owner-descriptor/v2`는 bounded structural profile을 이해하는 runtime handshake입니다. `doctor`는 read-only이며 `context-common/v2`, `repository_state`, `issues`, `warnings`를 보고합니다. 저장소가 아직 초기화되지 않은 read operation은 dependency 오류가 아닌 `context_root_missing`으로 실패합니다. `init`은 absent에서 fixed root/SNAP/OBS seed와 `codex → AGENTS.md`, `claude-code → CLAUDE.md` 관리형 block만 직접 적용합니다. populated repository에서 root index만 없으면 exact built-in SNAP/OBS metadata로 rebuild하고 미등록 area는 자동 claim하지 않으며, legacy artifact/index warning은 init을 막지 않습니다. init target의 incompatible schema/owner/path는 덮어쓰지 않습니다.
+`schema`와 `capabilities`는 vault 없이 확인할 수 있고 addon은 `filesystem-vault/v1` feature를 요구합니다. `schema.features`의 `context-owner-descriptor/v2`는 bounded structural profile을 이해하는 runtime handshake입니다. `doctor`는 read-only이며 `context-common/v2`, `repository_state`, `issues`, `warnings`를 보고합니다. 저장소가 아직 초기화되지 않은 read operation은 dependency 오류가 아닌 `context_root_missing`으로 실패합니다. `init`은 absent에서 fixed root/SNAP/OBS/ARCHIVE seed와 `codex → AGENTS.md`, `claude-code → CLAUDE.md` 관리형 block만 직접 적용합니다. pre-ARCHIVE vault에는 비어 있는 ARCHIVE area만 additive 등록하고 기존 artifact byte를 유지합니다. init target의 incompatible schema/owner/path는 덮어쓰지 않습니다.
+
+한도는 기본 읽기 예산입니다. 지식은 slot 크기가 아니라 stable slot 수로 확장합니다. ARCHIVE만 불변 원본 보존을 위해 `Content` 65,000 codepoint와 512 KiB capture envelope을 허용하며, `--include-archive` 없이는 recall/pack에 나타나지 않습니다.
 
 ## 제품 흐름
 
@@ -57,3 +59,5 @@ vault는 `context/`를 담는 일반 디렉터리이며 Git은 공유·버전관
 0.10.0은 filesystem-vault와 approval model을 바꾸지 않고 typed relation 검증과 optional INTENT/DOCUMENT owner 등록 surface를 추가합니다. tag나 publication을 의미하지 않습니다.
 
 0.11.0은 OBS preview의 미적용 상태를 명시하고, 공용 inline owner workflow transport와 same-major cache pin 진단을 추가합니다. approval과 저장 artifact bytes는 변경하지 않으며 tag나 publication을 의미하지 않습니다.
+
+0.12.0은 immutable ARCHIVE capture/read/search/discard, bounded OBS-to-context evidence reference와 DOCUMENT freshness hygiene 진단을 추가합니다. approval과 filesystem-vault 경계는 유지하며 tag나 publication을 의미하지 않습니다.

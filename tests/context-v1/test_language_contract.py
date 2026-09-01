@@ -86,7 +86,7 @@ class ActiveLanguageContractTests(unittest.TestCase):
     def test_canonical_runtime_sources_are_english_and_share_one_contract(self) -> None:
         canonical_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.md"))
         rules = sorted(ROOT.glob("plugins/*/rules/*.md"))
-        self.assertEqual(14, len(canonical_skills))
+        self.assertEqual(15, len(canonical_skills))
         for path in [*canonical_skills, *rules]:
             text = path.read_text(encoding="utf-8")
             self.assertIsNone(re.search(r"[가-힣]", text), path)

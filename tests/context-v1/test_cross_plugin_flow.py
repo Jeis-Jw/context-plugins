@@ -1059,7 +1059,7 @@ class CrossPluginFlowTests(unittest.TestCase):
                 (repo / "context/decision/decision.index.md").read_text(encoding="utf-8")
             ))
             self.assertEqual(
-                {"observation", "snapshot", "decision", "assumption", "term"},
+                {"archive", "observation", "snapshot", "decision", "assumption", "term"},
                 {item["kind"] for item in state["capabilities"]["owners"]},
             )
 

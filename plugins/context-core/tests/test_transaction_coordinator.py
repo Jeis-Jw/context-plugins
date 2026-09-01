@@ -387,7 +387,7 @@ class TransactionCoordinatorTests(unittest.TestCase):
             repaired_root = root_index.read_text(encoding="utf-8")
             self.assertIn("Owner-maintained recovery note.", repaired_root)
             _, areas = context_cli.parse_root_index(repaired_root)
-            self.assertEqual(["observation", "snapshot"], [area["area"] for area in areas])
+            self.assertEqual(["archive", "observation", "snapshot"], [area["area"] for area in areas])
 
     def test_explicit_init_rejects_noncanonical_empty_directory_prefix(self) -> None:
         with vault_dir() as temp:

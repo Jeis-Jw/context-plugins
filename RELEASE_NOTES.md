@@ -1,10 +1,19 @@
 # Release notes
 
+## 0.12.0 (developer preview; tag not published)
+
+- Add built-in immutable `context-archive/v1` evidence with approval-gated preview/apply, dedicated read/search/discard surfaces, a 65,000-codepoint Content ceiling, and explicit-only recall through `--include-archive`.
+- Additively register the empty ARCHIVE area when explicit init encounters a healthy pre-ARCHIVE vault. Existing artifact bytes and IDs remain unchanged.
+- Treat exact `ctx_` IDs in OBS Evidence as integrity-checked internal references while retaining free-form evidence strings. Inbound references block ARCHIVE discard.
+- Raise OBS evidence slots from four to six and document the policy that limits are default-read budgets: expand knowledge through stable slots, not larger slots. Clarify that DOCUMENT is a current-state recall/envelope surface, not a repository deliverable store.
+- Make `affects:document` operational: refresh emits a non-blocking `document-stale-vs-decision` hygiene warning until a newer affecting Current DEC is reflected by a later DOCUMENT update.
+- Publish release set `0.12.0` as a component-version map: `context-core` and `context-document` move to `0.12.0`; unchanged decision, assumption, term, and intent packages remain at `0.11.0`.
+
 ## 0.11.0 (developer preview; tag not published)
 
 - Make OBS preview state unambiguous: `observation preview` is canonical, `capture` remains a deprecated alias, and both JSON surfaces return envelope-level and result-level `applied: false` plus `state: awaiting_approval`. Human output states that approval and `transaction apply` are still required.
 - Add one-command inline preview wrappers for INTENT, TERM, ASM, and DOCUMENT, followed by one unchanged approved apply command. The wrappers derive the verified core manifest inventory and doctor state instead of requiring caller-authored candidate, attestation, inventory, or doctor JSON.
-- Declare one exact six-plugin `context-plugin-release-set/v1` in both marketplace catalogs. Profile v3 keeps same-major runtime compatibility but fails closed below the 0.11.0 minimum and never updates automatically.
+- Declare one six-plugin `context-plugin-release-set/v1` component map in both marketplace catalogs. Profile v3 keeps same-major runtime compatibility, uses per-component minimums, and never updates automatically.
 - On core path, manifest, schema, or command incompatibility, semantic adapters list manifest-validated same-major sibling core candidates for diagnosis only. They never select or execute a candidate automatically. Core doctor warns when its loaded catalog pin is behind a newer same-major cached version.
 - Clarify that `--revisit-on` accepts only a calendar date while `--sec-revisit` carries condition text. Comma-packed relation IDs now fail with guidance to repeat the typed relation flag.
 - Preserve `context-common/v2`, stored artifact bytes, approval binding, vault identity, CAS, locking, atomic writes, no-Git operation, and independent semantic-owner packages.
@@ -95,4 +104,4 @@ This developer-preview patch preserves `context-common/v2` and existing SNAP, OB
 
 ## Release boundary
 
-This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.11.0` remain owner-gated.
+This repository is preparing a developer preview and is licensed under the Apache License 2.0 in the root `LICENSE`. Source integration, main-branch push, or license application does not imply a tag or marketplace publication. Creation and push of `v0.12.0` remain owner-gated.

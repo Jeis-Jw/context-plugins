@@ -6,16 +6,16 @@
   "metadata": {
     "release_set": {
       "schema": "context-plugin-release-set/v1",
-      "version": "0.11.0",
+      "version": "0.12.0",
       "runtime_compatibility": "same-major-plus-runtime-handshake",
       "automatic_update": false,
       "members": {
-        "context-core": "0.11.0",
+        "context-core": "0.12.0",
         "context-decision": "0.11.0",
         "context-assumption": "0.11.0",
         "context-term": "0.11.0",
         "context-intent": "0.11.0",
-        "context-document": "0.11.0"
+        "context-document": "0.12.0"
       }
     }
   },
@@ -26,7 +26,7 @@
         "source": "local",
         "path": "./plugins/context-core"
       },
-      "version": "0.11.0",
+      "version": "0.12.0",
       "description": "Proactive scoped recall and approval-gated context capture with coordinated writes.",
       "policy": {
         "installation": "AVAILABLE",
@@ -96,7 +96,7 @@
         "source": "local",
         "path": "./plugins/context-document"
       },
-      "version": "0.11.0",
+      "version": "0.12.0",
       "description": "Authoritative living documents with stable scoped slots and same-ID content replacement.",
       "policy": {
         "installation": "AVAILABLE",

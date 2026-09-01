@@ -11,6 +11,7 @@ AI 코딩 에이전트는 유용하지만 새 대화를 시작하면 “왜 이�
 - **결정** — 무엇을 선택했고, 왜 선택했으며, 어떤 대안을 제외했는지
 - **취지** — 프로젝트가 지속적으로 지향하려는 방향
 - **관찰 기록** — 테스트 결과, 장애 원인처럼 다음에도 활용할 수 있는 사실
+- **원본 보관** — 근거로 채택한 불변 장문 원본
 - **문서** — 같은 식별자를 유지하면서 내용을 갱신할 living project guidance
 - **작업 현황** — 어디까지 작업했고 다음에 무엇을 해야 하는지
 
@@ -65,11 +66,14 @@ Marketplace가 이미 등록되어 있다면 첫 번째 명령은 생략해도 �
 
 - **Intent**는 desired direction입니다.
 - **Observation**과 **Assumption**은 evidence와 premise입니다.
+- **Archive**는 불변 source evidence이며 명시적으로 포함하지 않으면 기본 recall에서 제외됩니다.
 - **Decision**은 chosen commitment입니다.
 - **Rationale**은 해당 근거에서 왜 그 결정을 택했고 그 결정이 Intent를 어떻게 섬기는지 설명합니다.
 - **Document**는 식별자를 유지하면서 갱신할 수 있는 living content입니다.
 
 intent-only, decision-only, document-only로 각각 사용할 수 있습니다. 관련 artifact가 함께 존재하면 decision이 `serves:intent`, `informed_by:observation`, `informed_by:assumption`, `affects:document` 관계를 기록할 수 있습니다. 이 관계는 inverse record를 만들지 않고 어떤 plugin도 필수로 바꾸지 않습니다.
+
+artifact 한도는 기본 읽기 예산입니다. 지식은 slot 크기가 아니라 slot 수로 확장합니다. 예를 들어 하나의 설계를 `design-skeleton`·`design-envelope`·`design-rules`로 분해하고, 시점 고정 장문 원본은 ARCHIVE에 보관해 명시적으로만 읽습니다.
 
 ## 사용하는 방법
 

@@ -415,7 +415,7 @@ def document_capability() -> dict[str, Any]:
         "authority": "authoritative",
         "descriptor_digest": canonical_digest(descriptor),
         "claim_surface": {"type": "agent_skill", "name": "context-document:document", "operation": "claim"},
-        "claim_rule": "A project-scoped living document has a stable authoritative slot and substantive content",
+        "claim_rule": "A current-state statement consumed by an agent or person through recall/envelopes has a stable authoritative slot and substantive content; external deliverable documents remain repository-owned and out of scope",
         "claim_assertions": ["content_present", "living_document"],
         "lifecycle_operations": {},
         "draft_fields": {

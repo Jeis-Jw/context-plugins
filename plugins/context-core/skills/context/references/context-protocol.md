@@ -14,6 +14,7 @@ This is the public, host-independent storage, recall, and write contract impleme
 
 ## Read boundary
 
+- ARCHIVE stores immutable source material adopted as evidence. It is excluded from default recall and pack; `--include-archive` or the dedicated `archive read|search` surface is required.
 - A healthy Stage-1 metadata hit reads only the root and selected area index. It performs zero artifact opens/lists/stats.
 - A healthy non-empty query with zero metadata matches enumerates filenames only to detect unindexed artifacts. When all files are indexed, it opens zero bodies and is not marked as fallback.
 - Missing bodies, a broken selected area index, and a missing selected link share a recovery budget of at most 20 artifact body opens per recall. Truncation returns `index_miss_fallback_truncated` or `index_fallback_truncated`.
@@ -26,9 +27,10 @@ Hard bounds apply to artifact body materialization/open, selected output, candid
 
 - Healthy Stage 1: index-only and zero artifact opens/lists/stats.
 - Recovery: at most 20 body opens.
-- Stage-1 output: 4 KiB; selected body pack: 8 KiB; approval preview: 32 KiB.
+- Stage-1 output: 4 KiB; selected body pack: 8 KiB; ordinary approval preview: 32 KiB.
 - Common primary-claim protocol ceiling: 2,000 codepoints; built-in SNAP `current_context` and OBS `observation`: 1,200 codepoints each; canonical owner input: 8 KiB.
 - `context-capture-batch/v1`: at most eight candidates and at most 16 KiB for the full canonical `{schema,audit_count,candidates}` envelope. `audit_count` is the non-bool integer `1`; a legacy bare list is charged against the same synthetic envelope budget.
+- These limits are default-read budgets. Knowledge expands through more stable slots, not larger slots. Explicit ARCHIVE capture is the exception: immutable `Content` is at most 65,000 codepoints and its candidate, owner input, and approval preview use a 512 KiB envelope ceiling.
 - DEC additionally limits its primary decision to 1,200 codepoints, brief to 8 KiB, comparison input to 24 KiB, result to 32 KiB, and spec-view stdout to 32 KiB.
 
 Index bytes, metadata-row scoring, and directory enumeration can grow with the selected index or directory. The implementation avoids corpus-wide body materialization; it does not guarantee O(1) end-to-end recall computation or model tokens. `tests/context-v1/test_token_io_evidence.py` measures the enforceable artifact I/O, candidate, addon, and stdout budgets.
@@ -50,6 +52,8 @@ The managed policy requires one audit per conversation delta, silence when there
 - Apply verifies the digest and current vault identity before any write. A copied, moved, or same-path recreated vault needs a new preview. Unrelated files and optional version-control metadata are not bound; exact target CAS still protects affected bytes. Previously generated approval bundles and receipts with the old identity must be discarded and previewed again; saved Markdown artifacts require no migration.
 - Only context-core writes, under a vault-realpath lock, with atomic operations and deterministic index rebuild.
 - Hidden operations, missing seeds, altered material, changed target preconditions, path escapes, and symlink segments fail before writes.
+- OBS `Evidence` items that are exact `ctx_` IDs are internal references. Refresh validates their targets, while arbitrary evidence strings remain allowed. ARCHIVE has only capture, read, search, and discard; it has no update, rename, retirement, or supersede transition.
+- Refresh emits non-blocking `document-stale-vs-decision` hygiene warnings when a Current DEC with `affects:document` is newer than the target Current DOCUMENT's last update time.
 
 ### Core workflow receipt
 
@@ -80,7 +84,7 @@ The managed policy requires one audit per conversation delta, silence when there
 `doctor` preserves the four repository states (`absent|partial|invalid|ready`) and exact existing readiness meaning while adding `plugin_version`, resolved `entrypoint`, and `protocol` to its ten-field self-report.
 - `schema` and `capabilities` work without a repository root.
 
-`init --host codex|claude-code` applies an absent root's canonical root/SNAP/OBS seeds and the active host policy (`AGENTS.md` or `CLAUDE.md`). It preflights policy targets/markers before storage writes and preserves bytes outside the managed block.
+`init --host codex|claude-code` applies an absent root's canonical root/SNAP/OBS/ARCHIVE seeds and the active host policy (`AGENTS.md` or `CLAUDE.md`). A healthy pre-ARCHIVE vault receives only the missing empty ARCHIVE area. It preflights policy targets/markers before storage writes and preserves bytes outside the managed block.
 
 `bootstrap --descriptor @file --index-seed @file --host ...` is the public addon-init surface. In one call it completes core init, registers an exact empty area, and installs the same policy. Only fixed `core_init|area_register|policy_install` transitions receive explicit-init authority; all user-content mutation remains approval-gated.
 

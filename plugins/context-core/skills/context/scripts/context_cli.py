@@ -17,7 +17,7 @@ import sys
 import tempfile
 import unicodedata
 import uuid
-from typing import Any, Iterable, Iterator, Sequence
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 
 EXIT_USAGE = 2
@@ -37,16 +37,20 @@ MAX_CANDIDATE_BYTES = 16 * 1024
 MAX_OWNER_INPUT_BYTES = 8 * 1024
 MAX_PRIMARY_CLAIM_CODEPOINTS = 2000
 MAX_APPROVAL_PREVIEW_BYTES = 32 * 1024
+MAX_ARCHIVE_CONTENT_CODEPOINTS = 65_000
+MAX_ARCHIVE_INPUT_BYTES = MAX_ARCHIVE_CONTENT_CODEPOINTS * 4
+MAX_ARCHIVE_ENVELOPE_BYTES = 512 * 1024
 MAX_INDEX_FALLBACK_ARTIFACT_READS = 20
 MAX_OWNER_DESCRIPTOR_BYTES = 8 * 1024
 MAX_PROFILE_FIELDS = 24
 MAX_PROFILE_ITEMS = 12
 ROOT_INDEX = "context/context.index.md"
-BUILTIN_AREAS = ("snapshot", "observation")
+BUILTIN_AREAS = ("snapshot", "observation", "archive")
 RESERVED_INDEX_PATHS = {
     ROOT_INDEX,
     "context/snapshot/snapshot.index.md",
     "context/observation/observation.index.md",
+    "context/archive/archive.index.md",
     "context/decision/decision.index.md",
 }
 INDEX_FIXABLE_CODES = {
@@ -71,6 +75,7 @@ ADDITIVE_KEY_ORDER = {
         "kind_hint", "verified_at", "affects_paths", "relations", "supersedes",
         "superseded_by", "retired_at", "retired_reason", "retirement_note",
     ),
+    "context-archive/v1": (),
     "context-decision/v1": (
         "scope", "decision_key", "revisit_when", "revisit_on", "relations", "supersedes", "superseded_by",
         "retired_at", "retired_reason", "retirement_note",
@@ -79,6 +84,7 @@ ADDITIVE_KEY_ORDER = {
 SECTION_SPECS = {
     "context-snapshot/v1": (("Current context", "Open items", "Next steps", "Decided", "References", "Capture candidates"), ("Current context", "Open items", "Next steps")),
     "context-observation/v1": (("Observation", "Evidence", "Impact", "Current handling", "Follow-up conditions"), ("Observation", "Evidence")),
+    "context-archive/v1": (("Content",), ("Content",)),
     "context-decision/v1": (("Decision", "Rationale", "Rejected alternatives", "Evidence and constraints", "Trade-offs", "Revisit conditions"), ("Decision", "Rationale", "Rejected alternatives")),
 }
 LEGACY_SECTION_ALIASES = {
@@ -882,6 +888,14 @@ def _validate_common_document(
         if "supersedes" in frontmatter:
             for identifier in _string_list(frontmatter["supersedes"], "supersedes", maximum=12, item_maximum=36):
                 _require_context_id(identifier, "supersedes")
+    if schema == "context-archive/v1":
+        _string_list(frontmatter.get("source_refs"), "source_refs", required=True, maximum=12, item_maximum=500)
+        forbidden = {
+            "updated_at", "verified_at", "retired_at", "retired_reason", "retirement_note",
+            "supersedes", "superseded_by", "relations",
+        }
+        if forbidden & set(frontmatter):
+            raise ContextError("lifecycle_invalid", "archive is immutable and cannot carry mutation or lifecycle fields")
     if schema == "context-decision/v1":
         for field in ("scope", "decision_key"):
             if not _substantive(frontmatter.get(field)) or "\n" in frontmatter[field]:
@@ -952,6 +966,14 @@ def parse_document(text: str, descriptor: dict[str, Any] | None = None) -> Docum
         content = (_section_value(sections, schema, name) or "").strip()
         if not content or content in PLACEHOLDERS:
             raise ContextError("section_schema_error", "required section is missing or placeholder", {"section": name})
+    if schema == "context-archive/v1":
+        content = _section_value(sections, schema, "Content") or ""
+        if len(content) > MAX_ARCHIVE_CONTENT_CODEPOINTS:
+            raise ContextError(
+                "section_schema_error",
+                "archive Content exceeds the 65,000-codepoint limit",
+                {"section": "Content", **_codepoint_size_details(len(content), MAX_ARCHIVE_CONTENT_CODEPOINTS)},
+            )
     return Document(frontmatter=frontmatter, sections=sections, warnings=warnings)
 
 
@@ -992,6 +1014,14 @@ def render_document(
         content = (_section_value(sections, schema, name) or "").strip()
         if not content or content in PLACEHOLDERS:
             raise ContextError("section_schema_error", "required section is missing or placeholder", {"section": name})
+    if schema == "context-archive/v1":
+        content = _section_value(sections, schema, "Content") or ""
+        if len(content) > MAX_ARCHIVE_CONTENT_CODEPOINTS:
+            raise ContextError(
+                "section_schema_error",
+                "archive Content exceeds the 65,000-codepoint limit",
+                {"section": "Content", **_codepoint_size_details(len(content), MAX_ARCHIVE_CONTENT_CODEPOINTS)},
+            )
     known = COMMON_KEY_ORDER + (tuple(profile["fields"]) if profile is not None else ADDITIVE_KEY_ORDER.get(schema, ()))
     ordered = [key for key in known if key in canonical_frontmatter]
     ordered.extend(sorted(set(canonical_frontmatter) - set(ordered)))
@@ -1369,7 +1399,12 @@ def _area_row(row: dict[str, Any], label: str, summary: str) -> str:
 
 
 def _area_label(area: str) -> str:
-    return {"snapshot": "Snapshot", "observation": "Observation", "decision": "Decision"}.get(area, area.replace("-", " ").title())
+    return {
+        "snapshot": "Snapshot",
+        "observation": "Observation",
+        "archive": "Archive",
+        "decision": "Decision",
+    }.get(area, area.replace("-", " ").title())
 
 
 def _root_seed() -> str:
@@ -1407,6 +1442,7 @@ def _builtin_area_specs() -> list[tuple[dict[str, Any], str, str]]:
     return [
         ({"area": "snapshot", "path": "context/snapshot/snapshot.index.md", "owner": "context-core", "claims": ["snapshot"], "artifact_schema": "context-snapshot/v1", "authority": "staging"}, "Snapshot", "session handoff staging"),
         ({"area": "observation", "path": "context/observation/observation.index.md", "owner": "context-core", "claims": ["observation"], "artifact_schema": "context-observation/v1", "authority": "evidence"}, "Observation", "Non-authoritative findings and evidence"),
+        ({"area": "archive", "path": "context/archive/archive.index.md", "owner": "context-core", "claims": ["archive"], "artifact_schema": "context-archive/v1", "authority": "evidence"}, "Archive", "Immutable source material adopted as evidence"),
     ]
 
 
@@ -1701,6 +1737,7 @@ def recall_repository(
     query: str = "",
     areas: Sequence[str] = (),
     include_history: bool = False,
+    include_archive: bool = False,
     facets: Sequence[tuple[str, str]] = (),
     limit: int = 8,
     pack: bool = False,
@@ -1727,7 +1764,12 @@ def recall_repository(
         raise ContextError("context_root_missing", "context root index is missing", {"path": ROOT_INDEX}, EXIT_NOT_FOUND)
     root_text = _read_index(root_path, metrics)
     _, root_areas = parse_root_index(root_text)
-    selected_areas = [row for row in root_areas if not areas or row["area"] in set(areas)]
+    selected_areas = [
+        row
+        for row in root_areas
+        if (row["area"] != "archive" or include_archive)
+        and (not areas or row["area"] in set(areas))
+    ]
     all_entries: list[tuple[dict[str, Any], dict[str, Any]]] = []
     warnings: list[str] = []
     fallback = False
@@ -1929,7 +1971,7 @@ def builtin_capability(kind: str) -> dict[str, Any]:
             "draft_fields": {
                 "required": {
                     "observation": {"type": "string", "min_chars": 1, "max_chars": 1200},
-                    "evidence": {"type": "string_list", "min_items": 1, "max_items": 4, "max_item_chars": 500},
+                    "evidence": {"type": "string_list", "min_items": 1, "max_items": 6, "max_item_chars": 500},
                 },
                 "optional": {
                     "impact": {"type": "string", "max_chars": 800},
@@ -1938,11 +1980,37 @@ def builtin_capability(kind: str) -> dict[str, Any]:
                 },
             },
         }
+    if kind == "archive":
+        return {
+            "schema": "context-owner-capability/v1", "owner": "context-core", "kind": "archive",
+            "artifact_schema": "context-archive/v1", "authority": "evidence",
+            "claim_surface": {"type": "agent_skill", "name": "context-core:archive", "operation": "claim"},
+            "claim_rule": "The immutable source material has been adopted as evidence for a durable context record",
+            "claim_assertions": ["source_adopted_as_evidence", "immutable_original_present"],
+            "lifecycle_operations": {},
+            "draft_fields": {
+                "required": {
+                    "content": {
+                        "type": "string",
+                        "min_chars": 1,
+                        "max_chars": MAX_ARCHIVE_CONTENT_CODEPOINTS,
+                    },
+                },
+                "optional": {},
+            },
+        }
     raise ContextError("owner_unavailable", "built-in capability is unavailable", {"kind": kind}, EXIT_CONFLICT)
 
 
 def capabilities_result() -> dict[str, Any]:
-    return {"schema": "context-owner-capabilities/v1", "owners": [builtin_capability("snapshot"), builtin_capability("observation")]}
+    return {
+        "schema": "context-owner-capabilities/v1",
+        "owners": [
+            builtin_capability("snapshot"),
+            builtin_capability("observation"),
+            builtin_capability("archive"),
+        ],
+    }
 
 
 def _capability_list(value: Any) -> list[dict[str, Any]]:
@@ -2013,6 +2081,19 @@ def _codepoint_size_details(actual: int, maximum: int) -> dict[str, int]:
     }
 
 
+def _candidate_batch_limit(candidates: Any) -> int:
+    if (
+        isinstance(candidates, list)
+        and len(candidates) == 1
+        and isinstance(candidates[0], dict)
+        and candidates[0].get("requested_kind") == "archive"
+        and candidates[0].get("specialized_kinds") == ["archive"]
+        and candidates[0].get("fallback_kind") is None
+    ):
+        return MAX_ARCHIVE_ENVELOPE_BYTES
+    return MAX_CANDIDATE_BYTES
+
+
 def validate_candidate_batch(batch: Any, capabilities: Any) -> list[dict[str, Any]]:
     if isinstance(batch, dict):
         expected = {"schema", "audit_count", "candidates"}
@@ -2038,11 +2119,12 @@ def validate_candidate_batch(batch: Any, capabilities: Any) -> list[dict[str, An
     if len(candidates) > 8:
         raise ContextError("candidate_batch_too_large", "candidate batch exceeds the v1 count budget", {"maximum": 8}, EXIT_CONFLICT)
     batch_bytes = _candidate_batch_bytes(batch, candidates)
-    if batch_bytes > MAX_CANDIDATE_BYTES:
+    batch_limit = _candidate_batch_limit(candidates)
+    if batch_bytes > batch_limit:
         raise ContextError(
             "candidate_batch_too_large",
-            "candidate batch exceeds 16 KiB",
-            _byte_size_details(batch_bytes, MAX_CANDIDATE_BYTES),
+            "candidate batch exceeds its bounded envelope budget",
+            _byte_size_details(batch_bytes, batch_limit),
             EXIT_CONFLICT,
         )
     capability_by_kind = {item["kind"]: item for item in _capability_list(capabilities)}
@@ -2073,11 +2155,16 @@ def validate_candidate_batch(batch: Any, capabilities: Any) -> list[dict[str, An
         claim = candidate.get("claim")
         if not _substantive(claim):
             raise ContextError("candidate_invalid", "candidate claim is invalid")
-        if len(claim) > MAX_PRIMARY_CLAIM_CODEPOINTS:
+        claim_limit = (
+            MAX_ARCHIVE_CONTENT_CODEPOINTS
+            if candidate.get("requested_kind") == "archive"
+            else MAX_PRIMARY_CLAIM_CODEPOINTS
+        )
+        if len(claim) > claim_limit:
             raise ContextError(
                 "candidate_invalid",
-                "candidate claim exceeds the common 2,000-codepoint limit",
-                {"field": "claim", **_codepoint_size_details(len(claim), MAX_PRIMARY_CLAIM_CODEPOINTS)},
+                "candidate claim exceeds its kind-specific codepoint limit",
+                {"field": "claim", **_codepoint_size_details(len(claim), claim_limit)},
                 EXIT_CONFLICT,
             )
         if not _substantive(candidate.get("summary")) or len(candidate["summary"]) > 280 or "\n" in candidate["summary"]:
@@ -2104,11 +2191,12 @@ def validate_candidate_batch(batch: Any, capabilities: Any) -> list[dict[str, An
             raise ContextError("candidate_invalid", "owner_inputs contains an unrouted kind", {"kinds": sorted(set(owner_inputs) - relevant)})
         for kind, owner_input in owner_inputs.items():
             owner_input_bytes = len(canonical_json(owner_input).encode("utf-8"))
-            if owner_input_bytes > MAX_OWNER_INPUT_BYTES:
+            owner_input_limit = MAX_ARCHIVE_ENVELOPE_BYTES if kind == "archive" else MAX_OWNER_INPUT_BYTES
+            if owner_input_bytes > owner_input_limit:
                 raise ContextError(
                     "candidate_too_large",
-                    "owner input exceeds 8 KiB",
-                    {"kind": kind, **_byte_size_details(owner_input_bytes, MAX_OWNER_INPUT_BYTES)},
+                    "owner input exceeds its kind-specific byte budget",
+                    {"kind": kind, **_byte_size_details(owner_input_bytes, owner_input_limit)},
                     EXIT_CONFLICT,
                 )
             capability = capability_by_kind.get(kind)
@@ -2257,7 +2345,11 @@ def _validate_builtin_candidate_primary(
     owner_input: Any,
 ) -> dict[str, Any]:
     normalized = _validate_owner_inputs(kind, owner_input)
-    primary_field = "current_context" if kind == "snapshot" else "observation"
+    primary_field = {
+        "snapshot": "current_context",
+        "observation": "observation",
+        "archive": "content",
+    }[kind]
     if candidate.get("claim") != normalized[primary_field]:
         raise ContextError(
             "candidate_primary_claim_mismatch",
@@ -2296,14 +2388,22 @@ def direct_candidate(
         raise ContextError("candidate_invalid", "kind_hint is only supported for decision-like observations")
     normalized_inputs = _validate_owner_inputs(kind, owner_inputs)
     owner_input_bytes = len(canonical_json(normalized_inputs).encode("utf-8"))
-    if owner_input_bytes > MAX_OWNER_INPUT_BYTES:
+    owner_input_limit = MAX_ARCHIVE_ENVELOPE_BYTES if kind == "archive" else MAX_OWNER_INPUT_BYTES
+    if owner_input_bytes > owner_input_limit:
         raise ContextError(
             "candidate_too_large",
-            "owner input exceeds 8 KiB",
-            {"kind": kind, **_byte_size_details(owner_input_bytes, MAX_OWNER_INPUT_BYTES)},
+            "owner input exceeds its kind-specific byte budget",
+            {"kind": kind, **_byte_size_details(owner_input_bytes, owner_input_limit)},
             EXIT_CONFLICT,
         )
-    primary = normalized_inputs["current_context" if kind == "snapshot" else "observation"]
+    primary = normalized_inputs[{
+        "snapshot": "current_context",
+        "observation": "observation",
+        "archive": "content",
+    }[kind]]
+    normalized_source_refs = _string_list(list(source_refs), "source_refs", maximum=12, item_maximum=500)
+    if kind == "archive" and not normalized_source_refs:
+        raise ContextError("candidate_invalid", "archive requires at least one source_ref", exit_code=EXIT_CONFLICT)
     candidate: dict[str, Any] = {
         "schema": "context-capture-candidate/v1",
         "candidate_id": "cand_" + uuid.uuid4().hex,
@@ -2314,7 +2414,7 @@ def direct_candidate(
         "requested_kind": kind,
         "specialized_kinds": [kind],
         "fallback_kind": None,
-        "source_refs": _string_list(list(source_refs), "source_refs", maximum=12, item_maximum=500),
+        "source_refs": normalized_source_refs,
         "tags": _string_list(list(tags), "tags", maximum=12, item_maximum=40),
         "search_terms": _string_list(list(search_terms), "search_terms", maximum=12, item_maximum=40),
         "owner_inputs": {kind: normalized_inputs},
@@ -2322,11 +2422,12 @@ def direct_candidate(
     if kind_hint is not None:
         candidate["kind_hint"] = kind_hint
     candidate_bytes = len(canonical_json(candidate).encode("utf-8"))
-    if candidate_bytes > MAX_CANDIDATE_BYTES:
+    candidate_limit = MAX_ARCHIVE_ENVELOPE_BYTES if kind == "archive" else MAX_CANDIDATE_BYTES
+    if candidate_bytes > candidate_limit:
         raise ContextError(
             "candidate_too_large",
-            "candidate exceeds the v1 byte budget",
-            _byte_size_details(candidate_bytes, MAX_CANDIDATE_BYTES),
+            "candidate exceeds its kind-specific byte budget",
+            _byte_size_details(candidate_bytes, candidate_limit),
             EXIT_CONFLICT,
         )
     return candidate
@@ -2360,11 +2461,18 @@ def _list_section(items: Sequence[str]) -> str:
     return "\n".join(f"- {item}" for item in items)
 
 
-def _list_section_matches(value: str | None, items: Sequence[str]) -> bool:
+def _list_section_items(value: str | None) -> list[str]:
     if not isinstance(value, str):
-        return False
-    actual = [line[2:].strip() if line.startswith("- ") else line.strip() for line in value.splitlines() if line.strip()]
-    return actual == list(items)
+        return []
+    return [
+        line[2:].strip() if line.startswith("- ") else line.strip()
+        for line in value.splitlines()
+        if line.strip()
+    ]
+
+
+def _list_section_matches(value: str | None, items: Sequence[str]) -> bool:
+    return isinstance(value, str) and _list_section_items(value) == list(items)
 
 
 def _validate_claim_draft(kind: str, candidate: dict[str, Any], draft: dict[str, Any]) -> None:
@@ -2390,12 +2498,17 @@ def _validate_claim_draft(kind: str, candidate: dict[str, Any], draft: dict[str,
         optional = (("decided", "Decided"), ("refs", "References"), ("capture_candidates", "Capture candidates"))
         if frontmatter.get("anchors", []) != owner_inputs.get("anchors", []):
             raise ContextError("claim_result_mismatch", "snapshot anchors differ from embedded candidate", exit_code=EXIT_CONFLICT)
-    else:
+    elif kind == "observation":
         primary = owner_inputs["observation"]
         expected = {"Observation": primary, "Evidence": owner_inputs["evidence"]}
         optional = (("impact", "Impact"), ("current_handling", "Current handling"), ("followup_conditions", "Follow-up conditions"))
         if frontmatter.get("kind_hint") != candidate.get("kind_hint"):
             raise ContextError("claim_result_mismatch", "observation kind_hint differs from embedded candidate", exit_code=EXIT_CONFLICT)
+    else:
+        expected = {"Content": owner_inputs["content"]}
+        optional = ()
+        if not candidate.get("source_refs"):
+            raise ContextError("claim_result_mismatch", "archive requires source_refs", exit_code=EXIT_CONFLICT)
     for field, section in optional:
         value = owner_inputs.get(field)
         if value:
@@ -2451,12 +2564,15 @@ def draft_owner_result(
             "Next steps": _list_section(owner_inputs["next_steps"]),
         }
         optional_sections = (("decided", "Decided"), ("refs", "References"), ("capture_candidates", "Capture candidates"))
-    else:
+    elif kind == "observation":
         primary_claim = owner_inputs["observation"]
         if candidate.get("kind_hint") == "decision":
             frontmatter["kind_hint"] = "decision"
         sections = {"Observation": primary_claim, "Evidence": _list_section(owner_inputs["evidence"])}
         optional_sections = (("impact", "Impact"), ("current_handling", "Current handling"), ("followup_conditions", "Follow-up conditions"))
+    else:
+        sections = {"Content": owner_inputs["content"]}
+        optional_sections = ()
     for field, section in optional_sections:
         value = owner_inputs.get(field)
         if value:
@@ -2647,6 +2763,7 @@ def validate_owner_result(
             else {
                 "context-snapshot/v1": "snapshot",
                 "context-observation/v1": "observation",
+                "context-archive/v1": "archive",
                 "context-decision/v1": "decision",
             }.get(document.frontmatter.get("schema"))
         )
@@ -2659,7 +2776,12 @@ def validate_owner_result(
         primary_name = (
             profile["sections"]["primary"]
             if profile is not None and draft_kind == kind
-            else {"snapshot": "Current context", "observation": "Observation", "decision": "Decision"}.get(draft_kind)
+            else {
+                "snapshot": "Current context",
+                "observation": "Observation",
+                "archive": "Content",
+                "decision": "Decision",
+            }.get(draft_kind)
         )
         if (
             primary_name is None
@@ -2730,8 +2852,18 @@ def _require_vault_identity(repo: pathlib.Path, approval_material: Any) -> dict[
 
 
 def _bundle_result(repo: pathlib.Path, preview: dict[str, Any], plan: dict[str, Any], materials: list[dict[str, Any]]) -> dict[str, Any]:
-    if len(canonical_json(preview).encode("utf-8")) > MAX_APPROVAL_PREVIEW_BYTES:
-        raise ContextError("approval_preview_too_large", "grouped approval preview exceeds 32 KiB; split the candidates", exit_code=EXIT_CONFLICT)
+    effects = preview.get("effects", []) if isinstance(preview, dict) else []
+    preview_limit = (
+        MAX_ARCHIVE_ENVELOPE_BYTES
+        if effects and all(isinstance(effect, dict) and effect.get("area") == "archive" for effect in effects)
+        else MAX_APPROVAL_PREVIEW_BYTES
+    )
+    if len(canonical_json(preview).encode("utf-8")) > preview_limit:
+        raise ContextError(
+            "approval_preview_too_large",
+            "grouped approval preview exceeds its bounded byte budget; split the candidates",
+            exit_code=EXIT_CONFLICT,
+        )
     approval_material = {"vault_identity": vault_identity(repo), "preview": preview, "plan": plan}
     digest = canonical_digest(approval_material)
     bundle = {"schema": "context-mutation-bundle/v1", "approval_material": approval_material, "approval_digest": digest, "materials": materials}
@@ -3025,10 +3157,29 @@ def build_observation_capture_bundle(
     return _capture_bundle(repo, draft_owner_result(candidate, attestation, filename=filename, now=now))
 
 
+def build_archive_capture_bundle(
+    repo: pathlib.Path,
+    candidate: dict[str, Any],
+    attestation: dict[str, Any],
+    *,
+    filename: str | None = None,
+    now: str | None = None,
+) -> dict[str, Any]:
+    if candidate.get("requested_kind") != "archive":
+        raise ContextError("candidate_invalid", "archive capture requires an archive candidate")
+    return _capture_bundle(repo, draft_owner_result(candidate, attestation, filename=filename, now=now))
+
+
 def _semantic_projection(kind: str, document: Document) -> dict[str, Any]:
     schema = document.frontmatter["schema"]
-    primary_name = "Current context" if kind == "snapshot" else "Observation"
-    supporting_name = "Open items" if kind == "snapshot" else "Evidence"
+    primary_name = {"snapshot": "Current context", "observation": "Observation", "archive": "Content"}[kind]
+    supporting_name = {"snapshot": "Open items", "observation": "Evidence", "archive": None}[kind]
+    if supporting_name is None:
+        return {
+            "kind": kind,
+            "primary_claim": _section_value(document.sections, schema, primary_name),
+            "supporting_context": [],
+        }
     supporting_body = _section_value(document.sections, schema, supporting_name) or ""
     supporting = [line[2:].strip() for line in supporting_body.splitlines() if line.startswith("- ")][:4]
     return {
@@ -3277,7 +3428,7 @@ def _read_artifact(
                 warnings.append("anchor_changed")
         result.update({"freshness": freshness, "warnings": sorted(set(warnings))})
     else:
-        result["use_as"] = "investigate_or_support"
+        result["use_as"] = "source_evidence" if area == "archive" else "investigate_or_support"
         result["state"] = "history" if "/retired/" in result["path"] else "current"
     if max_bytes is None:
         return {**result, "sections": available, "truncated": False}
@@ -3336,7 +3487,25 @@ def _core_init_contents() -> dict[str, str]:
             "Non-authoritative findings and evidence",
             search_terms=("observation", "evidence"),
         ),
+        "context/archive/archive.index.md": _area_seed(
+            "archive",
+            "context-core",
+            "context-archive/v1",
+            "evidence",
+            "Immutable source material adopted as evidence",
+            search_terms=("archive", "source", "evidence"),
+        ),
     }
+
+
+def _core_init_paths(contents: Mapping[str, str] | Mapping[str, Any]) -> list[str]:
+    legacy_prefix = [
+        ROOT_INDEX,
+        "context/observation/observation.index.md",
+        "context/snapshot/snapshot.index.md",
+    ]
+    ordered = [path for path in legacy_prefix if path in contents]
+    return ordered + sorted(set(contents) - set(ordered))
 
 
 def _is_exact_core_init_prefix(repo: pathlib.Path, contents: dict[str, str]) -> bool:
@@ -3352,6 +3521,8 @@ def _is_exact_core_init_prefix(repo: pathlib.Path, contents: dict[str, str]) -> 
         "context/snapshot",
         "context/observation",
         "context/observation/retired",
+        "context/archive",
+        "context/archive/retired",
     }
     present_directories = {
         path.relative_to(repo).as_posix()
@@ -3365,7 +3536,7 @@ def _is_exact_core_init_prefix(repo: pathlib.Path, contents: dict[str, str]) -> 
         for path in entries
         if path.is_file()
     )
-    ordered = sorted(contents)
+    ordered = _core_init_paths(contents)
     if present != ordered[: len(present)]:
         return False
     return all(
@@ -3376,7 +3547,31 @@ def _is_exact_core_init_prefix(repo: pathlib.Path, contents: dict[str, str]) -> 
 
 def build_init_bundle(repo: pathlib.Path) -> dict[str, Any]:
     root_path = repo / "context"
-    paths = [repo / ROOT_INDEX, repo / "context/snapshot/snapshot.index.md", repo / "context/observation/observation.index.md"]
+    paths = [
+        repo / ROOT_INDEX,
+        repo / "context/snapshot/snapshot.index.md",
+        repo / "context/observation/observation.index.md",
+        repo / "context/archive/archive.index.md",
+    ]
+    legacy_paths = paths[:3]
+    if all(path.is_file() for path in legacy_paths):
+        try:
+            _, rows = parse_root_index(paths[0].read_text(encoding="utf-8"))
+            archive_rows = [row for row in rows if row["area"] == "archive" or "archive" in row["claims"]]
+            if archive_rows != [_builtin_area_specs()[2][0]] or not paths[3].is_file():
+                return build_area_register_bundle(
+                    repo,
+                    {
+                        "schema": "context-owner-descriptor/v1",
+                        "owner": "context-core",
+                        "kind": "archive",
+                        "artifact_schema": "context-archive/v1",
+                        "authority": "evidence",
+                    },
+                    _core_init_contents()["context/archive/archive.index.md"],
+                )
+        except (ContextError, OSError, UnicodeError):
+            pass
     existing = [path.is_file() for path in paths]
     if all(existing):
         try:
@@ -3386,6 +3581,7 @@ def build_init_bundle(repo: pathlib.Path) -> dict[str, Any]:
             indexes = {
                 "snapshot": parse_area_index(paths[1].read_text(encoding="utf-8")),
                 "observation": parse_area_index(paths[2].read_text(encoding="utf-8")),
+                "archive": parse_area_index(paths[3].read_text(encoding="utf-8")),
             }
             descriptors_match = all(
                 rows.get(area) == descriptor
@@ -3415,11 +3611,11 @@ def build_init_bundle(repo: pathlib.Path) -> dict[str, Any]:
     plan = {
         "schema": "context-mutation-plan/v1", "plan_id": new_plan_id(), "owner": "context-core", "source_type": "core_control",
         "transition": "core_init", "owner_descriptor": {"owner": "context-core", "kind": "storage", "artifact_schema": PROTOCOL},
-        "control_input": {"schema": "context-core-control/v1", "transition": "core_init", "seed_digests": {path: sha256_bytes(file_bytes(contents[path])) for path in sorted(contents)}},
+        "control_input": {"schema": "context-core-control/v1", "transition": "core_init", "seed_digests": {path: sha256_bytes(file_bytes(contents[path])) for path in _core_init_paths(contents)}},
         "prior_bundle_digests": [], "read_preconditions": [],
-        "operations": [{"op": "index_rebuild", "derived_from": [effect_id], "areas": ["observation", "snapshot"], "include_root": True, "before_sha256": before, "after_sha256": after, "seed_materials": material_ids}],
+        "operations": [{"op": "index_rebuild", "derived_from": [effect_id], "areas": ["archive", "observation", "snapshot"], "include_root": True, "before_sha256": before, "after_sha256": after, "seed_materials": material_ids}],
     }
-    preview = {"schema": "context-approval-preview/v1", "owner": "context-core", "candidate_id": None, "artifacts": [], "effects": [{"effect_id": effect_id, "action": "initialize_core", "paths": sorted(contents)}]}
+    preview = {"schema": "context-approval-preview/v1", "owner": "context-core", "candidate_id": None, "artifacts": [], "effects": [{"effect_id": effect_id, "action": "initialize_core", "paths": _core_init_paths(contents)}]}
     return _bundle_result(repo, preview, plan, materials)
 
 
@@ -4784,6 +4980,13 @@ def build_rename_bundle(repo: pathlib.Path, identifier: str, filename: str) -> d
     area, source, document = _find_artifact(repo, identifier, warnings=warnings)
     warnings.extend(warning["code"] for warning in document.warnings)
     _assert_artifact_id_unique(repo, identifier, source)
+    if area == "archive":
+        raise ContextError(
+            "lifecycle_unsupported",
+            "archive supports only capture, read, search, and discard",
+            {"area": area},
+            EXIT_CONFLICT,
+        )
     relative_source = source.relative_to(repo).as_posix()
     destination = resolve_artifact_path(repo, area, filename, existing_path=relative_source)
     relative_destination = destination.relative_to(repo).as_posix()
@@ -4829,6 +5032,9 @@ def _inbound_refs(repo: pathlib.Path, identifier: str, excluded_path: pathlib.Pa
                 relation_values.extend(value if isinstance(value, list) else [value])
             for value in frontmatter.get("relations", {}).values() if isinstance(frontmatter.get("relations"), dict) else []:
                 relation_values.extend(value if isinstance(value, list) else [value])
+            if frontmatter.get("schema") == "context-observation/v1":
+                evidence = _section_value(document.sections, "context-observation/v1", "Evidence")
+                relation_values.extend(item for item in _list_section_items(evidence) if is_context_id(item))
             if identifier in relation_values:
                 refs.append(path.relative_to(repo).as_posix())
     return sorted(refs)
@@ -4873,6 +5079,25 @@ def observation_read(
     max_bytes: int | None = None,
 ) -> dict[str, Any]:
     return _read_artifact(repo, identifier, "observation", sections, max_bytes)
+
+
+def archive_read(
+    repo: pathlib.Path,
+    identifier: str,
+    sections: Sequence[str] = (),
+    max_bytes: int | None = None,
+) -> dict[str, Any]:
+    return _read_artifact(repo, identifier, "archive", sections, max_bytes)
+
+
+def archive_search(repo: pathlib.Path, query: str, limit: int = 8) -> dict[str, Any]:
+    return recall_repository(repo, query=query, areas=["archive"], include_archive=True, limit=limit)
+
+
+def build_archive_discard_bundle(repo: pathlib.Path, identifier: str) -> dict[str, Any]:
+    path, _ = _artifact_in_area(repo, identifier, "archive", current_only=True)
+    del path
+    return build_discard_bundle(repo, identifier)
 
 
 def observation_search(repo: pathlib.Path, query: str = "", *, include_history: bool = False, limit: int = 8) -> dict[str, Any]:
@@ -5260,25 +5485,16 @@ def _validate_core_init_control(
     operation: dict[str, Any],
 ) -> None:
     descriptor = {"owner": "context-core", "kind": "storage", "artifact_schema": PROTOCOL}
-    contents = {
-        ROOT_INDEX: render_root_index(_root_seed(), _builtin_area_specs()),
-        "context/snapshot/snapshot.index.md": _area_seed(
-            "snapshot", "context-core", "context-snapshot/v1", "staging", "session handoff staging",
-            search_terms=("handoff", "resume"),
-        ),
-        "context/observation/observation.index.md": _area_seed(
-            "observation", "context-core", "context-observation/v1", "evidence", "Non-authoritative findings and evidence",
-            search_terms=("observation", "evidence"),
-        ),
-    }
+    contents = _core_init_contents()
     material_ids = {
         ROOT_INDEX: "seed_root",
         "context/snapshot/snapshot.index.md": "seed_snapshot",
         "context/observation/observation.index.md": "seed_observation",
+        "context/archive/archive.index.md": "seed_archive",
     }
     control = plan["control_input"]
     _require_exact_fields(control, {"schema", "transition", "seed_digests"}, "core_init control input")
-    expected_digests = {path: sha256_bytes(file_bytes(contents[path])) for path in sorted(contents)}
+    expected_digests = {path: sha256_bytes(file_bytes(contents[path])) for path in _core_init_paths(contents)}
     if (
         plan["owner"] != "context-core"
         or plan["owner_descriptor"] != descriptor
@@ -5293,7 +5509,7 @@ def _validate_core_init_control(
         }
         or operation["op"] != "index_rebuild"
         or operation["derived_from"] != ["effect_core_init"]
-        or operation["areas"] != ["observation", "snapshot"]
+        or operation["areas"] != ["archive", "observation", "snapshot"]
         or operation["include_root"] is not True
         or operation["before_sha256"] != {path: None for path in contents}
         or operation["after_sha256"] != expected_digests
@@ -5302,7 +5518,7 @@ def _validate_core_init_control(
         or preview["candidate_id"] is not None
         or preview["artifacts"] != []
         or preview["effects"] != [{
-            "effect_id": "effect_core_init", "action": "initialize_core", "paths": sorted(contents),
+            "effect_id": "effect_core_init", "action": "initialize_core", "paths": _core_init_paths(contents),
         }]
     ):
         _core_control_error("core_init plan differs from its exact allowlist")
@@ -5997,8 +6213,12 @@ def _apply_file_operation(
 
 
 def _apply_index_operation(repo: pathlib.Path, plan: dict[str, Any], operation: dict[str, Any], materials: dict[str, dict[str, Any]], changed: list[str]) -> list[str]:
-    index_paths = sorted(operation["after_sha256"])
     transition = plan["transition"]
+    index_paths = (
+        _core_init_paths(operation["after_sha256"])
+        if transition == "core_init"
+        else sorted(operation["after_sha256"])
+    )
     if transition in {"core_init", "area_register"}:
         by_path = {material["path"]: material for material in materials.values() if material.get("path")}
         pending: list[tuple[str, pathlib.Path]] = []
@@ -6299,6 +6519,7 @@ def refresh_repository(repo: pathlib.Path) -> dict[str, Any]:
     seen_ids: dict[str, str] = {}
     documents: dict[str, tuple[str, dict[str, Any]]] = {}
     document_kinds: dict[str, str] = {}
+    observation_evidence_refs: dict[str, list[str]] = {}
     root_specs: list[tuple[dict[str, Any], str, str]] = []
     for area in areas:
         index_valid = True
@@ -6378,6 +6599,11 @@ def refresh_repository(repo: pathlib.Path) -> dict[str, Any]:
                     seen_ids[row["id"]] = relative
                     documents[row["id"]] = (relative, document.frontmatter)
                     document_kinds[row["id"]] = area["area"]
+                    if document.frontmatter.get("schema") == "context-observation/v1":
+                        evidence = _section_value(document.sections, "context-observation/v1", "Evidence")
+                        observation_evidence_refs[row["id"]] = [
+                            item for item in _list_section_items(evidence) if is_context_id(item)
+                        ]
                 actual[row["id"]] = row
         except ContextError as error:
             issues.append({"code": error.code, "path": error.details.get("path", f"context/{area['area']}")})
@@ -6418,6 +6644,7 @@ def refresh_repository(repo: pathlib.Path) -> dict[str, Any]:
         if isinstance(relations, dict):
             for value in relations.values():
                 refs.extend(value if isinstance(value, list) else [value])
+        refs.extend(observation_evidence_refs.get(identifier, []))
         try:
             typed_relations = _typed_relation_entries(frontmatter)
         except ContextError as error:
@@ -6461,6 +6688,36 @@ def refresh_repository(repo: pathlib.Path) -> dict[str, Any]:
                 )
                 if not allowed_fallback:
                     issues.append({"code": "illegal_cross_kind_predecessor", "path": path, "id": identifier, "target": predecessor_id})
+    current_documents = {
+        identifier: frontmatter
+        for identifier, (path, frontmatter) in documents.items()
+        if document_kinds.get(identifier) == "document" and "/retired/" not in path
+    }
+    stale_documents: dict[str, list[str]] = {}
+    for decision_id, (path, frontmatter) in documents.items():
+        if document_kinds.get(decision_id) != "decision" or "/retired/" in path:
+            continue
+        relations = frontmatter.get("relations", {})
+        affected = relations.get("affects:document", []) if isinstance(relations, dict) else []
+        if not isinstance(affected, list):
+            continue
+        decision_at = datetime.datetime.fromisoformat(frontmatter["created_at"])
+        for document_id in affected:
+            target = current_documents.get(document_id)
+            if target is None:
+                continue
+            document_at = datetime.datetime.fromisoformat(target.get("updated_at", target["created_at"]))
+            if decision_at > document_at:
+                stale_documents.setdefault(document_id, []).append(decision_id)
+    warnings.extend(
+        {
+            "check": "document-stale-vs-decision",
+            "tier": "hygiene-warn",
+            "document": document_id,
+            "newer_decisions": sorted(decision_ids),
+        }
+        for document_id, decision_ids in sorted(stale_documents.items())
+    )
     successor_edges = {
         identifier: frontmatter["superseded_by"]
         for identifier, (_, frontmatter) in documents.items()
@@ -6625,7 +6882,12 @@ def doctor_repository(repo: pathlib.Path) -> dict[str, Any]:
 def schema_result() -> dict[str, Any]:
     return {
         "schema": "context-core-schema/v1", "protocol": PROTOCOL, "storage_root": "context/", "root_override": True,
-        "features": ["context-owner-descriptor/v2", "filesystem-vault/v1", "typed-relations/v1", "owner-inline-workflow/v1"],
+        "features": [
+            "context-owner-descriptor/v2", "filesystem-vault/v1",
+            "typed-relations/v1",
+            "owner-inline-workflow/v1",
+            "context-archive/v1",
+        ],
         "id": "ctx_<lowercase-uuidv4-hex>", "json_success": {"ok": True, "result": {}},
         "preview_success": {
             "ok": True,
@@ -6639,6 +6901,7 @@ def schema_result() -> dict[str, Any]:
             "schema", "capabilities", "doctor", "init", "bootstrap", "draft", "lifecycle prepare", "area register",
             "transaction preview", "transaction apply", "recall", "snapshot save/update/list/search/load/discard",
             "observation preview/capture/read/search/annotate/reverify/invalidate/supersede/discard", "rename", "discard", "refresh",
+            "archive preview/read/search/discard",
         ],
         "receipt": {
             "schema": CORE_RECEIPT_SCHEMA,
@@ -6726,7 +6989,7 @@ def _load_text_argument(value: str) -> str:
     return _read_input_file(value[1:])
 
 
-def _read_body_file(path: pathlib.Path) -> str:
+def _read_body_file(path: pathlib.Path, maximum_bytes: int = MAX_OWNER_INPUT_BYTES) -> str:
     if path.is_symlink():
         raise ContextError(
             "input_unavailable",
@@ -6748,15 +7011,15 @@ def _read_body_file(path: pathlib.Path) -> str:
                 {"path": str(path), "reason": "not_regular"},
                 EXIT_NOT_FOUND,
             )
-        if metadata.st_size > MAX_OWNER_INPUT_BYTES:
+        if metadata.st_size > maximum_bytes:
             raise ContextError(
                 "input_too_large",
-                "body input file exceeds 8 KiB",
-                {"path": str(path), **_byte_size_details(metadata.st_size, MAX_OWNER_INPUT_BYTES)},
+                "body input file exceeds its byte budget",
+                {"path": str(path), **_byte_size_details(metadata.st_size, maximum_bytes)},
                 EXIT_CONFLICT,
             )
         chunks: list[bytes] = []
-        remaining = MAX_OWNER_INPUT_BYTES + 1
+        remaining = maximum_bytes + 1
         while remaining:
             chunk = os.read(descriptor, min(remaining, 64 * 1024))
             if not chunk:
@@ -6764,11 +7027,11 @@ def _read_body_file(path: pathlib.Path) -> str:
             chunks.append(chunk)
             remaining -= len(chunk)
         payload = b"".join(chunks)
-        if len(payload) > MAX_OWNER_INPUT_BYTES:
+        if len(payload) > maximum_bytes:
             raise ContextError(
                 "input_too_large",
-                "body input file exceeds 8 KiB",
-                {"path": str(path), **_byte_size_details(len(payload), MAX_OWNER_INPUT_BYTES)},
+                "body input file exceeds its byte budget",
+                {"path": str(path), **_byte_size_details(len(payload), maximum_bytes)},
                 EXIT_CONFLICT,
             )
         return payload.decode("utf-8")
@@ -6786,13 +7049,13 @@ def _read_body_file(path: pathlib.Path) -> str:
             os.close(descriptor)
 
 
-def _load_body_argument(value: str) -> str:
+def _load_body_argument(value: str, maximum_bytes: int = MAX_OWNER_INPUT_BYTES) -> str:
     if value.startswith("@@"):
         return value[1:]
     if value == "@-":
         return sys.stdin.read()
     if value.startswith("@"):
-        return _read_body_file(pathlib.Path(value[1:]))
+        return _read_body_file(pathlib.Path(value[1:]), maximum_bytes)
     return value
 
 
@@ -6815,6 +7078,10 @@ def _capture_attestation(args: argparse.Namespace, candidate: dict[str, Any], ki
         "snapshot": (
             ("attest_handoff_requested", "handoff_requested", "/owner_inputs/snapshot/current_context"),
             ("attest_unfinished_context_present", "unfinished_context_present", "/owner_inputs/snapshot/open_items/0"),
+        ),
+        "archive": (
+            ("attest_source_adopted", "source_adopted_as_evidence", "/source_refs/0"),
+            ("attest_immutable_original", "immutable_original_present", "/owner_inputs/archive/content"),
         ),
     }[kind]
     selected = [bool(getattr(args, argument)) for argument, _, _ in flag_contract]
@@ -6918,6 +7185,7 @@ def build_parser() -> argparse.ArgumentParser:
     recall.add_argument("--query", default="")
     recall.add_argument("--area", action="append", default=[])
     recall.add_argument("--include-history", action="store_true")
+    recall.add_argument("--include-archive", action="store_true")
     recall.add_argument("--facet", action="append", default=[])
     recall.add_argument("--limit", type=int, default=8)
     recall.add_argument("--pack", action="store_true")
@@ -7061,6 +7329,37 @@ def build_parser() -> argparse.ArgumentParser:
     observation_discard.add_argument("--id", required=True)
     observation_discard.add_argument("--receipt-file")
     observation_discard.add_argument("--json", action="store_true")
+    archive = sub.add_parser("archive")
+    archive_sub = archive.add_subparsers(dest="archive_command", required=True)
+    archive_preview = archive_sub.add_parser(
+        "preview",
+        help="Build and freeze an immutable archive approval preview without recording it.",
+    )
+    archive_preview.add_argument("--title", required=True)
+    archive_preview.add_argument("--summary", required=True)
+    archive_preview.add_argument("--filename")
+    archive_preview.add_argument("--captured-from", choices=("conversation", "workspace", "manual", "import"), required=True)
+    archive_preview.add_argument("--attestation")
+    archive_preview.add_argument("--attest-source-adopted", action="store_true")
+    archive_preview.add_argument("--attest-immutable-original", action="store_true")
+    archive_preview.add_argument("--receipt-file")
+    archive_preview.add_argument("--content", required=True, help="Literal content or @file; @- reads stdin.")
+    archive_preview.add_argument("--source-ref", action="append", required=True)
+    archive_preview.add_argument("--tag", action="append", default=[])
+    archive_preview.add_argument("--search-term", action="append", default=[])
+    archive_preview.add_argument("--json", action="store_true")
+    archive_read_parser = archive_sub.add_parser("read")
+    archive_read_parser.add_argument("--id", required=True)
+    archive_read_parser.add_argument("--max-bytes", type=int)
+    archive_read_parser.add_argument("--json", action="store_true")
+    archive_search_parser = archive_sub.add_parser("search")
+    archive_search_parser.add_argument("--query", default="")
+    archive_search_parser.add_argument("--limit", type=int, default=8)
+    archive_search_parser.add_argument("--json", action="store_true")
+    archive_discard = archive_sub.add_parser("discard")
+    archive_discard.add_argument("--id", required=True)
+    archive_discard.add_argument("--receipt-file")
+    archive_discard.add_argument("--json", action="store_true")
     refresh = sub.add_parser("refresh")
     refresh.add_argument("--fix", choices=("index",))
     refresh.add_argument("--json", action="store_true")
@@ -7120,7 +7419,20 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
             if "=" not in value:
                 raise ContextError("usage_invalid", "facet must be KEY=VALUE")
             facets.append(tuple(value.split("=", 1)))
-        return recall_repository(repo, query=args.query, areas=args.area, include_history=args.include_history, facets=facets, limit=args.limit, pack=args.pack, sections=args.section, read_ids=args.read, strict_index=args.strict_index, max_bytes=args.max_bytes)
+        return recall_repository(
+            repo,
+            query=args.query,
+            areas=args.area,
+            include_history=args.include_history,
+            include_archive=args.include_archive,
+            facets=facets,
+            limit=args.limit,
+            pack=args.pack,
+            sections=args.section,
+            read_ids=args.read,
+            strict_index=args.strict_index,
+            max_bytes=args.max_bytes,
+        )
     if args.command == "rename":
         return _maybe_freeze_bundle_receipt(
             repo,
@@ -7271,6 +7583,37 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
             return _maybe_freeze_bundle_receipt(
                 repo,
                 build_observation_discard_bundle(repo, args.id),
+                args.receipt_file,
+            )
+    if args.command == "archive":
+        if args.archive_command == "preview":
+            candidate = direct_candidate(
+                "archive",
+                title=args.title,
+                summary=args.summary,
+                captured_from=args.captured_from,
+                owner_inputs={
+                    "content": _load_body_argument(args.content, MAX_ARCHIVE_INPUT_BYTES),
+                },
+                source_refs=args.source_ref,
+                tags=args.tag,
+                search_terms=args.search_term,
+            )
+            attestation, flag_based = _capture_attestation(args, candidate, "archive")
+            return _maybe_freeze_bundle_receipt(
+                repo,
+                build_archive_capture_bundle(repo, candidate, attestation, filename=args.filename),
+                args.receipt_file,
+                use_default=flag_based,
+            )
+        if args.archive_command == "read":
+            return archive_read(repo, args.id, max_bytes=args.max_bytes)
+        if args.archive_command == "search":
+            return archive_search(repo, args.query, args.limit)
+        if args.archive_command == "discard":
+            return _maybe_freeze_bundle_receipt(
+                repo,
+                build_archive_discard_bundle(repo, args.id),
                 args.receipt_file,
             )
     if args.command == "refresh":

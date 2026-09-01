@@ -14,6 +14,7 @@
 
 ## Read 경계
 
+- ARCHIVE는 근거로 채택한 불변 장문 원본을 저장합니다. 기본 recall·pack에서는 제외되며 `--include-archive` 또는 전용 `archive read|search` 표면을 명시해야 합니다.
 - healthy Stage 1 metadata hit은 root index와 선택된 area index만 열고 artifact open/list/stat을 하지 않는다. `-`와 `.`이 들어간 identifier-like query는 하나의 distinctive token으로 유지해 공통 fragment만 맞는 broad candidate를 만들지 않는다.
 - valid index의 non-empty query zero-match는 선택 area의 filename만 열거해 index에 없는 artifact만 읽는다. 모두 indexed면 body open은 0이고 fallback으로 표시하지 않는다. 누락 body와 broken area index·선택된 missing link의 recovery body read는 recall 한 번당 합계 20개로 제한하며 초과 시 `index_miss_fallback_truncated` 또는 `index_fallback_truncated` warning을 반환한다.
 - `--strict-index`는 fallback 없이 exit 6 `index_stale`로 실패한다.
@@ -23,7 +24,7 @@
 
 recall·capture의 artifact body materialization, bounded output과 model·owner invocation 비용은 corpus 크기, 등록 addon 수 또는 누적 turn 수에 비례해 증가하지 않아야 한다.
 
-- runtime 경계는 healthy Stage 1의 index-only read와 artifact open/list/stat 0, recovery body open 최대 20개, Stage 1 4 KiB·body pack 8 KiB, common primary-claim protocol 2,000 codepoint, built-in SNAP `current_context`·OBS `observation` 각각 1,200 codepoint, 최대 8개이면서 schema·audit_count·candidates 전체 canonical UTF-8 envelope가 16 KiB 이하인 `context-capture-batch/v1`, owner input 8 KiB, approval preview 32 KiB 상한으로 집행한다. Dict batch는 세 key만 허용하고 audit_count는 bool이 아닌 integer `1`이어야 한다. legacy bare list는 같은 synthetic v1 envelope byte budget으로 유지한다. zero-match의 unindexed 확인은 directory entry 수에 따라 증가할 수 있지만 indexed artifact body는 열지 않는다. `context-decision`은 별도로 decision 1,200 codepoint, brief 8 KiB·comparison input 24 KiB·result 32 KiB 상한을 둔다.
+- runtime 경계는 healthy Stage 1의 index-only read와 artifact open/list/stat 0, recovery body open 최대 20개, Stage 1 4 KiB·body pack 8 KiB, common primary-claim protocol 2,000 codepoint, built-in SNAP `current_context`·OBS `observation` 각각 1,200 codepoint, 최대 8개이면서 schema·audit_count·candidates 전체 canonical UTF-8 envelope가 16 KiB 이하인 `context-capture-batch/v1`, owner input 8 KiB, 일반 approval preview 32 KiB 상한으로 집행한다. 한도는 기본 읽기 예산이며 지식은 slot 크기가 아니라 stable slot 수로 확장한다. 명시적 ARCHIVE capture만 불변 `Content` 65,000 codepoint와 candidate·owner input·approval preview 512 KiB envelope을 허용한다. Dict batch는 세 key만 허용하고 audit_count는 bool이 아닌 integer `1`이어야 한다. legacy bare list는 같은 synthetic v1 envelope byte budget으로 유지한다. zero-match의 unindexed 확인은 directory entry 수에 따라 증가할 수 있지만 indexed artifact body는 열지 않는다. `context-decision`은 별도로 decision 1,200 codepoint, brief 8 KiB·comparison input 24 KiB·result 32 KiB 상한을 둔다.
 - `tests/context-v1/test_token_io_evidence.py`는 synthetic large corpus의 artifact I/O, candidate·addon 경계와 output byte budget을 계측한다.
 - root·area index bytes를 읽고 metadata row를 score하는 I/O·CPU는 선택한 area index 크기에 따라 증가할 수 있다. 현재 구현은 전체 artifact body materialization을 피하는 것이며 전체 recall 계산량의 O(1)을 보장하지 않는다.
 - 대화 delta당 단일 audit, signal이 없을 때의 침묵, addon의 대화 재판독 금지는 관리형 policy의 의무다. CLI는 `audit_count:1`과 bounded envelope을 검증하지만 host/model이 policy를 실제로 한 번만 수행하는지는 hard runtime guarantee가 아니다.
@@ -42,6 +43,8 @@ recall·capture의 artifact body materialization, bounded output과 model·owner
 - `approval_digest`는 canonical `approval_material` 전체의 SHA-256이다. `vault_identity`는 exact `{schema:"context-vault-identity/v1",root:{path,device,inode}}`이며 resolved vault absolute path와 device·inode decimal string을 담는다. extra·missing field는 거부한다. apply는 digest 확인 직후 현재 identity와 exact equality를 검증하고 동일 bundle object와 exact digest만 받는다. 복사·이동했거나 같은 path에 다시 만든 vault는 새 preview가 필요하다. unrelated file과 선택적인 버전관리 metadata는 결박하지 않고 실제 target byte는 CAS로 보호한다. 구 identity로 만든 미적용 bundle·receipt는 폐기하고 다시 preview해야 하며 기존 Markdown artifact는 migration하지 않는다.
 - context-core coordinator만 repository-realpath root lock 아래 atomic file operation과 deterministic index rebuild를 수행한다.
 - hidden operation, seed 누락, material/digest 불일치, changed precondition, path escape와 symlink segment는 write 전에 fail-closed한다.
+- OBS `Evidence`의 항목이 exact `ctx_` ID이면 internal reference로 보고 refresh가 target 존재를 검증한다. 일반 evidence 문자열은 계속 허용한다. ARCHIVE lifecycle은 capture·read·search·discard뿐이며 update·rename·retire·supersede는 없다.
+- Current DEC의 `affects:document`가 대상 Current DOCUMENT의 최종 갱신 시각보다 새로우면 refresh가 non-blocking `document-stale-vs-decision` hygiene warning을 반환한다.
 
 ### Core workflow receipt
 
@@ -74,7 +77,7 @@ v2 registration이 재시도 가능한 상태는 none, exact seed-only, exact ro
 `doctor`는 기존 4개 repository state(`absent|partial|invalid|ready`)와 readiness 의미를 바꾸지 않고 `plugin_version`, resolved `entrypoint`, `protocol`을 더한 exact 10-field self-report를 반환한다.
 - `schema`와 `capabilities`는 repository root 없이 동작한다. `schema.features`는 addon이 bootstrap 전에 확인하는 compatibility handshake다.
 
-`init --host codex|claude-code`은 명시적 호출 하나로 absent root의 canonical root/SNAP/OBS index seed와 활성 host의 관리형 policy block을 적용한다. host mapping은 `codex → AGENTS.md`, `claude-code → CLAUDE.md`다. policy target과 marker를 storage write 전에 preflight하고 managed marker 밖 bytes를 보존한다. valid descriptor와 최신 block이면 unrelated corpus 진단과 무관하게 `core_init`과 `policy_install`이 noop이다. populated repository에서 root index만 없으면 exact built-in SNAP/OBS metadata만 rebuild하고 미등록 area는 자동 claim하지 않으며, init target의 incompatible schema/owner/path만 `partial_core_init`으로 중단한다. 결과는 structured phase와 post-apply doctor receipt를 포함한다.
+`init --host codex|claude-code`은 명시적 호출 하나로 absent root의 canonical root/SNAP/OBS/ARCHIVE index seed와 활성 host의 관리형 policy block을 적용한다. pre-ARCHIVE vault에는 비어 있는 ARCHIVE area만 additive 등록하고 기존 artifact byte를 보존한다. host mapping은 `codex → AGENTS.md`, `claude-code → CLAUDE.md`다. policy target과 marker를 storage write 전에 preflight하고 managed marker 밖 bytes를 보존한다. valid descriptor와 최신 block이면 unrelated corpus 진단과 무관하게 `core_init`과 `policy_install`이 noop이다. init target의 incompatible schema/owner/path만 `partial_core_init`으로 중단하며 결과는 structured phase와 post-apply doctor receipt를 포함한다.
 
 `bootstrap --descriptor @file --index-seed @file --host codex|claude-code`은 addon init용 public surface다. 같은 호출에서 core init을 먼저 완료한 뒤 empty area seed를 `area_register`로 적용하고 동일한 host policy를 설치한다. 중간 실패는 완료/실패 phase를 반환하며, v1의 exact root-row prefix 또는 v2의 exact root-row+profile-registry prefix는 재시도에서 남은 area index를 적용해 수렴한다. descriptor schema/owner/kind/artifact_schema/authority/profile digest 또는 existing area index metadata가 다르면 noop이 아니라 write 0 fail-closed다. 이 explicit-init authority는 fixed `core_init|area_register|policy_install` transition에만 허용되고 일반 artifact/index mutation에는 사용할 수 없다.
 

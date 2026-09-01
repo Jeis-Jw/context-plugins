@@ -2,7 +2,7 @@
 
 [English](./README.md)
 
-`context-document`는 project-scoped living document의 semantic owner입니다. DOCUMENT만 단독으로 쓸 수 있으며 DEC가 `affects:document`로 참조할 수 있지만 이 plugin은 Decision owner를 요구하거나 설치하지 않습니다.
+`context-document`는 판단자(에이전트·사람)가 recall/envelope로 소비하는 project-scoped 현행 상태 진술의 semantic owner입니다. DOCUMENT만 단독으로 쓸 수 있으며 DEC가 `affects:document`로 참조할 수 있지만 이 plugin은 Decision owner를 요구하거나 설치하지 않습니다. 외부 전달용 deliverable 문서는 범위 밖이며 repository가 소유합니다.
 
 ## Artifact 계약
 
@@ -14,7 +14,9 @@
 
 `update`는 ID, path, scope, `document_key`를 유지한 채 Current artifact를 같은 state에서 교체합니다. document taxonomy, subtype, supersede flow와 backlink index는 의도적으로 제공하지 않습니다.
 
-decision은 `affects:document`로 document를 참조할 수 있고 document 쪽 inverse edge는 저장하지 않습니다. Intent, decision, document는 각각 독립적으로 사용할 수 있습니다.
+artifact 한도는 기본 읽기 예산입니다. 큰 지식은 한 slot을 키우지 말고 `design-skeleton`·`design-envelope`·`design-rules`처럼 stable chapter slot으로 분해합니다.
+
+decision은 `affects:document`로 document를 참조할 수 있고 document 쪽 inverse edge는 저장하지 않습니다. `refresh`는 Current DEC가 document의 `updated_at`(최초 update 전에는 `created_at`)보다 새로우면 `document-stale-vs-decision` hygiene warning을 내고, DEC 이후 document를 update하면 warning을 없앱니다. Intent, decision, document는 각각 독립적으로 사용할 수 있습니다.
 
 semantic CLI는 canonical area를 읽고 draft와 validation receipt만 만듭니다. path resolution, artifact/index write, approval bundle, lock, CAS와 apply는 `context-core`만 수행합니다. 일반 filesystem directory가 vault이며 Git repository는 필요하지 않습니다.
 
@@ -23,3 +25,5 @@ semantic CLI는 canonical area를 읽고 draft와 validation receipt만 만듭�
 `0.10.0`은 developer preview이며 tag나 marketplace publication을 의미하지 않습니다.
 
 `0.11.0`은 단일 inline preview와 승인 후 apply 경로, 진단용 호환 core 후보 안내를 추가합니다. tag나 marketplace publication을 의미하지 않습니다.
+
+`0.12.0`은 DOCUMENT를 recall되는 current-state context로 명시하고 stable-slot 분해와 cross-owner freshness hygiene 진단을 추가합니다. tag나 marketplace publication을 의미하지 않습니다.

@@ -6,9 +6,9 @@
 
 Run the root `core-decision` profile installer once from the downloaded plugin files. It asks the host to install missing profile plugins and accepts enabled same-major versions as compatible. Reload the host, then run `$context-decision:init` once in the target vault directory. That addon init bootstraps core storage, registers the DEC area, and installs the managed `AGENTS.md` or `CLAUDE.md` policy. There is no bundle or meta-plugin, and decision code is not embedded in core.
 
-For a core-only setup, `$context-core:init` remains available. It creates the canonical root, SNAP and OBS indexes and the active host policy. Re-running init after a ready result is a filesystem no-op.
+For a core-only setup, `$context-core:init` remains available. It creates the canonical root, SNAP, OBS, and ARCHIVE indexes and the active host policy. Re-running init after a ready result is a filesystem no-op; a pre-ARCHIVE vault receives only the missing empty ARCHIVE area.
 
-The `v0.11.0` tag is not published yet. See the repository root README for the owner-gated tag, publication, and license status.
+The `v0.12.0` tag is not published yet. See the repository root README for the owner-gated tag, publication, and license status.
 
 ## Runtime contract
 
@@ -28,8 +28,9 @@ The managed policy audits only the new semantic delta in the current response pa
 
 - A healthy metadata miss opens zero indexed artifact bodies.
 - Missing or stale index recovery opens at most 20 bodies per recall.
-- Stage-1 output is bounded to 4 KiB, selected body packs to 8 KiB, and approval previews to 32 KiB.
+- Stage-1 output is bounded to 4 KiB, selected body packs to 8 KiB, and ordinary approval previews to 32 KiB.
 - The common primary-claim protocol ceiling is 2,000 codepoints. Built-in SNAP `current_context` and OBS `observation` each use an owner-specific 1,200-codepoint ceiling; DEC `decision` independently uses 1,200. Canonical owner input is at most 8 KiB. A `context-capture-batch/v1` has at most eight candidates and its entire canonical envelope is at most 16 KiB.
+- Limits are default-read budgets: expand knowledge with more stable slots, not larger slots. ARCHIVE is the explicit exception for immutable source material: `Content` is at most 65,000 codepoints, its capture envelope is bounded to 512 KiB, and it is excluded from default recall/pack unless `--include-archive` is present.
 - These hard bounds cover body materialization/open, selected output, candidates/envelopes, and owner invocation input. Index scoring and directory enumeration may grow with the index, and end-to-end model tokens are not O(1).
 
 ## Approval and vault binding
@@ -46,6 +47,7 @@ A denied apply, preview, recall, route, claim, or validation has zero repository
 |---|---|---|
 | SNAP | Unfinished-session handoff | staging |
 | OBS | Reusable observation and evidence | evidence |
+| ARCHIVE | Immutable source material adopted as evidence | evidence; excluded from default recall |
 | DEC | Current decision and superseded history | authoritative, owned by `context-decision` |
 | ASM | Optional unverified premise | provisional, experimental owner |
 | TERM | Optional project vocabulary | authoritative, experimental owner |
@@ -61,5 +63,7 @@ Version `0.9.0` uses major versions as the package compatibility boundary, minor
 Version `0.10.0` adds typed relation validation and optional INTENT/DOCUMENT owner registration surfaces without changing the filesystem-vault or approval model. No tag or publication is implied.
 
 Version `0.11.0` makes OBS preview state explicit, provides the shared inline owner workflow transport, and adds a diagnostic same-major cache-pin warning without changing approval or stored artifact bytes. No tag or publication is implied.
+
+Version `0.12.0` adds immutable ARCHIVE capture/read/search/discard, bounded OBS-to-context evidence references, and DOCUMENT freshness hygiene diagnostics while preserving the approval and filesystem-vault boundaries. No tag or publication is implied.
 
 See the [storage protocol](./skills/context/references/context-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).

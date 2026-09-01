@@ -7,12 +7,15 @@ description: When a living project document needs durable capture or content rep
 
 This skill is the `context-document/v1` semantic owner and never writes vault bytes.
 
-- Claim substantive living-document `Content` with an exact `(scope, document_key)` Current slot.
+- Claim substantive current-state `Content` that an agent or person consumes through recall/envelopes, with an exact `(scope, document_key)` Current slot.
+- Decline external deliverables; they remain repository-owned documents outside this context owner.
 - Decline evidence, premises, desired direction, chosen commitments, and mixed-owner input.
 - Bind claim attestation to exact RFC 6901 pointers for `document_key` and `content`.
 - `update` changes only `Content` and `updated_at`; preserve ID, path, scope, document_key, and Current state.
+- Treat `document-stale-vs-decision` as a non-blocking freshness signal: review the newer affecting DEC and update Content only when the current state actually changed.
 - Rebuild every complete owner result from live Current bytes and exact semantic input before issuing a receipt.
 - Do not add taxonomy, subtypes, supersede lifecycle, backlink indexes, or inverse relations.
+- Treat each slot as one default-read budget. Split a larger design into stable chapter slots such as `design-skeleton`, `design-envelope`, and `design-rules`; do not enlarge one slot.
 
 Only context-core may preview, approve, lock, CAS, or persist a result. Present the complete rendered body when asking for approval and never regenerate it after approval.
 

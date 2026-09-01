@@ -33,11 +33,11 @@ class ProfileInstallerTests(unittest.TestCase):
     def test_acceptance_68_profile_installer_keeps_core_and_decision_separate(self) -> None:
         profile = installer.load_profile()
         self.assertEqual("context-plugin-profile/v3", profile["schema"])
-        self.assertEqual("0.11.0", profile["version"])
+        self.assertEqual("0.12.0", profile["version"])
         self.assertEqual("same-major", profile["compatibility"])
-        self.assertEqual("context-plugins/0.11.0", profile["release_set"])
+        self.assertEqual("context-plugins/0.12.0", profile["release_set"])
         self.assertEqual(
-            {"context-core": "0.11.0", "context-decision": "0.11.0"},
+            {"context-core": "0.12.0", "context-decision": "0.11.0"},
             profile["minimum_versions"],
         )
         self.assertEqual(
@@ -82,8 +82,8 @@ class ProfileInstallerTests(unittest.TestCase):
         profile = installer.load_profile()
         marketplaces = [{"name": "context-plugins", "root": str(ROOT.resolve())}]
         installed = [
-            {"pluginId": selector, "version": "0.11.0", "enabled": True}
-            for selector in profile["plugins"]
+            {"pluginId": "context-core@context-plugins", "version": "0.12.0", "enabled": True},
+            {"pluginId": "context-decision@context-plugins", "version": "0.11.0", "enabled": True},
         ]
         self.assertEqual([], installer.build_install_plan(profile, "codex", "user", marketplaces, installed))
 
@@ -106,7 +106,7 @@ class ProfileInstallerTests(unittest.TestCase):
         ]
         with self.assertRaisesRegex(
             installer.InstallProfileError,
-            r"below compatible release-set minimum 0\.11\.0.*Compatible candidate path:.*no automatic update",
+            r"below compatible release-set minimum 0\.12\.0.*Compatible candidate path:.*no automatic update",
         ):
             installer.build_install_plan(profile, "codex", "user", marketplaces, installed)
 

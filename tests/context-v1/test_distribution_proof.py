@@ -26,7 +26,15 @@ PLUGIN_NAMES = (
     "context-intent",
     "context-document",
 )
-RELEASE_VERSION = "0.11.0"
+RELEASE_SET_VERSION = "0.12.0"
+PLUGIN_VERSIONS = {
+    "context-core": "0.12.0",
+    "context-decision": "0.11.0",
+    "context-assumption": "0.11.0",
+    "context-term": "0.11.0",
+    "context-intent": "0.11.0",
+    "context-document": "0.12.0",
+}
 OWNER_SKILLS = {
     "context-core": "context",
     "context-decision": "decision",
@@ -215,10 +223,10 @@ class DistributionProofTests(unittest.TestCase):
         codex_entries = {item["name"]: item for item in codex_marketplace["plugins"]}
         expected_release_set = {
             "schema": "context-plugin-release-set/v1",
-            "version": RELEASE_VERSION,
+            "version": RELEASE_SET_VERSION,
             "runtime_compatibility": "same-major-plus-runtime-handshake",
             "automatic_update": False,
-            "members": {name: RELEASE_VERSION for name in PLUGIN_NAMES},
+            "members": PLUGIN_VERSIONS,
         }
         self.assertEqual(expected_release_set, claude_marketplace["metadata"]["release_set"])
         self.assertEqual(expected_release_set, codex_marketplace["metadata"]["release_set"])
@@ -229,7 +237,7 @@ class DistributionProofTests(unittest.TestCase):
             codex = read_json(root / ".codex-plugin/plugin.json")
             self.assertEqual(name, claude["name"])
             self.assertEqual(name, codex["name"])
-            self.assertEqual(RELEASE_VERSION, claude["version"])
+            self.assertEqual(PLUGIN_VERSIONS[name], claude["version"])
             self.assertEqual(claude["version"], codex["version"])
             self.assertEqual(claude["version"], claude_entries[name]["version"])
             self.assertEqual(claude["version"], codex_entries[name]["version"])
@@ -246,7 +254,7 @@ class DistributionProofTests(unittest.TestCase):
             for document in (claude, codex, claude_entries[name], codex_entries[name]):
                 self.assertFalse(FORBIDDEN_KEYS & recursive_keys(document))
             plugin_readme = (root / "README.md").read_text(encoding="utf-8")
-            self.assertIn(RELEASE_VERSION, plugin_readme)
+            self.assertIn(PLUGIN_VERSIONS[name], plugin_readme)
             if name in {"context-core", "context-decision"}:
                 self.assertTrue((root / "README.ko.md").is_file())
 
@@ -420,11 +428,14 @@ class DistributionProofTests(unittest.TestCase):
             self.assertNotIn(developer_only_token, readme)
         profile = read_json(ROOT / "profiles/core-decision.json")
         self.assertEqual("context-plugin-profile/v3", profile["schema"])
-        self.assertEqual(RELEASE_VERSION, profile["version"])
+        self.assertEqual(RELEASE_SET_VERSION, profile["version"])
         self.assertEqual("same-major", profile["compatibility"])
-        self.assertEqual(f"context-plugins/{RELEASE_VERSION}", profile["release_set"])
+        self.assertEqual(f"context-plugins/{RELEASE_SET_VERSION}", profile["release_set"])
         self.assertEqual(
-            {"context-core": RELEASE_VERSION, "context-decision": RELEASE_VERSION},
+            {
+                "context-core": PLUGIN_VERSIONS["context-core"],
+                "context-decision": PLUGIN_VERSIONS["context-decision"],
+            },
             profile["minimum_versions"],
         )
         self.assertEqual(
@@ -509,9 +520,9 @@ class DistributionProofTests(unittest.TestCase):
         skill_paths = sorted(ROOT.glob("plugins/*/skills/*/SKILL*.md"))
         canonical_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.md"))
         translated_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.ko.md"))
-        self.assertEqual(14, len(canonical_skills))
-        self.assertEqual(6, len(translated_skills))
-        self.assertEqual(20, len(skill_paths))
+        self.assertEqual(15, len(canonical_skills))
+        self.assertEqual(7, len(translated_skills))
+        self.assertEqual(22, len(skill_paths))
 
         for path in canonical_skills:
             text = path.read_text(encoding="utf-8")

@@ -66,8 +66,8 @@ Handshake가 실패하면 semantic adapter는 exact sibling cache layout에서 m
 - Core selector: `context-core@context-plugins`
 - Source: `Jeis-Jw/context-plugins`
 - Protocol: `context-common/v2`
-- Current repository version: `0.11.0`
-- Optional release tag: `v0.11.0` (not created or pushed; owner approval required)
+- Current repository version: `0.12.0`
+- Optional release tag: `v0.12.0` (not created or pushed; owner approval required)
 
 ## Provenance
 
@@ -77,4 +77,4 @@ Handshake가 실패하면 semantic adapter는 exact sibling cache layout에서 m
 
 이 저장소에는 root [`LICENSE`](./LICENSE)의 Apache License 2.0이 적용됩니다.
 
-라이선스 선택은 완료됐지만 `v0.11.0` tag 생성·push와 marketplace publication은 여전히 각각 별도 owner gate입니다. 라이선스 적용, 검증 또는 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.
+라이선스 선택은 완료됐지만 `v0.12.0` tag 생성·push와 marketplace publication은 여전히 각각 별도 owner gate입니다. 라이선스 적용, 검증 또는 source branch push만으로 이 단계가 완료됐다고 간주하지 않습니다.
