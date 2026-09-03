@@ -37,7 +37,8 @@ The B1 review regression adds ten component siblings per target at N=200/1000. A
 - Code and policy change sets each pass the complete Python 3.11 and 3.13 suites: 362 passed, 602 subtests.
 - The subsequent W2 ranking and scale-regression change passes both complete suites: 365 passed, 624 subtests. The experiment corpus checks pass on both interpreters as well.
 - The B1 follow-up passes both complete suites: 368 passed, 640 subtests, including record supersede/withdraw and ambiguous same-major core-cache regressions.
-- The W3 index-projection change passes both complete suites: 378 passed, 646 subtests on Python 3.11 and 3.13, plus `compileall` and `claude plugin validate` for the marketplace, core, and decision packages. The parent decision `integrity-write-boundary` was superseded by `ctx_292f1a32eeae4c0db02f4276ab7e0073` in the coordinating vault before this change landed.
+- The W3 index-projection change passes both complete suites: 378 passed, 646 subtests on Python 3.11 and 3.13, plus `compileall` and `claude plugin validate` for the marketplace, core, and decision packages.
+- The one-call snapshot change passes both complete suites: 379 passed, 646 subtests on Python 3.11 and 3.13, plus `compileall`. The parent decision `integrity-write-boundary` was superseded by `ctx_292f1a32eeae4c0db02f4276ab7e0073` in the coordinating vault before this change landed.
 - Both interpreters pass `compileall`; `claude plugin validate` passes for the marketplace, core, and decision packages using isolated local configuration.
 - The generated policy body, distributed rule, and repository managed block are identical. Core EN/KO SKILL files remain within the existing 3,000-byte limits.
 
