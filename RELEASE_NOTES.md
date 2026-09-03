@@ -1,5 +1,13 @@
 # Release notes
 
+## 0.14.0 (developer preview; tag not published)
+
+This is the unreleased lean v6 source candidate. Distribution manifests still describe the `0.13.0` release set pending release preparation.
+
+- Add `decision_workflow.py record --approved`: the caller attests direct, explicit, unconditional semantic approval, then one process previews and applies the unchanged frozen receipt. Core remains the only physical writer; runtime SHA, vault identity, approval binding, CAS, locking, and atomic writes remain enforced.
+- Resolve an omitted `--core-cli` only when exactly one manifest-validated, same-major sibling core exists. Missing or ambiguous candidates stop before a write. Explicit paths and the low-level two-phase workflow remain compatible.
+- Derive up to twelve search terms from a decision's body when none are supplied, including rejected alternatives and rationale. Compare query and index word stems so a conflicting request can find the relevant decision among near-topic distractors without a body scan.
+
 ## 0.13.0 (developer preview; tag not published)
 
 - Replace the user-facing rendered Markdown/file-body approval preview with semantic approval of payload, canonical scope, and lifecycle effect in normal conversation. A direct, explicit, unconditional settled choice or record request authorizes capture without a second storage question.

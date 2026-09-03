@@ -16,6 +16,7 @@ import time
 import uuid
 from typing import Any, Sequence
 
+import core_compatibility
 import decision_cli
 
 
@@ -72,8 +73,31 @@ def _load_json_argument(value: str) -> Any:
         raise WorkflowError("input_unavailable", "JSON input could not be read", {"path": str(path)}, 3) from error
 
 
-def _core_cli(value: str) -> pathlib.Path:
-    return decision_cli.required_core_surface(value)
+def _core_cli(value: str | None) -> pathlib.Path:
+    """Resolve the context-core entrypoint.
+
+    An explicit ``--core-cli`` keeps the historical contract. Without it, the
+    sibling ``context-core`` package next to this plugin is resolved
+    deterministically: exactly one same-major, manifest-validated candidate is
+    accepted and its actual SHA-256 is bound by every later core call. Zero or
+    several candidates fail closed with the diagnostic list; nothing is guessed.
+    """
+    if value:
+        return decision_cli.required_core_surface(value)
+    candidates = core_compatibility.discover_core_candidates(
+        __file__,
+        None,
+        compatible_major=decision_cli.CORE_COMPATIBLE_MAJOR,
+        minimum_version="0.9.0",
+    )
+    if len(candidates) != 1:
+        raise WorkflowError(
+            "core_cli_required",
+            "pass --core-cli <path>: sibling context-core resolution needs exactly one same-major candidate",
+            {"candidates": candidates},
+            exit_code=2,
+        )
+    return decision_cli.required_core_surface(candidates[0]["entrypoint"])
 
 
 def _file_digest(path: pathlib.Path) -> str:
@@ -875,6 +899,47 @@ def apply(args: argparse.Namespace) -> dict[str, Any]:
     return result
 
 
+def record(args: argparse.Namespace) -> dict[str, Any]:
+    """Preview and apply one DEC in a single call.
+
+    The frozen receipt, approval_digest binding, pinned core SHA, CAS, lock and
+    atomic write are unchanged: ``record`` runs the same ``preview`` and then the
+    same ``apply`` on that unchanged receipt inside one process. The caller
+    attests with ``--approved`` that the user gave direct, explicit,
+    unconditional semantic approval in conversation; the digest never has to be
+    relayed by the agent.
+    """
+    if not getattr(args, "approved", False):
+        raise WorkflowError(
+            "approval_attestation_required",
+            "record requires --approved: the user's direct, explicit, unconditional approval given in conversation",
+            exit_code=2,
+        )
+    previewed = preview(args)
+    apply_args = argparse.Namespace(
+        vault=getattr(args, "vault", None),
+        core_cli=previewed["preflight"]["observed"]["entrypoint"],
+        receipt_file=previewed["receipt_file"],
+        approved_digest=previewed["approval_digest"],
+        keep_receipt=getattr(args, "keep_receipt", False),
+    )
+    applied = apply(apply_args)
+    return {
+        "schema": "context-decision-workflow-record/v1",
+        "candidate_id": previewed["candidate_id"],
+        "operation": previewed["operation"],
+        "approval_preview": previewed["approval_preview"],
+        "approval_digest": previewed["approval_digest"],
+        "plan_id": previewed["plan_id"],
+        "preflight": previewed["preflight"],
+        "applied": bool(applied.get("applied", True)),
+        "changed_paths": applied.get("changed_paths", []),
+        "index_paths": applied.get("index_paths", []),
+        "receipt_removed": applied.get("receipt_removed", False),
+        "warnings": applied.get("warnings", []),
+    }
+
+
 def reject(args: argparse.Namespace) -> dict[str, Any]:
     repo = decision_cli.vault_root(getattr(args, "vault", None))
     core_cli = _core_cli(args.core_cli) if args.core_cli is not None else None
@@ -911,6 +976,48 @@ def reject(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _add_capture_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--host", choices=("codex", "claude-code"), required=True)
+    parser.add_argument("--core-cli", help="context-core entrypoint; omit to resolve the single same-major sibling core.")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--candidate")
+    source.add_argument("--inline", action="store_true")
+    parser.add_argument("--attestation")
+    parser.add_argument("--candidate-id")
+    parser.add_argument("--title")
+    parser.add_argument("--summary")
+    parser.add_argument("--scope")
+    parser.add_argument("--decision-key")
+    parser.add_argument("--captured-from", choices=("conversation", "workspace", "manual", "import"))
+    parser.add_argument("--commitment-evidence", action="append", default=[])
+    parser.add_argument("--sec-decision")
+    parser.add_argument("--sec-rationale")
+    parser.add_argument("--sec-alternatives", action="append", default=[])
+    parser.add_argument("--sec-constraints", action="append", default=[])
+    parser.add_argument("--sec-tradeoffs", action="append", default=[])
+    parser.add_argument("--sec-revisit", action="append", default=[], help="Revisit condition text; repeat for multiple conditions.")
+    parser.add_argument("--revisit-on", help="Calendar date only (YYYY-MM-DD); condition text: --sec-revisit.")
+    parser.add_argument("--source-ref", action="append", default=[])
+    parser.add_argument("--tag", action="append", default=[])
+    parser.add_argument("--search-term", action="append", default=[])
+    parser.add_argument("--informed-by", action="append", default=[])
+    relation_help = "One ctx_ id per flag; repeat the flag for multiple ids (no comma list)."
+    parser.add_argument("--serves-intent", dest="serves_intents", action="append", default=[], help=relation_help)
+    parser.add_argument("--informed-by-observation", dest="informed_by_observations", action="append", default=[], help=relation_help)
+    parser.add_argument("--informed-by-assumption", dest="informed_by_assumptions", action="append", default=[], help=relation_help)
+    parser.add_argument("--affects-document", dest="affects_documents", action="append", default=[], help=relation_help)
+    parser.add_argument("--attest-explicit-choice", action="store_true")
+    parser.add_argument("--attest-scope-identified", action="store_true")
+    parser.add_argument("--attest-commitment-present", action="store_true")
+    parser.add_argument("--ack-conflicts", action="append", default=[])
+    lifecycle = parser.add_mutually_exclusive_group()
+    lifecycle.add_argument("--supersede")
+    lifecycle.add_argument("--withdraw")
+    parser.add_argument("--reason")
+    parser.add_argument("--receipt-file")
+    parser.add_argument("--json", action="store_true")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="decision_workflow.py",
@@ -940,45 +1047,22 @@ receipt and approval:
   receipt_digest detects damage to the frozen envelope.
 """,
     )
-    preview_parser.add_argument("--host", choices=("codex", "claude-code"), required=True)
-    preview_parser.add_argument("--core-cli", required=True)
-    source = preview_parser.add_mutually_exclusive_group()
-    source.add_argument("--candidate")
-    source.add_argument("--inline", action="store_true")
-    preview_parser.add_argument("--attestation")
-    preview_parser.add_argument("--candidate-id")
-    preview_parser.add_argument("--title")
-    preview_parser.add_argument("--summary")
-    preview_parser.add_argument("--scope")
-    preview_parser.add_argument("--decision-key")
-    preview_parser.add_argument("--captured-from", choices=("conversation", "workspace", "manual", "import"))
-    preview_parser.add_argument("--commitment-evidence", action="append", default=[])
-    preview_parser.add_argument("--sec-decision")
-    preview_parser.add_argument("--sec-rationale")
-    preview_parser.add_argument("--sec-alternatives", action="append", default=[])
-    preview_parser.add_argument("--sec-constraints", action="append", default=[])
-    preview_parser.add_argument("--sec-tradeoffs", action="append", default=[])
-    preview_parser.add_argument("--sec-revisit", action="append", default=[], help="Revisit condition text; repeat for multiple conditions.")
-    preview_parser.add_argument("--revisit-on", help="Calendar date only (YYYY-MM-DD); condition text: --sec-revisit.")
-    preview_parser.add_argument("--source-ref", action="append", default=[])
-    preview_parser.add_argument("--tag", action="append", default=[])
-    preview_parser.add_argument("--search-term", action="append", default=[])
-    preview_parser.add_argument("--informed-by", action="append", default=[])
-    relation_help = "One ctx_ id per flag; repeat the flag for multiple ids (no comma list)."
-    preview_parser.add_argument("--serves-intent", dest="serves_intents", action="append", default=[], help=relation_help)
-    preview_parser.add_argument("--informed-by-observation", dest="informed_by_observations", action="append", default=[], help=relation_help)
-    preview_parser.add_argument("--informed-by-assumption", dest="informed_by_assumptions", action="append", default=[], help=relation_help)
-    preview_parser.add_argument("--affects-document", dest="affects_documents", action="append", default=[], help=relation_help)
-    preview_parser.add_argument("--attest-explicit-choice", action="store_true")
-    preview_parser.add_argument("--attest-scope-identified", action="store_true")
-    preview_parser.add_argument("--attest-commitment-present", action="store_true")
-    preview_parser.add_argument("--ack-conflicts", action="append", default=[])
-    lifecycle = preview_parser.add_mutually_exclusive_group()
-    lifecycle.add_argument("--supersede")
-    lifecycle.add_argument("--withdraw")
-    preview_parser.add_argument("--reason")
-    preview_parser.add_argument("--receipt-file")
-    preview_parser.add_argument("--json", action="store_true")
+    _add_capture_arguments(preview_parser)
+    record_parser = sub.add_parser(
+        "record",
+        description="Preview and apply one DEC in a single call after the user's semantic approval.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""record = preview + apply on the unchanged frozen receipt inside one process.
+Pass --approved only after the user's direct, explicit, unconditional approval in
+conversation. --core-cli is optional: exactly one same-major sibling context-core is
+resolved deterministically and SHA-bound; otherwise the call fails closed with
+core_cli_required and the candidate list. The receipt is removed on success unless
+--keep-receipt is set. Semantic input and limits are the same as preview.
+""",
+    )
+    _add_capture_arguments(record_parser)
+    record_parser.add_argument("--approved", action="store_true", help="Attest the user's direct, explicit, unconditional approval given in conversation.")
+    record_parser.add_argument("--keep-receipt", action="store_true")
     apply_parser = sub.add_parser(
         "apply",
         description="Apply the unchanged frozen receipt after exact user approval.",
@@ -995,7 +1079,7 @@ An explicit receipt remains a mode-0600 sensitive file outside the vault.
 approval_digest binds the frozen material; receipt_digest detects damage.
 """,
     )
-    apply_parser.add_argument("--core-cli", required=True)
+    apply_parser.add_argument("--core-cli", help="context-core entrypoint; omit to resolve the single same-major sibling core.")
     apply_parser.add_argument("--receipt-file")
     apply_parser.add_argument("--approved-digest", required=True)
     apply_parser.add_argument("--keep-receipt", action="store_true")
@@ -1019,6 +1103,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = preview(args)
         elif args.command == "apply":
             result = apply(args)
+        elif args.command == "record":
+            result = record(args)
         else:
             result = reject(args)
         _emit({"ok": True, "result": result}, compact=args.json)

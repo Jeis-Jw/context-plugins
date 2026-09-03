@@ -392,7 +392,7 @@ class PluginContractTests(unittest.TestCase):
             ["explicit_choice", "scope_identified", "commitment_present"],
             schema["workflow_surface"]["inline_assertions"],
         )
-        self.assertEqual(["preview", "apply", "reject"], schema["workflow_surface"]["commands"])
+        self.assertEqual(["preview", "apply", "reject", "record"], schema["workflow_surface"]["commands"])
         self.assertEqual(["capture", "supersede", "withdraw"], schema["workflow_surface"]["operations"])
         self.assertEqual(
             {

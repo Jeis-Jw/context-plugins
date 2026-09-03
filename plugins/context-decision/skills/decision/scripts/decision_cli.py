@@ -739,7 +739,9 @@ def schema_result() -> dict[str, Any]:
         "commands": ["init", "schema", "capabilities", "candidate prepare", "check", "draft", "capture", "search", "read", "brief", "spec-view", "conflicts", "supersede", "import-fallback", "withdraw", "annotate", "revisit", "batch validate", "plan validate"],
         "workflow_surface": {
             "entrypoint": "decision_workflow.py",
-            "commands": ["preview", "apply", "reject"],
+            "commands": ["preview", "apply", "reject", "record"],
+            "record": "preview_then_unchanged_apply_in_one_process_after_caller_attested_semantic_approval",
+            "core_cli": "explicit_or_single_same_major_sibling_resolution",
             "preview_input_modes": ["inline", "files"],
             "operations": ["capture", "supersede", "withdraw"],
             "inline_assertions": ["explicit_choice", "scope_identified", "commitment_present"],
@@ -2120,6 +2122,61 @@ def spec_view(
     return result
 
 
+_STOPWORDS = frozenset("""
+a an the and or but if then else when while of to in on at by for with from into onto over under about as is are was were be been
+being have has had do does did not no nor so than that this these those it its we our us you your they their them he she his her
+also only just very more most less least such same other another any some all each every both either neither own per via
+because until unless whether which who whom whose what where why how here there now today again still yet already ever never
+should would could can may might must shall will use used using make made keep keeps kept take taken get got put set let
+""".split())
+_STEM_SUFFIXES = ("ations", "ation", "ments", "ment", "ities", "ity", "ings", "ing", "ness", "ies", "ers", "ely", "ly", "ed", "es", "al", "s")
+
+
+def stem_token(token: str) -> str:
+    """Crude, deterministic suffix stripping so query and index terms compare on word stems."""
+    word = normalized_key(token)
+    for _ in range(2):
+        for suffix in _STEM_SUFFIXES:
+            if word.endswith(suffix) and len(word) - len(suffix) >= 4:
+                word = word[: -len(suffix)]
+                break
+    return word
+
+
+def _content_stems(text: str) -> list[str]:
+    out: list[str] = []
+    for token in re.findall(r"[^\W_]+", normalized_key(text), flags=re.UNICODE):
+        if len(token) < 4 or len(token) > 40 or token.isdecimal() or token in _STOPWORDS:
+            continue
+        word = stem_token(token)
+        if 3 <= len(word) <= 40 and word not in out:
+            out.append(word)
+    return out
+
+
+def derive_search_terms(title: str, summary: str, values: dict[str, Any], *, maximum: int = 12) -> list[str]:
+    """Index terms from the decision body so a conflicting request can be found among many decisions.
+
+    Title and summary are already indexed; body sections carry the words a
+    conflicting request tends to share (the rejected alternative, the rationale).
+    Order: decision, rejected alternatives, rationale, revisit conditions.
+    """
+    already = set(_content_stems(f"{title} {summary}"))
+    ordered: list[str] = []
+    parts = [values.get("decision", "")]
+    parts.extend(values.get("rejected_alternatives", []) or [])
+    parts.append(values.get("rationale", ""))
+    parts.extend(values.get("revisit_when", []) or [])
+    for part in parts:
+        for word in _content_stems(str(part)):
+            if word in already or word in ordered:
+                continue
+            ordered.append(word)
+            if len(ordered) >= maximum:
+                return ordered
+    return ordered
+
+
 def _comparison_tokens(*values: str) -> set[str]:
     text = normalized_key(" ".join(value for value in values if value))
     return {
@@ -2164,13 +2221,16 @@ def prepare_decision_check(
     tokens = _comparison_tokens(statement, rationale, query)
 
     metadata_haystacks = [
-        normalized_key(
-            " ".join(str(row.get(field, "")) for field in ("title", "summary"))
-            + " "
-            + " ".join(str(term) for term in row.get("terms", []))
+        set(
+            _content_stems(
+                " ".join(str(row.get(field, "")) for field in ("title", "summary", "decision_key"))
+                + " "
+                + " ".join(str(term) for term in row.get("terms", []))
+            )
         )
         for row in current_rows
     ]
+    tokens = {stem_token(token) for token in tokens if len(token) >= 4 and token not in _STOPWORDS}
     token_frequency = {
         token: sum(token in haystack for haystack in metadata_haystacks)
         for token in tokens
@@ -2725,7 +2785,8 @@ def build_direct_candidate(args: argparse.Namespace) -> dict[str, Any]:
         "schema": "context-capture-candidate/v1", "candidate_id": args.candidate_id,
         "title": args.title, "claim": decision, "summary": args.summary, "captured_from": args.captured_from,
         "requested_kind": "decision", "specialized_kinds": ["decision"], "fallback_kind": None,
-        "scope_hint": args.scope, "source_refs": args.source_ref, "tags": args.tag, "search_terms": args.search_term,
+        "scope_hint": args.scope, "source_refs": args.source_ref, "tags": args.tag,
+        "search_terms": list(args.search_term) if args.search_term else derive_search_terms(args.title, args.summary, values),
         "evidence": args.commitment_evidence,
         "owner_inputs": {"decision": values},
     }
