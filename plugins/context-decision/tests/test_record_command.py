@@ -63,13 +63,22 @@ class RecordCommandTests(unittest.TestCase):
         for candidate_count in (0, 2):
             with self.subTest(candidates=candidate_count):
                 if candidate_count:
-                    for name in ("first", "second"):
-                        shutil.copytree(ROOT / "plugins/context-core", packages / "context-core" / name,
+                    for version in ("0.13.0", "0.13.1"):
+                        cached_core = packages / "context-core" / version
+                        shutil.copytree(ROOT / "plugins/context-core", cached_core,
                                         ignore=shutil.ignore_patterns("__pycache__"))
+                        for host in (".claude-plugin", ".codex-plugin"):
+                            manifest_path = cached_core / host / "plugin.json"
+                            manifest = json.loads(manifest_path.read_text())
+                            manifest["version"] = version
+                            manifest_path.write_text(json.dumps(manifest))
                 rc, payload = run([str(copied_workflow), "record", *semantic("--approved")], self.repo)
                 self.assertEqual(2, rc, payload)
                 self.assertEqual("core_cli_required", payload["error"]["code"])
                 self.assertEqual(candidate_count, len(payload["error"]["details"]["candidates"]))
+                if candidate_count:
+                    self.assertEqual({"0.13.0", "0.13.1"},
+                                     {item["version"] for item in payload["error"]["details"]["candidates"]})
                 self.assertEqual(before, {p.relative_to(self.repo): p.read_bytes() for p in (self.repo / "context").rglob("*") if p.is_file()})
 
     def test_record_previews_and_applies_in_one_call_with_sibling_core_resolution(self) -> None:
@@ -95,6 +104,61 @@ class RecordCommandTests(unittest.TestCase):
         self.assertNotEqual(0, rc)
         self.assertEqual("decision_slot_conflict", payload["error"]["code"])
         self.assertEqual("supersede", payload["error"]["details"]["suggested_action"])
+
+    def test_record_supersede_preserves_history_and_links_the_successor(self) -> None:
+        self.assertEqual(0, run([str(WORKFLOW), "record", *semantic("--approved")], self.repo)[0])
+        rc, payload = run([str(CHECK), "search"], self.repo)
+        self.assertEqual(0, rc, payload)
+        predecessor = payload["result"]["items"][0]
+        arguments = semantic("--approved", "--supersede", predecessor["id"])
+        for flag, value in {
+            "--title": "Use PostgreSQL", "--summary": "Use a managed PostgreSQL service.",
+            "--sec-decision": "Use managed PostgreSQL for persistence.",
+            "--sec-rationale": "Offline support has been removed.",
+            "--sec-alternatives": "Embedded SQLite, rejected after removing offline support.",
+        }.items():
+            arguments[arguments.index(flag) + 1] = value
+        rc, payload = run([str(WORKFLOW), "record", *arguments], self.repo)
+        self.assertEqual(0, rc, payload)
+        self.assertTrue(payload["result"]["applied"])
+        self.assertTrue(payload["result"]["receipt_removed"])
+        rc, payload = run([str(CHECK), "search"], self.repo)
+        self.assertEqual(0, rc, payload)
+        self.assertEqual(1, len(payload["result"]["items"]))
+        successor = payload["result"]["items"][0]
+        self.assertNotEqual(predecessor["id"], successor["id"])
+        self.assertEqual("Use PostgreSQL", successor["title"])
+        rc, payload = run([str(CHECK), "read", "--id", predecessor["id"]], self.repo)
+        self.assertEqual(0, rc, payload)
+        self.assertTrue(payload["result"]["do_not_follow"])
+        self.assertEqual("superseded", payload["result"]["lifecycle_reason"])
+        rc, payload = run([str(CHECK), "brief", "--id", predecessor["id"], "--include-history"], self.repo)
+        self.assertEqual(0, rc, payload)
+        self.assertEqual(successor["id"], payload["result"]["items"][0]["successor"])
+
+    def test_record_withdraw_requires_approval_and_retires_the_current_decision(self) -> None:
+        self.assertEqual(0, run([str(WORKFLOW), "record", *semantic("--approved")], self.repo)[0])
+        rc, payload = run([str(CHECK), "search"], self.repo)
+        self.assertEqual(0, rc, payload)
+        identifier = payload["result"]["items"][0]["id"]
+        before = {p.relative_to(self.repo): p.read_bytes() for p in (self.repo / "context").rglob("*") if p.is_file()}
+        arguments = [str(WORKFLOW), "record", "--host", "codex", "--withdraw", identifier,
+                     "--reason", "The project no longer needs a persistence decision."]
+        rc, payload = run(arguments, self.repo)
+        self.assertEqual(2, rc, payload)
+        self.assertEqual("approval_attestation_required", payload["error"]["code"])
+        self.assertEqual(before, {p.relative_to(self.repo): p.read_bytes() for p in (self.repo / "context").rglob("*") if p.is_file()})
+        rc, payload = run([*arguments, "--approved"], self.repo)
+        self.assertEqual(0, rc, payload)
+        self.assertTrue(payload["result"]["applied"])
+        self.assertTrue(payload["result"]["receipt_removed"])
+        rc, payload = run([str(CHECK), "search"], self.repo)
+        self.assertEqual(0, rc, payload)
+        self.assertEqual([], payload["result"]["items"])
+        rc, payload = run([str(CHECK), "read", "--id", identifier], self.repo)
+        self.assertEqual(0, rc, payload)
+        self.assertTrue(payload["result"]["do_not_follow"])
+        self.assertEqual("withdrawn", payload["result"]["lifecycle_reason"])
 
     def test_explicit_core_cli_still_works_and_schema_lists_record(self) -> None:
         rc, payload = run([str(WORKFLOW), "record", "--core-cli", str(CORE), *semantic("--approved")], self.repo)

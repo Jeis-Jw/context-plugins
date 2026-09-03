@@ -2257,10 +2257,18 @@ def prepare_decision_check(
         token: math.log1p(len(current_rows) / token_frequency[token])
         for token in distinctive_tokens
     }
+    if coverage == "discovery_only":
+        # Keep within-band document-frequency changes from reordering otherwise
+        # equal lexical evidence when component siblings inflate term counts.
+        inverse_frequency = {token: max(1, math.floor(weight)) for token, weight in inverse_frequency.items()}
 
     ranked: list[tuple[float, list[str], dict[str, Any]]] = []
     lexical_scores: dict[str, float] = {}
     metadata_by_id = {row["id"]: words for row, words in zip(current_rows, metadata_haystacks, strict=True)}
+    discovery_hits_by_id = {
+        row["id"]: words & distinctive_tokens
+        for row, words in zip(current_rows, metadata_haystacks, strict=True)
+    }
     mandatory_ids: set[str] = set()
     for row, haystack, title_words, key_words in zip(current_rows, metadata_haystacks, title_stems, key_stems, strict=True):
         row_scope = row.get("scope")
@@ -2310,22 +2318,32 @@ def prepare_decision_check(
     ranked.sort(key=lambda item: (-item[0], str(item[2].get("path", "")), item[2]["id"]))
     eligible = [item for item in ranked if item[0] > 0]
     if coverage == "discovery_only" and eligible:
-        # Near-duplicate metadata must not consume the whole body-read budget.
-        # Diversify lexical discovery only; exact-slot/overlap coverage below
-        # remains mandatory. Similarity selects candidates, never semantics.
-        remaining = list(eligible)
-        selected = [remaining.pop(0)]
+        # Protect the raw top half before filling the remaining discovery slots.
+        # Query-hit redundancy drives diversity; full metadata breaks ties.
+        # Extra unmatched component words cannot improve either priority. This
+        # ranks metadata, never semantic identity; slot/overlap stays mandatory.
+        protected_count = (limit + 1) // 2
+        selected = eligible[:protected_count]
+        remaining = eligible[protected_count:]
         while remaining and len(selected) < limit:
-            def discovery_priority(item: tuple[float, list[str], dict[str, Any]]) -> tuple[float, str, str]:
+            def discovery_priority(item: tuple[float, list[str], dict[str, Any]]) -> tuple[float, float, str, str]:
                 row = item[2]
-                words = metadata_by_id[row["id"]]
+                words = discovery_hits_by_id[row["id"]]
                 similarity = max(
-                    len(words & metadata_by_id[chosen[2]["id"]])
-                    / max(1, len(words | metadata_by_id[chosen[2]["id"]]))
+                    len(words & discovery_hits_by_id[chosen[2]["id"]])
+                    / max(1, len(words | discovery_hits_by_id[chosen[2]["id"]]))
                     for chosen in selected
                 )
                 score = lexical_scores[row["id"]] * (1 - 0.8 * similarity)
-                return -score, str(row.get("path", "")), row["id"]
+                # Cover less of already selected metadata when query scores
+                # tie. The denominator excludes the candidate's extra words,
+                # so padding a sibling cannot manufacture novelty.
+                metadata_overlap = max(
+                    len(metadata_by_id[row["id"]] & metadata_by_id[chosen[2]["id"]])
+                    / max(1, len(metadata_by_id[chosen[2]["id"]]))
+                    for chosen in selected
+                )
+                return -score, metadata_overlap, str(row.get("path", "")), row["id"]
 
             chosen = min(remaining, key=discovery_priority)
             selected.append(chosen)

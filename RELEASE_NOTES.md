@@ -8,7 +8,8 @@ This is the unreleased lean v6 source candidate. Distribution manifests still de
 - Resolve an omitted `--core-cli` only when exactly one manifest-validated, same-major sibling core exists. Missing or ambiguous candidates stop before a write. Explicit paths and the low-level two-phase workflow remain compatible.
 - Derive up to twelve search terms from a decision's body when none are supplied, including rejected alternatives and rationale. Compare query and index word stems so a conflicting request can find the relevant decision among near-topic distractors without a body scan.
 - Make DEC `check` and `record` the ordinary agent path. Avoid reference/script discovery, `--help`, and post-capture rechecks; reuse returned bodies and the write result. Align the installed policy, core policy source, and repository managed block, including bounded task-subtree discovery.
-- Weight distinctive discovery hits by inverse corpus frequency, with additional title/key weight and consistent common word stems. Diversify later discovery candidates using only index metadata to prevent repeated near-topic records from filling the body-read budget. Preserve the frequency cutoff, exact-slot/overlap coverage, and count/byte bounds.
+- Weight distinctive discovery hits by inverse corpus frequency, with additional title/key weight and consistent common word stems. Use integer logarithmic IDF bands in discovery so within-band frequency changes from component siblings do not reorder equal lexical evidence. Protect the raw top `ceil(limit/2)` candidates (four by default) from diversity penalties, then fill the remaining slots by query-hit diversity. Break equal scores by coverage of already selected metadata, without rewarding unrelated extra words. Preserve the frequency cutoff, exact-slot/overlap ranking and mandatory coverage, and count/byte bounds.
+- Re-stem queries and stored terms at query time; the stem changes require no migration of stored `search_terms`.
 - Instruct the semantic owner to reuse a returned Current scope/key for the same governing choice. Existing comparison results already contain these fields; no extra slot-list payload or context read is added.
 
 ### Measured evidence and limits
@@ -19,10 +20,13 @@ Source: `value-validation-v4/RESULTS.ko.md`, sections 3 and 5–7, with `protoco
 
 The separate W2 model-free regression queries all eight unchanged v4 prompts against frozen, record-created corpora with observed v6 titles and slots. At N=200, recall@8 improves from 5/8 to 8/8; at N=1000, from 4/8 to 8/8. Recall@1 improves from 4/8 to 6/8 at both sizes, with at most eight returned bodies. Source: `value-validation-v4/RETRIEVAL.ko.md` and its JSON reports. This is a development regression set with repeated synthetic topics, not a holdout or a new measurement of agent behavior or token savings. The committed `test_recall_at_scale.py` fixture also checks body-read bounds and zero reads for high-frequency noise.
 
+The B1 review regression adds ten component siblings per target at N=200/1000. All eight targets remain returned, and the six conflict/premise targets rank first or second, with at most eight body reads and 32 KiB output. These are synthetic metadata fixtures with mocked body reads. The separate record-created corpus still returns 8/8 at recall@8 and 6/8 at recall@1 at both sizes; the new `w2-b1-fix` report exports both measurements without replacing prior evidence.
+
 ### Reproducible verification
 
 - Code and policy change sets each pass the complete Python 3.11 and 3.13 suites: 362 passed, 602 subtests.
 - The subsequent W2 ranking and scale-regression change passes both complete suites: 365 passed, 624 subtests. The experiment corpus checks pass on both interpreters as well.
+- The B1 follow-up passes both complete suites: 368 passed, 640 subtests, including record supersede/withdraw and ambiguous same-major core-cache regressions.
 - Both interpreters pass `compileall`; `claude plugin validate` passes for the marketplace, core, and decision packages using isolated local configuration.
 - The generated policy body, distributed rule, and repository managed block are identical. Core EN/KO SKILL files remain within the existing 3,000-byte limits.
 
