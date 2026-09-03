@@ -4,6 +4,23 @@
 
 Context Plugins gives AI coding agents a small, project-owned memory. It keeps important decisions and useful context with your project, recalls them when they matter, and saves only meaning you explicitly settle or ask it to remember.
 
+## What the numbers say
+
+Every claim below comes from a pre-registered, arm-blind experiment (`value-validation-v4` on the `task/value-validation-v4` branch). Three setups ran the same scenarios as fresh agent sessions with N prior decisions already stored, and two independent scorers from a different model family graded the transcripts without knowing which setup produced them.
+
+| Prior decisions | Setup | Held true conflicts | Compatible work not blocked | Unrelated edits left alone | Mean tokens per recall session |
+|---:|---|---|---|---|---:|
+| 0 | No tooling | 2/4 | 2/2 | 4/8 | 72K |
+| 0 | 8-line AGENTS.md convention + docs/adr | 4/4 | 2/2 | 5/8 | 103K |
+| 0 | Context Plugins | 4/4 | 2/2 | 7/8 | 93K |
+| 200 | No tooling | 1/2 | 1/1 | 2/4 | 255K |
+| 200 | 8-line AGENTS.md convention + docs/adr | 1/2 | 0/1 | 2/4 | 342K |
+| 200 | Context Plugins | 2/2 | 1/1 | 4/4 | 85K |
+
+Codex host (gpt-5.6-sol), one repeat, eight scenarios at N=0 and four at N=200; every setup saved a stated decision faithfully (8/8). On Claude Code (Opus 5, N=0) the plugin and the convention both held 4/4 conflicts and saved 8/8; the plugin left 7/8 unrelated edits alone versus 4/8 and used about 1.4x the tokens (130K versus 93K per session).
+
+With a handful of decisions, an eight-line convention is as good as the plugin. With two hundred, the convention and the bare agent read most of the store on every question (255K to 342K tokens) and each implemented one conflicting request anyway, while the plugin answered from its index in 85K tokens and held every conflict. That scale result exists because of a defect found on the way: at N=200 the first lean build's lexical index returned only near-topic distractors and the agent went ahead with a conflicting migration. Indexing terms from the decision body (rejected alternatives and rationale, not just the title) and matching word stems fixed that lane; on the frozen corpus, recall@8 went from 5/8 to 8/8 at N=200 and from 4/8 to 8/8 at N=1000.
+
 ## What is it?
 
 AI coding agents are helpful, but a new conversation may forget why your project was built a certain way. Context Plugins keeps the parts that should survive between conversations:
