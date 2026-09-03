@@ -78,6 +78,8 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 
 0.11.0은 release set을 정렬하고 handshake 실패 뒤에만 호환 core 후보를 안내하며 revisit·복수 relation 입력 도움말을 명확히 합니다. DEC semantics와 저장 bytes는 변경하지 않으며 tag나 publication을 의미하지 않습니다.
 
+0.13.0은 `record --approved` 한 번으로 결정을 기록하고, 결정 본문에서 검색어를 파생해 충돌하는 요청이 많은 기록 속에서도 맞는 결정을 찾게 하며, 구별력 있는 hit에 코퍼스 빈도 역수 가중치를 주되 상위 후보는 diversity 감점에서 보호합니다. 브랜치 병합으로 Current가 둘이 된 slot은 그 slot의 write만 보류합니다. 저장 DEC bytes는 migration이 필요 없습니다.
+
 0.12.0은 명시적으로 확정된 선택을 semantic approval로 보고 rendered-file preview를 사용자 승인 단계에서 제거합니다. 내부 frozen receipt와 unchanged apply integrity는 유지하며 저장 DEC bytes는 migration이 필요 없습니다. tag나 publication을 의미하지 않습니다.
 
 ### One-call record

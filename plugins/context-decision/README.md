@@ -75,6 +75,8 @@ Version `0.11.0` aligns the release set, lists compatible core candidates only a
 
 Version `0.12.0` treats an explicit settled choice as semantic approval and removes the rendered-file preview as a user-facing approval step. Internal frozen-receipt and unchanged-apply integrity remain. Stored DEC bytes require no migration. No tag or publication is implied.
 
+Version `0.13.0` records a decision in one `record --approved` call, derives search terms from the decision body so a conflicting request finds the right record among many, weights distinctive hits by inverse corpus frequency while protecting the strongest candidates from diversity penalties, and holds writes to a decision slot that a branch merge left with two current records. Stored DEC bytes require no migration.
+
 See the [owner protocol](./skills/decision/references/decision-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).
 
 ### One-call record

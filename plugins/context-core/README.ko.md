@@ -62,4 +62,6 @@ vault는 `context/`를 담는 일반 디렉터리이며 Git은 공유·버전관
 
 0.12.0은 immutable ARCHIVE capture/read/search/discard, bounded OBS-to-context evidence reference와 DOCUMENT freshness hygiene 진단을 추가합니다. approval과 filesystem-vault 경계는 유지하며 tag나 publication을 의미하지 않습니다.
 
+0.14.0은 생성 index를 write 시점의 투영으로 다룹니다. 승인된 write는 artifact payload와 lifecycle effect에만 결박되고, preview 이후 area index가 바뀌었으면 core가 root lock 안에서 재생성합니다. artifact 변경, 같거나 겹치는 decision slot의 경쟁 Current, 중복 Current slot은 계속 fail-closed입니다. Git vault에서는 `init`이 `.gitattributes` union-merge 블록을 설치하고, `refresh --check`가 CI용 projection drift를 보고하며, `snapshot save/update --approved`는 한 번의 호출로 preview와 apply를 수행합니다. 저장 artifact bytes와 `context-common/v2`는 migration이 필요 없습니다.
+
 0.13.0은 확정된 semantic payload·scope·lifecycle effect를 capture 승인으로 사용합니다. 렌더링된 Markdown은 내부 integrity 단계로만 유지하며 두 번째 승인 화면으로 보여주지 않습니다. 저장 artifact bytes와 `context-common/v2`는 migration이 필요 없습니다. tag나 publication을 의미하지 않습니다.

@@ -8,12 +8,12 @@
     "description": "Developer-preview marketplace for filesystem-vault, approval-gated durable project context.",
     "release_set": {
       "schema": "context-plugin-release-set/v1",
-      "version": "0.13.0",
+      "version": "0.14.0",
       "runtime_compatibility": "same-major-plus-runtime-handshake",
       "automatic_update": false,
       "members": {
-        "context-core": "0.13.0",
-        "context-decision": "0.12.0",
+        "context-core": "0.14.0",
+        "context-decision": "0.13.0",
         "context-assumption": "0.12.0",
         "context-term": "0.12.0",
         "context-intent": "0.12.0",
@@ -26,13 +26,13 @@
       "name": "context-core",
       "source": "./plugins/context-core",
       "description": "Shared-context runtime for proactive scoped recall, approval-gated capture suggestions, handoffs, evidence, and coordinated writes.",
-      "version": "0.13.0"
+      "version": "0.14.0"
     },
     {
       "name": "context-decision",
       "source": "./plugins/context-decision",
       "description": "Decision continuity with pre-decision body comparison, rationale-change and conflict notices, and approval-gated capture.",
-      "version": "0.12.0"
+      "version": "0.13.0"
     },
     {
       "name": "context-assumption",

@@ -1,8 +1,8 @@
 # Release notes
 
-## 0.14.0 (developer preview; tag not published)
+## 0.14.0 (developer preview)
 
-This is the unreleased lean v6 source candidate. Distribution manifests still describe the `0.13.0` release set pending release preparation.
+Release set `0.14.0`: `context-core` moves to `0.14.0` and `context-decision` to `0.13.0`; assumption, term, and intent stay at `0.12.0` and document at `0.13.0`. The `v0.14.0` tag is pushed to `Jeis-Jw/context-plugins`. Central marketplace publication remains a separate owner gate.
 
 - Add `decision_workflow.py record --approved`: the caller attests direct, explicit, unconditional semantic approval, then one process previews and applies the unchanged frozen receipt. Core remains the only physical writer; runtime SHA, vault identity, approval binding, CAS, locking, and atomic writes remain enforced.
 - Resolve an omitted `--core-cli` only when exactly one manifest-validated, same-major sibling core exists. Missing or ambiguous candidates stop before a write. Explicit paths and the low-level two-phase workflow remain compatible.

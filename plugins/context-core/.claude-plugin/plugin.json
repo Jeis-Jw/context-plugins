@@ -1,6 +1,6 @@
 {
   "name": "context-core",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Shared-context runtime for proactive scoped recall, approval-gated capture suggestions, handoffs, evidence, and coordinated writes.",
   "author": {
     "name": "Jinwuk-Lee",

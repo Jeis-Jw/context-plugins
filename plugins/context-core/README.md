@@ -8,7 +8,7 @@ Run the root `core-decision` profile installer once from the downloaded plugin f
 
 For a core-only setup, `$context-core:init` remains available. It creates the canonical root, SNAP, OBS, and ARCHIVE indexes and the active host policy. Re-running init after a ready result is a filesystem no-op; a pre-ARCHIVE vault receives only the missing empty ARCHIVE area.
 
-The `v0.13.0` tag is not published yet. See the repository root README for the owner-gated tag, publication, and license status.
+The `v0.14.0` tag is published. Central marketplace publication is still a separate owner gate; see the repository root README for the current status.
 
 ## Runtime contract
 
@@ -67,5 +67,7 @@ Version `0.11.0` makes OBS preview state explicit, provides the shared inline ow
 Version `0.12.0` adds immutable ARCHIVE capture/read/search/discard, bounded OBS-to-context evidence references, and DOCUMENT freshness hygiene diagnostics while preserving the approval and filesystem-vault boundaries. No tag or publication is implied.
 
 Version `0.13.0` makes settled semantic payload, scope, and lifecycle effect the capture approval. Rendered Markdown remains an internal integrity step and is not shown as a second approval surface. Stored artifact bytes and `context-common/v2` require no migration. No tag or publication is implied.
+
+Version `0.14.0` treats generated indexes as projections at write time: an approved write binds the artifact payload and lifecycle effect, and core re-derives a drifted area index under the root lock instead of refusing. Artifact drift, competing same or overlapping decision slots, and duplicate current slots still fail closed. `init` installs a managed `.gitattributes` union-merge block for Git vaults, `refresh --check` reports projection drift for CI, and `snapshot save/update --approved` previews and applies in one call. Stored artifact bytes and `context-common/v2` require no migration.
 
 See the [storage protocol](./skills/context/references/context-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).
