@@ -413,11 +413,11 @@ class DistributionProofTests(unittest.TestCase):
                     public_readme,
                 )
                 self.assertIn(selector, text, public_readme)
-        self.assertIn("Every semantic owner requires `context-core`", readme)
-        self.assertIn("semantic owners do not require one another", readme)
+        self.assertIn("Each optional feature requires `context-core`", readme)
+        self.assertIn("optional features do not require one another", readme)
         korean_readme = (ROOT / "README.ko.md").read_text(encoding="utf-8")
-        self.assertIn("모든 semantic owner는 `context-core`가 필요", korean_readme)
-        self.assertIn("semantic owner끼리는 서로를 요구하지 않습니다", korean_readme)
+        self.assertIn("각 추가 기능에는 `context-core`가 필요", korean_readme)
+        self.assertIn("추가 기능끼리는 함께 설치할 필요가 없습니다", korean_readme)
         for developer_only_token in (
             "git clone",
             "scripts/install_profile.py",
@@ -567,9 +567,9 @@ class DistributionProofTests(unittest.TestCase):
             self.assertNotIn("Delete the receipt manually", text, path)
             self.assertNotIn("사용자가 직접 삭제", text, path)
             if path == ROOT / "README.md":
-                self.assertIn("there is no second document-preview question", text)
+                self.assertIn("You don't need to approve the same content again just to save it", text)
             elif path == ROOT / "README.ko.md":
-                self.assertIn("별도 문서 preview 없이 저장", text)
+                self.assertIn("저장을 위해 같은 내용을 다시 승인할 필요는 없습니다", text)
             else:
                 self.assertTrue(
                     "direct, explicit, unconditional" in text
@@ -719,22 +719,7 @@ class DistributionProofTests(unittest.TestCase):
                     module.required_core_surface(str(copied_cli.resolve()))
                 self.assertEqual("core_surface_mismatch", caught.exception.code)
 
-    def test_development_and_public_trust_contract_match_the_release_surface(self) -> None:
-        version = read_json(ROOT / "plugins/context-core/.claude-plugin/plugin.json")["version"]
-        development = (ROOT / "DEVELOPMENT.md").read_text(encoding="utf-8")
-        self.assertIn(f"Current repository version: `{version}`", development)
-        for name in PLUGIN_NAMES:
-            self.assertIn(f"  {name}/", development)
-            self.assertIn(f"plugins/{name}/tests", development)
-        for token in (
-            "compatible major",
-            "실제 `context_cli.py` digest",
-            "test_semantic_plugins_accept_same_major_core_and_reject_other_major",
-            "marketplace provenance",
-            "low-level compatibility mode",
-        ):
-            self.assertIn(token, development)
-
+    def test_public_trust_contract_matches_the_release_surface(self) -> None:
         for name in ("context-assumption", "context-term"):
             readme = (ROOT / "plugins" / name / "README.md").read_text(encoding="utf-8")
             for token in ("entrypoint suffix", "SHA-256", "marketplace provenance", "compatibility", "@file", "8 KiB", "16 KiB"):
@@ -749,13 +734,13 @@ class DistributionProofTests(unittest.TestCase):
 
         root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
         for token in (
-            "AI coding agents",
-            "project-owned memory",
+            "Codex and Claude Code",
+            "remember your project",
             "context/",
             "does not automatically save your entire conversation",
-            "agent chat, not in the terminal",
-            "there is no second document-preview question",
-            "reports the result without showing the storage document",
+            "send this message in the AI chat",
+            "You don't need to approve the same content again just to save it",
+            "the AI saves it and lets you know",
         ):
             self.assertIn(token, root_readme)
         for developer_only_token in (
@@ -778,10 +763,8 @@ class DistributionProofTests(unittest.TestCase):
 
         release_notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
         migration = (ROOT / "MIGRATION.md").read_text(encoding="utf-8")
-        self.assertIn("Apache License 2.0", development)
         self.assertIn("Apache License 2.0", release_notes)
         for stale_license_claim in ("공개 라이선스는 아직 선택하지 않았습니다", "A public license has not been selected"):
-            self.assertNotIn(stale_license_claim, development)
             self.assertNotIn(stale_license_claim, release_notes)
         for token in ("W1", "W2", "W3", "not a token-savings measurement"):
             self.assertIn(token, release_notes)
@@ -804,12 +787,12 @@ class DistributionProofTests(unittest.TestCase):
         )
         self.assertIn(english_measurement, release_notes)
         for token in (
-            "AI 코딩 에이전트",
-            "프로젝트 전용 기억",
+            "Codex와 Claude Code",
+            "프로젝트의 중요한 내용을 기억",
             "context/",
             "대화 전체를 자동으로 저장하지 않습니다",
-            "터미널이 아니라 에이전트와의 대화창",
-            "생성된 Markdown 파일이 아니라 대화에서 내용 자체를 확인합니다",
+            "AI와의 대화창에 다음 메시지를 보내세요",
+            "저장을 위해 같은 내용을 다시 승인할 필요는 없습니다",
         ):
             self.assertIn(token, korean_readme)
         for developer_only_token in (

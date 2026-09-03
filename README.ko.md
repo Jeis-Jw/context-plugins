@@ -2,55 +2,37 @@
 
 [English](./README.md)
 
-Context Plugins는 AI 코딩 에이전트에게 프로젝트 전용 기억을 만들어주는 플러그인입니다. 중요한 결정과 필요한 맥락을 프로젝트 안에 보관하고, 관련 작업을 할 때 다시 떠올리며, 사용자가 명시적으로 확정하거나 기억해 달라고 한 의미만 저장합니다.
-
-## 숫자로 보는 효과
-
-아래 수치는 사전등록된 arm-blind 실험(`task/value-validation-v4` 브랜치의 `value-validation-v4`)에서 나왔습니다. 세 가지 설정이 같은 시나리오를 새 agent 세션으로 실행하되 사전에 N개의 결정이 저장된 상태였고, 다른 모델 계열의 독립 채점자 2명이 어떤 설정인지 모른 채 transcript를 채점했습니다.
-
-| 사전 결정 수 | 설정 | 진짜 충돌을 멈춤 | 양립 가능한 작업을 막지 않음 | 무관한 편집을 건드리지 않음 | recall 세션 평균 토큰 |
-|---:|---|---|---|---|---:|
-| 0 | 도구 없음 | 2/4 | 2/2 | 4/8 | 72K |
-| 0 | 8줄 AGENTS.md 관례 + docs/adr | 4/4 | 2/2 | 5/8 | 103K |
-| 0 | Context Plugins | 4/4 | 2/2 | 7/8 | 93K |
-| 200 | 도구 없음 | 1/2 | 1/1 | 2/4 | 255K |
-| 200 | 8줄 AGENTS.md 관례 + docs/adr | 1/2 | 0/1 | 2/4 | 342K |
-| 200 | Context Plugins | 2/2 | 1/1 | 4/4 | 85K |
-
-Codex host(gpt-5.6-sol), 반복 1회, N=0은 8개·N=200은 4개 시나리오이며 모든 설정이 진술된 결정을 충실히 저장했습니다(8/8). Claude Code(Opus 5, N=0)에서는 플러그인과 관례 모두 충돌 4/4를 멈추고 8/8을 저장했으며, 플러그인은 무관한 편집을 7/8 건드리지 않았고(관례 4/8) 토큰은 약 1.4배(세션당 130K 대 93K)를 썼습니다.
-
-결정이 몇 개뿐이면 8줄 관례로도 플러그인만큼 됩니다. 200개가 되면 관례와 맨 agent는 질문마다 저장소 대부분을 읽고(255K~342K 토큰) 그러고도 각각 충돌하는 요청 하나를 그대로 구현했지만, 플러그인은 index에서 85K 토큰으로 답하고 모든 충돌을 멈췄습니다. 이 규모 결과는 도중에 찾은 결함 덕분입니다. N=200에서 첫 lean 빌드의 lexical index는 근접 주제 distractor만 돌려줬고 agent는 충돌하는 migration을 진행했습니다. 제목만이 아니라 결정 본문(반려 대안·근거)에서 index 용어를 뽑고 어간을 맞추도록 고치자 그 lane이 해결됐고, 고정 corpus에서 recall@8이 N=200에서 5/8→8/8, N=1000에서 4/8→8/8이 됐습니다.
+Context Plugins는 Codex와 Claude Code가 프로젝트의 중요한 내용을 기억하도록 돕는 플러그인입니다. 결정한 내용과 그 이유, 하던 일을 남겨 새 대화에서도 이어갈 수 있게 합니다.
 
 ## 무엇인가요?
 
-AI 코딩 에이전트는 유용하지만 새 대화를 시작하면 “왜 이렇게 만들었는지”를 잊을 수 있습니다. Context Plugins는 대화가 바뀌어도 남아야 할 내용을 보관합니다.
+AI와 함께 개발하다 보면 새 대화에서 프로젝트를 처음부터 다시 설명해야 할 때가 있습니다. Context Plugins는 대화가 바뀌어도 남아야 할 내용을 프로젝트에 보관합니다.
 
-- **결정** — 무엇을 선택했고, 왜 선택했으며, 어떤 대안을 제외했는지
-- **취지** — 프로젝트가 지속적으로 지향하려는 방향
-- **관찰 기록** — 테스트 결과, 장애 원인처럼 다음에도 활용할 수 있는 사실
-- **원본 보관** — 근거로 채택한 불변 장문 원본
-- **문서** — 같은 식별자를 유지하면서 내용을 갱신할 living project guidance
-- **작업 현황** — 어디까지 작업했고 다음에 무엇을 해야 하는지
+- **결정** — 무엇을 선택했고, 왜 그렇게 했는지
+- **프로젝트 방향** — 누구를 위해 무엇을 만들고 있는지
+- **작업 중 알게 된 사실** — 잘된 방법이나 문제를 해결한 과정
+- **참고 자료** — 나중에 다시 확인할 원본 자료
+- **프로젝트 문서** — 작업하면서 계속 다듬어 가는 기획과 안내
+- **작업 현황** — 어디까지 했고 다음에 무엇을 해야 하는지
 
-저장된 내용은 filesystem vault의 `context/` 폴더에 일반 Markdown 파일로 남습니다. 직접 읽고 수정할 수 있고, 필요하면 기존 파일 공유나 버전 관리 방식으로 함께 사용할 수 있습니다. Git은 선택 사항이며 runtime 전제가 아닙니다.
+저장된 내용은 기본적으로 프로젝트의 `context/` 폴더에 읽기 쉬운 Markdown 문서로 남습니다. 직접 열어보거나 함께 일하는 사람과 공유할 수 있습니다.
 
-Context Plugins는 대화 전체를 자동으로 저장하지 않습니다. 의미·scope·lifecycle effect가 미확정일 때만 그 부분을 짧게 확인하며, 저장 파일 본문을 승인용 preview로 보여주지 않습니다.
+Context Plugins는 대화 전체를 자동으로 저장하지 않습니다. 사용자가 분명히 확정하거나 기억해 달라고 요청한 내용만 저장합니다.
 
 ## 왜 사용하나요?
 
-- 새 대화를 시작할 때마다 같은 결정과 배경을 다시 설명하지 않아도 됩니다.
-- 이미 제외한 방법이 새로운 제안처럼 반복되는 일을 줄일 수 있습니다.
-- 새 작업이 기존 결정과 충돌하면 코드를 바꾸기 전에 알 수 있습니다.
-- 중요한 결과와 미완료 작업의 상태를 채팅창이 아니라 프로젝트에 남길 수 있습니다.
-- 명시적으로 확정하거나 기억해 달라고 요청한 내용만 저장하므로 사용자가 계속 통제할 수 있습니다.
+- 새 대화에서 같은 결정과 배경을 반복해서 설명하는 일을 줄일 수 있습니다.
+- 이미 제외한 방법이 다시 제안되는 일을 줄일 수 있습니다.
+- 새 요청이 기존 결정과 맞지 않을 때 AI가 먼저 확인하도록 돕습니다.
+- 남겨둔 결과와 다음 할 일을 참고해 하던 작업을 이어갈 수 있습니다.
 
 ## 설치하기
 
-Codex 또는 Claude Code, macOS나 Linux의 프로젝트 폴더, Python 3.11 이상이 필요합니다. 이 저장소를 직접 다운로드할 필요는 없습니다.
+Codex 또는 Claude Code, macOS나 Linux의 프로젝트 폴더, Python 3.11 이상이 필요합니다.
+
+사용하는 도구에 맞춰 아래 명령을 터미널에 한 줄씩 붙여 넣고 실행하세요.
 
 ### Codex
-
-터미널에서 다음 명령을 차례로 실행하세요.
 
 ```bash
 codex plugin marketplace add Jeis-Jw/context-plugins
@@ -60,85 +42,63 @@ codex plugin add context-decision@context-plugins
 
 ### Claude Code
 
-터미널에서 다음 명령을 차례로 실행하세요.
-
 ```bash
 claude plugin marketplace add Jeis-Jw/context-plugins --scope user
 claude plugin install context-core@context-plugins --scope user
 claude plugin install context-decision@context-plugins --scope user
 ```
 
-Marketplace가 이미 등록되어 있다면 첫 번째 명령은 생략해도 됩니다. 설치가 끝나면 에이전트를 다시 시작하거나 새 세션을 여세요.
+이 플러그인의 Marketplace를 이미 등록했다면 첫 번째 명령은 생략해도 됩니다. 설치가 끝나면 Codex 또는 Claude Code를 다시 시작하거나 새 대화를 여세요.
 
-처음 사용할 때는 `context-core`와 `context-decision`만 설치하면 됩니다. 모든 semantic owner는 `context-core`가 필요하지만 semantic owner끼리는 서로를 요구하지 않습니다. 필요한 optional owner만 아래 명령으로 설치하고 초기화하세요. 하나를 설치해도 다른 owner가 자동으로 설치되거나 초기화되지 않습니다.
+처음 사용할 때는 `context-core`와 `context-decision`만 설치하면 됩니다.
 
-| Optional owner | Codex 설치 | Claude Code 설치 | Agent 대화창에서 초기화 |
+<details>
+<summary>프로젝트 방향·문서·가정·용어도 기억하게 하고 싶다면</summary>
+
+필요한 기능만 골라 추가할 수 있습니다. 각 추가 기능에는 `context-core`가 필요하며, 추가 기능끼리는 함께 설치할 필요가 없습니다. 사용하는 도구의 명령으로 설치한 뒤, 마지막 열의 명령을 AI와의 대화창에 보내세요.
+
+| 추가로 기억할 내용 | Codex 설치 | Claude Code 설치 | 대화창에서 처음 한 번 |
 | --- | --- | --- | --- |
-| Intent | `codex plugin add context-intent@context-plugins` | `claude plugin install context-intent@context-plugins --scope user` | `$context-intent:init` |
-| Document | `codex plugin add context-document@context-plugins` | `claude plugin install context-document@context-plugins --scope user` | `$context-document:init` |
-| Assumption | `codex plugin add context-assumption@context-plugins` | `claude plugin install context-assumption@context-plugins --scope user` | `$context-assumption:init` |
-| Term | `codex plugin add context-term@context-plugins` | `claude plugin install context-term@context-plugins --scope user` | `$context-term:init` |
+| 프로젝트 방향 | `codex plugin add context-intent@context-plugins` | `claude plugin install context-intent@context-plugins --scope user` | `$context-intent:init` |
+| 기획·안내 문서 | `codex plugin add context-document@context-plugins` | `claude plugin install context-document@context-plugins --scope user` | `$context-document:init` |
+| 확인이 필요한 가정 | `codex plugin add context-assumption@context-plugins` | `claude plugin install context-assumption@context-plugins --scope user` | `$context-assumption:init` |
+| 프로젝트 용어 | `codex plugin add context-term@context-plugins` | `claude plugin install context-term@context-plugins --scope user` | `$context-term:init` |
 
-### Context type의 관계
-
-- **Intent**는 desired direction입니다.
-- **Observation**과 **Assumption**은 evidence와 premise입니다.
-- **Archive**는 불변 source evidence이며 명시적으로 포함하지 않으면 기본 recall에서 제외됩니다.
-- **Decision**은 chosen commitment입니다.
-- **Rationale**은 해당 근거에서 왜 그 결정을 택했고 그 결정이 Intent를 어떻게 섬기는지 설명합니다.
-- **Document**는 식별자를 유지하면서 갱신할 수 있는 living content입니다.
-
-intent-only, decision-only, document-only로 각각 사용할 수 있습니다. 관련 artifact가 함께 존재하면 decision이 `serves:intent`, `informed_by:observation`, `informed_by:assumption`, `affects:document` 관계를 기록할 수 있습니다. 이 관계는 inverse record를 만들지 않고 어떤 plugin도 필수로 바꾸지 않습니다.
-
-artifact 한도는 기본 읽기 예산입니다. 지식은 slot 크기가 아니라 slot 수로 확장합니다. 예를 들어 하나의 설계를 `design-skeleton`·`design-envelope`·`design-rules`로 분해하고, 시점 고정 장문 원본은 ARCHIVE에 보관해 명시적으로만 읽습니다.
+</details>
 
 ## 사용하는 방법
 
-### 1. 프로젝트 초기화하기
+### 1. 프로젝트에서 처음 한 번 준비하기
 
-Codex 또는 Claude Code에서 프로젝트를 연 뒤, 터미널이 아니라 에이전트와의 대화창에 다음 메시지를 보내세요.
+Codex 또는 Claude Code에서 프로젝트를 연 뒤, AI와의 대화창에 다음 메시지를 보내세요.
 
 ```text
 $context-decision:init
 ```
 
-프로젝트마다 한 번만 실행하면 됩니다. 플러그인이 프로젝트의 `context/` 폴더와 에이전트에게 필요한 안내를 준비합니다.
+프로젝트마다 한 번만 실행하면 됩니다. 필요한 폴더와 AI가 참고할 안내를 준비해줍니다.
 
 ### 2. 평소처럼 대화하기
 
-일상적인 사용에는 별도 명령이 필요하지 않습니다. 다음처럼 자연어로 요청하면 됩니다.
+따로 명령어를 외울 필요 없이 평소 말하듯 요청하면 됩니다.
 
-- “인증과 데이터베이스를 한 번에 제공해서 Supabase를 사용하기로 했어. 이 결정을 기억해줘.”
-- “로그인 방식을 바꾸기 전에 이와 관련해 이미 내린 결정이 있는지 확인해줘.”
-- “이번 배포 결과를 다음 작업에서도 활용할 수 있게 남겨줘.”
+- “첫 버전은 회원가입 없이 쓸 수 있게 만들기로 했어. 이 결정을 기억해줘.”
+- “로그인 기능을 추가하기 전에 관련해서 정한 내용이 있는지 확인해줘.”
+- “방금 해결한 문제와 해결 방법을 다음에도 참고할 수 있게 남겨줘.”
 - “지금까지 진행한 내용과 다음에 할 일을 저장해줘.”
 
-### 3. 내용 확정하기
+### 3. 저장할 내용 확인하기
 
-생성된 Markdown 파일이 아니라 대화에서 내용 자체를 확인합니다.
+결정을 분명히 확정하거나 “이 내용을 기억해줘”라고 요청하면 AI가 저장하고 결과를 알려줍니다. 저장을 위해 같은 내용을 다시 승인할 필요는 없습니다.
 
-- 결정을 분명히 확정하거나 확정된 내용을 기억해 달라고 요청하면 별도 문서 preview 없이 저장됩니다.
-- 의미·scope·교체 효과가 불분명할 때만 에이전트가 그 부분을 짧게 확인합니다.
-- 미확정 내용에 대한 단순한 확인이나 맞장구는 승인이 아닙니다.
-- 저장 뒤에는 파일 본문 대신 기록 결과만 알려줍니다.
+어디에 적용할 결정인지, 기존 결정을 바꾸려는 것인지 등이 불분명하면 그 부분만 먼저 확인합니다. 아직 정하지 않은 내용은 “알겠어” 같은 맞장구만으로 저장하지 않습니다.
 
 ### 4. 다음 대화에서 이어가기
 
-저장된 내용이 현재 작업과 관련 있으면 에이전트가 다시 참고할 수 있습니다. 직접 요청해도 됩니다.
+새 대화에서 관련 작업을 할 때 AI가 저장된 내용을 참고할 수 있습니다. 직접 이렇게 요청해도 됩니다.
 
 > 이 작업을 계속하기 전에 프로젝트에 저장된 결정을 먼저 확인해줘.
 
-기억이 프로젝트 안에 저장되므로 다른 에이전트나 팀원도 이전에 내린 선택을 이해하는 데 활용할 수 있습니다.
-
-### 5. 브랜치, 병합, CI
-
-`context/` 아래 Markdown 파일이 정본입니다. 옆에 있는 `*.index.md`는 빠른 조회용으로 생성되는 투영(projection)이며, 새로 clone해도 별도 빌드 없이 동작하도록 함께 커밋합니다.
-
-- 프로젝트가 Git 저장소이면 `init`이 `.gitattributes`에 관리 블록을 추가해, 두 브랜치가 각각 결정을 기록해도 생성 index가 충돌하지 않고 union으로 병합됩니다. vault가 Git checkout 밖에 있으면 `context/**/*.index.md merge=union` 한 줄을 직접 추가하세요. `doctor`가 `merge_attributes_missing`으로 알려줍니다.
-- 병합 뒤에는 다음 context 기록이 index를 다시 만듭니다. 바로 정리하려면 `context_cli.py refresh --fix index`를 실행합니다. `context_cli.py`는 설치된 플러그인 디렉터리 안의 `context-core` 진입점입니다([DEVELOPMENT.md](./DEVELOPMENT.md) 참고).
-- 두 브랜치가 같은 scope·key에 서로 다른 결정을 기록했다면 `doctor`가 `duplicate_current_slot`을 보고합니다. 그 slot의 기록은 하나를 withdraw하거나 supersede할 때까지 보류되고, 다른 slot은 계속 동작하며, 자동으로 고르지 않습니다.
-- CI에서는 프로젝트 루트에서 `context_cli.py refresh --check --json`을 실행하세요. index가 artifact와 어긋나거나 무결성 문제가 있으면 non-zero로 종료합니다.
-
-기록에 결박되는 것은 사용자가 승인한 결정 내용뿐입니다. 그 사이 다른 브랜치가 병합됐어도 기록은 진행되고 index는 lock 안에서 재생성됩니다. 대상 기록 자체가 바뀌었거나, 같은(또는 겹치는) scope·key에 경쟁 결정이 들어온 경우에만 멈춥니다.
+프로젝트를 공유하면 다른 AI나 함께 일하는 사람도 같은 기록을 참고할 수 있습니다.
 
 Context Plugins는 [Apache License 2.0](./LICENSE)으로 제공됩니다.
