@@ -810,7 +810,11 @@ def _substantive(value: Any) -> bool:
 
 def _string_list(value: Any, field: str, *, required: bool = False, maximum: int = 12, item_maximum: int = 500) -> list[str]:
     if not isinstance(value, list) or any(not _substantive(item) or "\n" in item or len(item) > item_maximum for item in value):
-        raise ContextError("schema_invalid", f"{field} must be a substantive string list")
+        raise ContextError(
+            "schema_invalid",
+            f"{field} must be a list of short items: one item per line (an optional `- ` bullet), each non-empty "
+            f"and at most {item_maximum} characters",
+        )
     if (required and not value) or len(value) > maximum:
         raise ContextError("schema_invalid", f"{field} has an invalid item count")
     return [nfc(item.strip()) for item in value]
@@ -7388,14 +7392,24 @@ def _section_arguments(args: argparse.Namespace, mapping: Sequence[tuple[str, st
     return output
 
 
+_ITEM_MARKER = re.compile(r"^(?:[-*\u2022]\s+|\d{1,3}[.)]\s+)")
+
+
 def _body_to_items(value: str) -> list[str]:
+    """One item per non-empty line; a leading `- `, `* `, `•` or `1.` marker is optional.
+
+    A single line is one item, so callers can pass a sentence or a bullet list without
+    learning a format first.
+    """
     body = _load_body_argument(value).strip()
     if not body:
         return []
-    lines = [line.strip() for line in body.splitlines() if line.strip()]
-    if all(line.startswith("- ") for line in lines):
-        return [line[2:].strip() for line in lines]
-    return [body]
+    items = []
+    for line in body.splitlines():
+        stripped = _ITEM_MARKER.sub("", line.strip(), count=1).strip()
+        if stripped:
+            items.append(stripped)
+    return items
 
 
 def build_parser() -> argparse.ArgumentParser:

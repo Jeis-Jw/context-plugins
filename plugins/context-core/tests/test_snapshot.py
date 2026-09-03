@@ -243,6 +243,37 @@ class SnapshotTests(unittest.TestCase):
             self.assertEqual(0, listed.returncode, listed.stdout + listed.stderr)
             self.assertIn(artifact["id"], listed.stdout)
 
+    def test_list_bodies_accept_plain_lines_numbered_and_bulleted_items(self) -> None:
+        self.assertEqual(["Write rows", "Return exit code 3"], context_cli._body_to_items("Write rows\nReturn exit code 3"))
+        self.assertEqual(["Write rows", "Return exit code 3"], context_cli._body_to_items("1. Write rows\n2) Return exit code 3"))
+        self.assertEqual(["Write rows", "Return exit code 3"], context_cli._body_to_items("- Write rows\n* Return exit code 3\n"))
+        self.assertEqual(["Run the suite."], context_cli._body_to_items("Run the suite."))
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repository"
+            repo.mkdir()
+            initialize(repo)
+            saved = run_cli(
+                repo, "snapshot", "save", "--approved",
+                "--title", "Numbered handoff", "--summary", "Items given as a numbered list.",
+                "--captured-from", "conversation", "--attest-handoff-requested", "--attest-unfinished-context-present",
+                "--sec-context", "Step 1 is complete.",
+                "--sec-open-items", "1. Write one row per in-stock item\n2. Return exit code 3 when nothing was exported",
+                "--sec-next-steps", "Extend export_items in src/cli.py\nAdd tests for the empty export", "--json",
+                environment={"TMPDIR": temp},
+            )
+            self.assertEqual(0, saved.returncode, saved.stdout + saved.stderr)
+            body = (repo / json.loads(saved.stdout)["result"]["artifacts"][0]["path"]).read_text(encoding="utf-8")
+            self.assertIn("Return exit code 3 when nothing was exported", body)
+            rejected = run_cli(
+                repo, "snapshot", "save",
+                "--title", "Oversized handoff", "--summary", "Rejects an oversized item.",
+                "--captured-from", "conversation", "--attest-handoff-requested", "--attest-unfinished-context-present",
+                "--sec-context", "Step 1 is complete.", "--sec-open-items", "x" * 600, "--sec-next-steps", "Run the suite.", "--json",
+                environment={"TMPDIR": temp},
+            )
+            self.assertEqual(2, rejected.returncode, rejected.stdout + rejected.stderr)
+            self.assertIn("one item per line", json.loads(rejected.stdout)["error"]["message"])
+
     def test_attestation_file_and_snapshot_flags_are_mutually_exclusive(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
