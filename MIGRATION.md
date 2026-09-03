@@ -1,5 +1,11 @@
 # Repository extraction
 
+## 0.14.0 generated indexes as projections
+
+Area indexes remain committed, but an approved write no longer requires their bytes to be unchanged since preview: core re-derives the index from the artifacts under the root lock and reports `index_regenerated:<path>`. Target-artifact drift, a competing Current decision in the same or an overlapping scope/key, a slot that already holds two Current decisions, and chained same-area proposals still fail closed. Existing `context-common/v2` artifacts and indexes need no migration; pending receipts stay valid.
+
+For Git vaults, run your host's `init` once more to add the managed `.gitattributes` block (`context/**/*.index.md merge=union`), or add that line yourself. After a merge, run `refresh --fix index` or let the next write re-derive the index; use `refresh --check` in CI. If a merge left two Current decisions in one slot, `doctor` reports `duplicate_current_slot` and only that slot holds until one record is withdrawn or superseded.
+
 ## 0.13.0 semantic approval
 
 Capture approval now attaches to the settled semantic payload, canonical scope, and lifecycle effect expressed in conversation. The agent does not show the rendered Markdown or ask a second storage question merely to authorize persistence. If rendering introduces or changes meaning, it holds the write and confirms only that semantic delta.

@@ -1589,11 +1589,21 @@ def validate_batch(repo: pathlib.Path, owner_result: dict[str, Any], prior_bundl
         if by_id.get(record["id"]) != {"id": record["id"], "path": record["path"], "sha256": record["sha256"]}:
             raise DecisionError("conflict_read_precondition_required", "acknowledged overlap lacks exact read precondition", {"id": record["id"]}, EXIT_CONFLICT)
     before_ids = set(state)
+    slot_counts: dict[tuple[str, str], int] = {}
+    for record in state.values():
+        slot = (record["frontmatter"]["scope"], record["frontmatter"]["decision_key"])
+        slot_counts[slot] = slot_counts.get(slot, 0) + 1
+    inherited_duplicates = {slot for slot, count in slot_counts.items() if count > 1}
     _overlay_owner_result(state, owner_result)
+    own_slot = (frontmatter["scope"], frontmatter["decision_key"])
     slots: dict[tuple[str, str], str] = {}
     for record in state.values():
         slot = (record["frontmatter"]["scope"], record["frontmatter"]["decision_key"])
         if slot in slots:
+            if slot != own_slot and slot in inherited_duplicates:
+                # A merge left two Current DEC in another slot. Doctor reports it and writes to
+                # that slot hold; unrelated slots keep working (no automatic pick or retire).
+                continue
             raise DecisionError("decision_slot_conflict", "virtual current contains two DEC in one slot", {"ids": [slots[slot], record["id"]]}, EXIT_CONFLICT)
         slots[slot] = record["id"]
     del before_ids
@@ -2571,8 +2581,30 @@ def _doctor_result(value: Any) -> dict[str, Any]:
     return value
 
 
+def _slot_held_doctor(doctor: dict[str, Any]) -> dict[str, Any]:
+    """Treat merge-created duplicate Current slots as a per-slot hold, not a vault-wide stop.
+
+    Core keeps reporting ``duplicate_current_slot`` as an issue (doctor, ``refresh --check``);
+    the owner holds writes to that slot in ``validate_batch`` and lets other slots proceed.
+    """
+    issues = doctor.get("issues")
+    if not isinstance(issues, list):
+        return doctor
+    held = [item for item in issues if isinstance(item, dict) and item.get("code") == "duplicate_current_slot"]
+    if not held:
+        return doctor
+    remaining = [item for item in issues if item not in held]
+    adjusted = dict(doctor)
+    adjusted["issues"] = remaining
+    warnings = doctor.get("warnings")
+    adjusted["warnings"] = [*(warnings if isinstance(warnings, list) else []), *held]
+    if not remaining and doctor.get("repository_state") == "invalid":
+        adjusted["repository_state"] = "ready"
+    return adjusted
+
+
 def validate_core_doctor_handshake(value: Any, *, allowed_states: set[str]) -> dict[str, Any]:
-    doctor = _doctor_result(value)
+    doctor = _slot_held_doctor(_doctor_result(value))
     required = {
         "schema", "owner", "supported_protocols", "repository_state", "root", "issues", "warnings",
         "plugin_version", "entrypoint", "protocol",

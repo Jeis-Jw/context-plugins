@@ -113,4 +113,15 @@ $context-decision:init
 
 기억이 프로젝트 안에 저장되므로 다른 에이전트나 팀원도 이전에 내린 선택을 이해하는 데 활용할 수 있습니다.
 
+### 5. 브랜치, 병합, CI
+
+`context/` 아래 Markdown 파일이 정본입니다. 옆에 있는 `*.index.md`는 빠른 조회용으로 생성되는 투영(projection)이며, 새로 clone해도 별도 빌드 없이 동작하도록 함께 커밋합니다.
+
+- 프로젝트가 Git 저장소이면 `init`이 `.gitattributes`에 관리 블록을 추가해, 두 브랜치가 각각 결정을 기록해도 생성 index가 충돌하지 않고 union으로 병합됩니다. vault가 Git checkout 밖에 있으면 `context/**/*.index.md merge=union` 한 줄을 직접 추가하세요. `doctor`가 `merge_attributes_missing`으로 알려줍니다.
+- 병합 뒤에는 다음 context 기록이 index를 다시 만듭니다. 바로 정리하려면 `context_cli.py refresh --fix index`를 실행합니다. `context_cli.py`는 설치된 플러그인 디렉터리 안의 `context-core` 진입점입니다([DEVELOPMENT.md](./DEVELOPMENT.md) 참고).
+- 두 브랜치가 같은 scope·key에 서로 다른 결정을 기록했다면 `doctor`가 `duplicate_current_slot`을 보고합니다. 그 slot의 기록은 하나를 withdraw하거나 supersede할 때까지 보류되고, 다른 slot은 계속 동작하며, 자동으로 고르지 않습니다.
+- CI에서는 프로젝트 루트에서 `context_cli.py refresh --check --json`을 실행하세요. index가 artifact와 어긋나거나 무결성 문제가 있으면 non-zero로 종료합니다.
+
+기록에 결박되는 것은 사용자가 승인한 결정 내용뿐입니다. 그 사이 다른 브랜치가 병합됐어도 기록은 진행되고 index는 lock 안에서 재생성됩니다. 대상 기록 자체가 바뀌었거나, 같은(또는 겹치는) scope·key에 경쟁 결정이 들어온 경우에만 멈춥니다.
+
 Context Plugins는 [Apache License 2.0](./LICENSE)으로 제공됩니다.

@@ -29,6 +29,11 @@ def vault_dir() -> tempfile.TemporaryDirectory[str]:
     return temp
 
 
+def context_cli_refresh(repo: Path) -> dict:
+    completed = subprocess.run([sys.executable, str(CLI_PATH), "refresh", "--json"], cwd=repo, capture_output=True, text=True)
+    return json.loads(completed.stdout)["result"]
+
+
 def tree_digest(root: Path) -> str:
     digest = hashlib.sha256()
     for path in sorted(item for item in root.rglob("*") if item.is_file()):
@@ -991,48 +996,65 @@ class OwnerDescriptorV2Tests(unittest.TestCase):
             receipt = owner_receipt(repo, descriptor, capability, result, "create_current")
             preview = self._preview(repo, result, receipt, prefix="locked")["result"]
             bundle_path = self._json_input("locked-bundle.json", preview["bundle"])
+            index_path = repo / "context/premise/premise.index.md"
+            fixture_path = repo / "context/premise/fixture.md"
 
             lock_root = Path(tempfile.gettempdir()) / "context-core-locks"
             lock_root.mkdir(mode=0o700, parents=True, exist_ok=True)
             lock_path = lock_root / hashlib.sha256(str(repo.resolve()).encode("utf-8")).hexdigest()
-            fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
-            completed: subprocess.CompletedProcess[str]
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX)
-                process = subprocess.Popen(
-                    [
-                        sys.executable,
-                        str(CLI_PATH),
-                        "transaction",
-                        "apply",
-                        "--plan-bundle",
-                        f"@{bundle_path}",
-                        "--approved-digest",
-                        preview["approval_digest"],
-                        "--json",
-                    ],
-                    cwd=repo,
-                    text=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                )
-                time.sleep(0.25)
-                self.assertIsNone(process.poll(), "apply did not wait for the repository lock")
-                index_path = repo / "context/premise/premise.index.md"
-                index_path.write_text(index_path.read_text(encoding="utf-8") + "\n<!-- concurrent tamper -->\n", encoding="utf-8")
-                tampered = tree_digest(repo)
-                fcntl.flock(fd, fcntl.LOCK_UN)
-                stdout, stderr = process.communicate(timeout=5)
-                completed = subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
-            finally:
-                try:
-                    fcntl.flock(fd, fcntl.LOCK_UN)
-                finally:
-                    os.close(fd)
-            self.assertEqual(5, completed.returncode, completed.stdout + completed.stderr)
-            self.assertEqual("precondition_changed", json.loads(completed.stdout)["error"]["code"])
-            self.assertEqual(tampered, tree_digest(repo))
-            self.assertFalse((repo / "context/premise/fixture.md").exists())
+            # Artifact-level tamper under the lock still fails closed; an index-only tamper
+            # (the projection) is re-derived by core instead of blocking the approved write.
+            for tamper in ("artifact", "index"):
+                with self.subTest(tamper=tamper):
+                    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+                    completed: subprocess.CompletedProcess[str]
+                    try:
+                        fcntl.flock(fd, fcntl.LOCK_EX)
+                        process = subprocess.Popen(
+                            [
+                                sys.executable,
+                                str(CLI_PATH),
+                                "transaction",
+                                "apply",
+                                "--plan-bundle",
+                                f"@{bundle_path}",
+                                "--approved-digest",
+                                preview["approval_digest"],
+                                "--json",
+                            ],
+                            cwd=repo,
+                            text=True,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                        )
+                        time.sleep(0.25)
+                        self.assertIsNone(process.poll(), "apply did not wait for the repository lock")
+                        if tamper == "artifact":
+                            fixture_path.write_text("concurrent artifact\n", encoding="utf-8")
+                        else:
+                            index_path.write_text(index_path.read_text(encoding="utf-8") + "\n<!-- concurrent tamper -->\n", encoding="utf-8")
+                        tampered = tree_digest(repo)
+                        fcntl.flock(fd, fcntl.LOCK_UN)
+                        stdout, stderr = process.communicate(timeout=5)
+                        completed = subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
+                    finally:
+                        try:
+                            fcntl.flock(fd, fcntl.LOCK_UN)
+                        finally:
+                            os.close(fd)
+                    if tamper == "artifact":
+                        self.assertEqual(5, completed.returncode, completed.stdout + completed.stderr)
+                        self.assertEqual("precondition_changed", json.loads(completed.stdout)["error"]["code"])
+                        self.assertEqual(tampered, tree_digest(repo))
+                        fixture_path.unlink()
+                    else:
+                        self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+                        applied = json.loads(completed.stdout)["result"]
+                        self.assertTrue(applied["applied"])
+                        self.assertIn("index_regenerated:context/premise/premise.index.md", applied["warnings"])
+                        self.assertTrue(fixture_path.is_file())
+                        self.assertIn("<!-- concurrent tamper -->", index_path.read_text(encoding="utf-8"))
+                        self.assertEqual([], context_cli_refresh(repo)["issues"])
 
     def test_acceptance_56_partial_retry_convergence(self) -> None:
         descriptor = owner_descriptor()

@@ -139,6 +139,30 @@ POLICY_BODY = """<!-- BEGIN context-core-policy (managed by context-core) -->
 <!-- END context-core-policy (managed by context-core) -->"""
 POLICY_TARGETS = {"AGENTS.md", "CLAUDE.md"}
 POLICY_HOST_TARGETS = {"codex": "AGENTS.md", "claude-code": "CLAUDE.md"}
+MERGE_ATTRIBUTES_TARGET = ".gitattributes"
+MERGE_ATTRIBUTES_BEGIN = "# BEGIN context-core-merge (managed by context-core)"
+MERGE_ATTRIBUTES_END = "# END context-core-merge (managed by context-core)"
+MERGE_ATTRIBUTES_BODY = """# BEGIN context-core-merge (managed by context-core)
+# Generated context indexes are projections of the artifacts. Let Git keep both sides,
+# then run `context_cli.py refresh --fix index` to re-derive the canonical index.
+context/**/*.index.md merge=union
+# END context-core-merge (managed by context-core)"""
+_POLICY_SPEC = {
+    "begin": POLICY_BEGIN, "end": POLICY_END, "body": POLICY_BODY, "transition": "policy_install",
+    "effect_id": "effect_install_policy", "action": "install_policy", "material_id": "material_policy",
+    "descriptor": {"owner": "context-core", "kind": "policy", "artifact_schema": "context-policy/v1"},
+}
+MANAGED_ROOT_FILES = {
+    "AGENTS.md": _POLICY_SPEC,
+    "CLAUDE.md": _POLICY_SPEC,
+    MERGE_ATTRIBUTES_TARGET: {
+        "begin": MERGE_ATTRIBUTES_BEGIN, "end": MERGE_ATTRIBUTES_END, "body": MERGE_ATTRIBUTES_BODY,
+        "transition": "merge_attributes_install", "effect_id": "effect_install_merge_attributes",
+        "action": "install_merge_attributes", "material_id": "material_merge_attributes",
+        "descriptor": {"owner": "context-core", "kind": "merge_attributes", "artifact_schema": "context-merge-attributes/v1"},
+    },
+}
+MANAGED_ROOT_TRANSITIONS = {spec["transition"] for spec in MANAGED_ROOT_FILES.values()}
 REMOVED_FINGERPRINT_FIELDS = {"claim_fingerprint", "source_claim_fingerprint"}
 REMOVED_CANDIDATE_FIELDS = REMOVED_FINGERPRINT_FIELDS | {"claim_key"}
 
@@ -168,6 +192,51 @@ class AreaIndex:
     current: list[dict[str, Any]]
     history: list[dict[str, Any]]
     text: str
+    # Set when the bytes on disk are a non-canonical projection (for example after a Git
+    # union merge): ``text`` then holds the canonical index re-derived from the artifacts
+    # and ``physical_text`` the bytes that were actually read.
+    physical_text: str | None = None
+
+
+def _index_base_digest(index: AreaIndex) -> str:
+    return sha256_bytes((index.physical_text if index.physical_text is not None else index.text).encode("utf-8"))
+
+
+def _tolerant_area_index(repo: pathlib.Path, area: str, index_text: str) -> AreaIndex:
+    """Parse an area index; re-derive a non-canonical projection from the artifacts in memory.
+
+    Only row-level drift (``index_noncanonical``: order, duplicates, stale JSON) is tolerated.
+    Structural problems (schema, metadata, profile) still raise. Nothing is written here.
+    """
+    try:
+        return parse_area_index(index_text)
+    except ContextError as error:
+        if error.code != "index_noncanonical":
+            raise
+    canonical = render_area_index_from_repository(repo, area, repair_rows=True)
+    regenerated = parse_area_index(canonical)
+    return AreaIndex(regenerated.frontmatter, regenerated.current, regenerated.history, canonical, index_text)
+
+
+def _decision_scopes_overlap(left: str, right: str) -> bool:
+    if not left or not right:
+        return False
+    return left == right or left.startswith(right + "/") or right.startswith(left + "/")
+
+
+def _git_metadata_root(repo: pathlib.Path) -> pathlib.Path | None:
+    for candidate in (repo, *list(repo.parents)[:8]):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def _merge_attributes_installed(repo: pathlib.Path) -> bool:
+    try:
+        text = (repo / MERGE_ATTRIBUTES_TARGET).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return False
+    return MERGE_ATTRIBUTES_BEGIN in text and MERGE_ATTRIBUTES_END in text and "merge=union" in text
 
 
 @dataclasses.dataclass
@@ -3788,6 +3857,28 @@ def bootstrap_repository(
     except ContextError as error:
         raise _bootstrap_phase_error(error, "policy_install", phases) from error
 
+    merge_requested = _git_metadata_root(repo) is not None
+    merge_status = "skipped"
+    if merge_requested:
+        try:
+            merge_bundle = build_policy_bundle(repo, MERGE_ATTRIBUTES_TARGET)
+            if merge_bundle.get("noop") is True:
+                merge_status = "noop"
+                merge_changed: list[str] = []
+            else:
+                applied = apply_bundle(
+                    repo,
+                    merge_bundle["bundle"],
+                    merge_bundle["approval_digest"],
+                    approval_source="explicit_init",
+                )
+                merge_status = "applied"
+                merge_changed = applied["changed_paths"]
+                changed_paths.extend(merge_changed)
+            phases.append({"phase": "merge_attributes_install", "status": merge_status, "changed_paths": merge_changed})
+        except ContextError as error:
+            raise _bootstrap_phase_error(error, "merge_attributes_install", phases) from error
+
     return {
         "schema": "context-core-bootstrap-result/v1",
         "applied": any(phase["status"] == "applied" for phase in phases),
@@ -3800,6 +3891,12 @@ def bootstrap_repository(
             "target": policy_target,
             "applied": policy_status == "applied",
             "noop": policy_status == "noop",
+        },
+        "merge_attributes": {
+            "requested": merge_requested,
+            "target": MERGE_ATTRIBUTES_TARGET,
+            "applied": merge_status == "applied",
+            "noop": merge_status == "noop",
         },
     }
 
@@ -4093,8 +4190,10 @@ def build_area_register_bundle(repo: pathlib.Path, descriptor: dict[str, Any], i
 
 
 def build_policy_bundle(repo: pathlib.Path, target: str) -> dict[str, Any]:
-    if target not in POLICY_TARGETS or pathlib.PurePosixPath(target).name != target:
-        raise ContextError("policy_target_invalid", "policy target must be exact repository-root AGENTS.md or CLAUDE.md", {"target": target}, EXIT_CONFLICT)
+    spec = MANAGED_ROOT_FILES.get(target)
+    if spec is None or pathlib.PurePosixPath(target).name != target:
+        raise ContextError("policy_target_invalid", "policy target must be exact repository-root AGENTS.md, CLAUDE.md, or .gitattributes", {"target": target}, EXIT_CONFLICT)
+    POLICY_BEGIN, POLICY_END, POLICY_BODY = spec["begin"], spec["end"], spec["body"]
     path = _ensure_contained(repo, target)
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise ContextError("policy_file_unsupported", "policy target must be a regular root file", {"target": target}, EXIT_CONFLICT)
@@ -4132,8 +4231,8 @@ def build_policy_bundle(repo: pathlib.Path, target: str) -> dict[str, Any]:
         after = policy_body + newline
     if after == before:
         return {"noop": True, "applied": False, "changed_paths": []}
-    effect_id = "effect_install_policy"
-    material_id = "material_policy"
+    effect_id = spec["effect_id"]
+    material_id = spec["material_id"]
     before_digest = sha256_bytes(before_bytes) if before_bytes is not None else None
     after_digest = sha256_bytes(after.encode("utf-8"))
     operation = {
@@ -4147,9 +4246,9 @@ def build_policy_bundle(repo: pathlib.Path, target: str) -> dict[str, Any]:
     }
     plan = {
         "schema": "context-mutation-plan/v1", "plan_id": new_plan_id(), "owner": "context-core", "source_type": "core_control",
-        "transition": "policy_install", "owner_descriptor": {"owner": "context-core", "kind": "policy", "artifact_schema": "context-policy/v1"},
+        "transition": spec["transition"], "owner_descriptor": dict(spec["descriptor"]),
         "control_input": {
-            "schema": "context-core-control/v1", "transition": "policy_install", "target": target,
+            "schema": "context-core-control/v1", "transition": spec["transition"], "target": target,
             "before_sha256": before_digest, "outside_bytes_sha256": sha256_bytes((before[:before.find(POLICY_BEGIN)] + before[before.find(POLICY_END) + len(POLICY_END):]).encode("utf-8")) if POLICY_BEGIN in before else sha256_bytes(before.encode("utf-8")),
         },
         "prior_bundle_digests": [], "read_preconditions": [], "operations": [operation],
@@ -4157,7 +4256,7 @@ def build_policy_bundle(repo: pathlib.Path, target: str) -> dict[str, Any]:
     preview = {
         "schema": "context-approval-preview/v1", "owner": "context-core", "candidate_id": None,
         "artifacts": [{"effect_id": effect_id, "path": target, "content": after}],
-        "effects": [{"effect_id": effect_id, "action": "install_policy", "path": target}],
+        "effects": [{"effect_id": effect_id, "action": spec["action"], "path": target}],
     }
     return _bundle_result(repo, preview, plan, [_material(material_id, target, after)])
 
@@ -4173,7 +4272,7 @@ def _profiled_area_for_owner(
         raise ContextError("area_owner_mismatch", "owner is not authorized for target area", {"owner": owner, "area": area}, EXIT_CONFLICT)
     row = matches[0]
     index_text = _ensure_contained(repo, row["path"]).read_text(encoding="utf-8")
-    parsed = parse_area_index(index_text)
+    parsed = _tolerant_area_index(repo, area, index_text)
     metadata = parsed.frontmatter
     if (
         metadata["area"],
@@ -4586,7 +4685,7 @@ def _validate_owner_validation(
         expected = dict(validation)
         receipt_digest = expected.pop("receipt_digest", None)
         descriptor_digest = canonical_digest(descriptor)
-        expected_base_digest = base_area_index_sha256 or sha256_bytes(area_index.text.encode("utf-8"))
+        expected_base_digest = base_area_index_sha256 or _index_base_digest(area_index)
         if (
             validation.get("owner") != owner_result["owner"]
             or validation.get("kind") != owner_result["target_kind"]
@@ -4616,7 +4715,7 @@ def _validate_owner_validation(
         or validation.get("owner") != owner_result["owner"]
         or validation.get("kind") != owner_result["target_kind"]
         or validation.get("owner_result_digest") != canonical_digest(owner_result)
-        or validation.get("base_area_index_sha256") != sha256_bytes(area_index.text.encode("utf-8"))
+        or validation.get("base_area_index_sha256") != _index_base_digest(area_index)
         or validation.get("prior_same_area_bundle_digests") != list(same_area_prior_digests)
         or validation.get("status") != "valid"
         or receipt_digest != canonical_digest(expected)
@@ -4667,7 +4766,7 @@ def finalize_owner_result(repo: pathlib.Path, owner_result: dict[str, Any], owne
         target = _ensure_contained(repo, precondition["path"])
         if not target.is_file() or sha256_bytes(target.read_bytes()) != precondition["sha256"]:
             raise ContextError("precondition_changed", "owner read precondition is stale", {"path": precondition["path"]}, EXIT_CONFLICT)
-    area_indexes: dict[str, AreaIndex] = {primary_area: AreaIndex(physical_area_index.frontmatter, parse_area_index(virtual_text).current, parse_area_index(virtual_text).history, virtual_text)}
+    area_indexes: dict[str, AreaIndex] = {primary_area: AreaIndex(physical_area_index.frontmatter, parse_area_index(virtual_text).current, parse_area_index(virtual_text).history, virtual_text, physical_area_index.physical_text)}
     area_descriptors: dict[str, dict[str, Any] | None] = {primary_area: descriptor}
     for area in sorted({effect.get("area") for effect in owner_result["effects"] if isinstance(effect.get("area"), str)} - {primary_area}):
         if owner_result["transition"] != "decision_fallback_import" or area != "observation" or owner != "context-decision":
@@ -4754,7 +4853,7 @@ def finalize_owner_result(repo: pathlib.Path, owner_result: dict[str, Any], owne
         index = area_indexes[area]
         path = f"context/{area}/{area}.index.md"
         rendered_index = _virtual_area_index(index, matching_effects, matching_drafts, area_descriptors[area])
-        index_before[path] = sha256_bytes(index.text.encode("utf-8"))
+        index_before[path] = _index_base_digest(index)
         index_after[path] = sha256_bytes(file_bytes(rendered_index))
         index_material_id = f"material_index_{hashlib.sha256(area.encode('utf-8')).hexdigest()[:12]}"
         materials.append(_material(index_material_id, path, rendered_index))
@@ -5670,7 +5769,6 @@ def _validate_policy_control(
     by_id: dict[str, dict[str, Any]],
     operation: dict[str, Any],
 ) -> None:
-    descriptor = {"owner": "context-core", "kind": "policy", "artifact_schema": "context-policy/v1"}
     control = plan["control_input"]
     _require_exact_fields(
         control,
@@ -5678,9 +5776,14 @@ def _validate_policy_control(
         "policy_install control input",
     )
     target = control.get("target")
-    if set(by_id) != {"material_policy"}:
+    spec = MANAGED_ROOT_FILES.get(target) if isinstance(target, str) else None
+    if spec is None or plan.get("transition") != spec["transition"]:
+        _core_control_error("managed root file target or transition is not in the allowlist")
+    descriptor = dict(spec["descriptor"])
+    POLICY_BEGIN, POLICY_END, POLICY_BODY = spec["begin"], spec["end"], spec["body"]
+    if set(by_id) != {spec["material_id"]}:
         _core_control_error("policy_install material differs from the exact allowlist")
-    material = by_id["material_policy"]
+    material = by_id[spec["material_id"]]
     _require_exact_fields(material, {"material_id", "path", "content"}, "policy material")
     content = material["content"]
     newline = "\r\n" if "\r\n" in content else "\n"
@@ -5691,8 +5794,8 @@ def _validate_policy_control(
     end = content.find(POLICY_END, start) + len(POLICY_END)
     if content.count(POLICY_BEGIN) != 1 or content.count(POLICY_END) != 1 or content[start:end] != expected_block:
         _core_control_error("policy material managed block is not canonical")
-    current = _ensure_contained(repo, str(target)) if target in POLICY_TARGETS else repo
-    current_digest = _digest_or_none(current) if target in POLICY_TARGETS else None
+    current = _ensure_contained(repo, str(target))
+    current_digest = _digest_or_none(current)
     if current_digest == operation.get("before_sha256"):
         before = current.read_text(encoding="utf-8") if current_digest is not None else ""
         outside = (
@@ -5720,24 +5823,24 @@ def _validate_policy_control(
         plan["owner"] != "context-core"
         or plan["owner_descriptor"] != descriptor
         or control.get("schema") != "context-core-control/v1"
-        or control.get("transition") != "policy_install"
-        or target not in POLICY_TARGETS
+        or control.get("transition") != spec["transition"]
+        or target not in MANAGED_ROOT_FILES
         or control.get("before_sha256") != operation.get("before_sha256")
         or set(operation) != {"op", "effect_id", "role", "path", "before_sha256", "after_sha256", "material"}
         or operation["op"] != expected_op
-        or operation["effect_id"] != "effect_install_policy"
+        or operation["effect_id"] != spec["effect_id"]
         or operation["role"] != "policy"
         or operation["path"] != target
-        or operation["material"] != "material_policy"
+        or operation["material"] != spec["material_id"]
         or operation["after_sha256"] != sha256_bytes(content.encode("utf-8"))
         or material["path"] != target
         or preview["owner"] != "context-core"
         or preview["candidate_id"] is not None
         or preview["artifacts"] != [{
-            "effect_id": "effect_install_policy", "path": target, "content": content,
+            "effect_id": spec["effect_id"], "path": target, "content": content,
         }]
         or preview["effects"] != [{
-            "effect_id": "effect_install_policy", "action": "install_policy", "path": target,
+            "effect_id": spec["effect_id"], "action": spec["action"], "path": target,
         }]
     ):
         _core_control_error("policy_install plan differs from its exact allowlist")
@@ -5765,7 +5868,7 @@ def _validate_core_control_bundle(
     if (
         plan.get("schema") != "context-mutation-plan/v1"
         or plan.get("source_type") != "core_control"
-        or transition not in {"core_init", "area_register", "policy_install"}
+        or transition not in {"core_init", "area_register", *MANAGED_ROOT_TRANSITIONS}
         or not _valid_plan_id(plan.get("plan_id"))
         or plan.get("prior_bundle_digests") != []
         or plan.get("read_preconditions") != []
@@ -5775,7 +5878,7 @@ def _validate_core_control_bundle(
         or any(set(material) != {"material_id", "path", "content"} for material in by_id.values())
     ):
         _core_control_error("core control envelope differs from the exact allowlist")
-    if transition == "policy_install":
+    if transition in MANAGED_ROOT_TRANSITIONS:
         if index_operations or len(non_index) != 1:
             _core_control_error("policy_install permits exactly one policy file operation")
         _validate_policy_control(repo, plan, preview, by_id, non_index[0])
@@ -5834,7 +5937,7 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
         raise ContextError("plan_preview_mismatch", "operations and preview effects are not 1:1", exit_code=EXIT_CONFLICT)
     index_operations = [operation for operation in operations if operation.get("op") == "index_rebuild"]
     derived_ids = index_operations[0].get("derived_from", []) if len(index_operations) == 1 else []
-    if plan.get("transition") == "policy_install":
+    if plan.get("transition") in MANAGED_ROOT_TRANSITIONS:
         if index_operations or len(non_index) != 1 or set(effect_ids) != set(preview_ids):
             raise ContextError("plan_preview_mismatch", "policy install must contain one visible file operation", exit_code=EXIT_CONFLICT)
     elif (
@@ -5850,7 +5953,7 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
         role = operation.get("role")
         if role not in {"artifact", "policy"}:
             raise ContextError("plan_preview_mismatch", "file operation role is invalid", exit_code=EXIT_CONFLICT)
-        if role == "policy" and (plan.get("transition") != "policy_install" or operation.get("path") not in POLICY_TARGETS or "area" in operation):
+        if role == "policy" and (plan.get("transition") not in MANAGED_ROOT_TRANSITIONS or operation.get("path") not in MANAGED_ROOT_FILES or "area" in operation):
             raise ContextError("policy_target_invalid", "policy operation escapes the repository-root allowlist", exit_code=EXIT_CONFLICT)
         if role == "artifact" and not isinstance(operation.get("area"), str):
             raise ContextError("plan_preview_mismatch", "artifact operation lacks area", exit_code=EXIT_CONFLICT)
@@ -5992,7 +6095,7 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
             before_digest = index_operation["before_sha256"].get(relative)
             after_digest = index_operation["after_sha256"].get(relative)
             if current_digest == before_digest:
-                current_index = parse_area_index((repo / relative).read_text(encoding="utf-8"))
+                current_index = _tolerant_area_index(repo, area, (repo / relative).read_text(encoding="utf-8"))
                 matching_effects = [effect for effect in owner_effects.values() if effect.get("area") == area]
                 matching_drafts = {
                     effect_id: draft
@@ -6008,12 +6111,17 @@ def _validate_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest
                         EXIT_CONFLICT,
                     )
             elif current_digest != after_digest:
-                raise ContextError(
-                    "precondition_changed",
-                    "target area index precondition changed",
-                    {"path": relative},
-                    EXIT_CONFLICT,
-                )
+                if plan.get("prior_same_area_bundle_digests"):
+                    # A chained proposal was validated on the virtual index after its priors;
+                    # it is only meaningful once those priors are physically applied.
+                    raise ContextError(
+                        "precondition_changed",
+                        "target area index precondition changed",
+                        {"path": relative},
+                        EXIT_CONFLICT,
+                    )
+                area_descriptor = registered_descriptor if area == registered_row["area"] else None
+                _require_benign_index_drift(repo, area, content, list(owner_effects.values()), owner_drafts, area_descriptor)
         request_inputs = [item for item in owner_result["semantic_inputs"] if item.get("operation") == "mutation_request"]
         if request_inputs:
             request = request_inputs[0]["value"]
@@ -6148,6 +6256,116 @@ def _digest_or_none(path: pathlib.Path) -> str | None:
     return sha256_bytes(path.read_bytes()) if path.is_file() else None
 
 
+def _require_benign_index_drift(
+    repo: pathlib.Path,
+    area: str,
+    material_content: str,
+    effects: Sequence[dict[str, Any]],
+    drafts: dict[str, dict[str, Any]],
+    descriptor: dict[str, Any] | None,
+) -> None:
+    """Decide whether a derived index that changed since preview may be re-derived at apply.
+
+    The index is a projection, so its bytes are not part of the approved payload. Index-only
+    drift (row order, duplicates, unrelated additions) passes and the index is regenerated
+    under the root lock. The write is still refused when a Current decision this plan never
+    saw now occupies the same or an overlapping slot as a decision the plan makes Current, or
+    when that slot already holds two Current decisions (a merge left them; doctor reports it).
+    Artifact preconditions and read preconditions are checked separately and unchanged.
+    """
+    seen = {row["id"] for row in parse_area_index(material_content).current}
+    planned: list[tuple[str, str, str]] = []
+    for effect in effects:
+        if effect.get("area") != area:
+            continue
+        draft = drafts.get(effect.get("effect_id"))
+        if draft is None or "/retired/" in draft["path"]:
+            continue
+        frontmatter = parse_document(draft["content"], descriptor).frontmatter
+        if frontmatter.get("schema") != "context-decision/v1":
+            continue
+        planned.append((
+            _canonical_decision_scope(frontmatter.get("scope", "")),
+            _canonical_decision_key(frontmatter.get("decision_key", "")),
+            frontmatter["id"],
+        ))
+    if not planned:
+        return
+    planned_ids = {identifier for _, _, identifier in planned}
+    occupants: dict[tuple[str, str], list[str]] = {}
+    unseen: list[tuple[tuple[str, str], str, str]] = []
+    for path, _ in _scan_area_paths(repo, area, include_history=False):
+        try:
+            frontmatter = parse_document(path.read_text(encoding="utf-8"), descriptor).frontmatter
+        except (ContextError, OSError, UnicodeError):
+            continue
+        if frontmatter.get("schema") != "context-decision/v1":
+            continue
+        slot = (
+            _canonical_decision_scope(frontmatter.get("scope", "")),
+            _canonical_decision_key(frontmatter.get("decision_key", "")),
+        )
+        identifier = frontmatter["id"]
+        occupants.setdefault(slot, []).append(identifier)
+        if identifier not in seen and identifier not in planned_ids:
+            unseen.append((slot, identifier, path.relative_to(repo).as_posix()))
+    for scope, key, identifier in planned:
+        others = [item for item in occupants.get((scope, key), []) if item != identifier]
+        if len(others) >= 2:
+            raise ContextError(
+                "precondition_changed",
+                "target slot holds two current decisions; withdraw or supersede one before writing",
+                {"area": area, "scope": scope, "decision_key": key, "ids": sorted(others)},
+                EXIT_CONFLICT,
+            )
+        for (other_scope, other_key), other_id, other_path in unseen:
+            if other_key == key and _decision_scopes_overlap(other_scope, scope):
+                raise ContextError(
+                    "precondition_changed",
+                    "a current decision in the same or an overlapping slot was added after preview",
+                    {"area": area, "path": other_path, "id": other_id, "scope": other_scope, "decision_key": other_key},
+                    EXIT_CONFLICT,
+                )
+
+
+def _plan_touched_paths(plan: dict[str, Any]) -> list[str]:
+    paths: list[str] = []
+    for operation in plan.get("operations", []):
+        if operation.get("op") == "index_rebuild":
+            paths.extend(f"context/{area}/{area}.index.md" for area in operation.get("areas", []))
+            paths.extend(path for path in operation.get("after_sha256", {}) if isinstance(path, str))
+            if operation.get("include_root"):
+                paths.append(ROOT_INDEX)
+        else:
+            paths.extend(operation.get(key) for key in ("path", "from_path", "to_path") if isinstance(operation.get(key), str))
+    ordered: list[str] = []
+    for path in paths:
+        if path not in ordered:
+            ordered.append(path)
+    return ordered
+
+
+def _journal_paths(repo: pathlib.Path, relatives: Sequence[str]) -> dict[str, tuple[bytes, int] | None]:
+    journal: dict[str, tuple[bytes, int] | None] = {}
+    for relative in relatives:
+        path = _ensure_contained(repo, relative)
+        journal[relative] = (path.read_bytes(), path.stat().st_mode & 0o777) if path.is_file() else None
+    return journal
+
+
+def _restore_journal(repo: pathlib.Path, journal: dict[str, tuple[bytes, int] | None]) -> None:
+    """Best-effort rollback of an interrupted apply: every touched path returns to its journaled bytes."""
+    for relative, saved in reversed(list(journal.items())):
+        path = repo / relative
+        if saved is None:
+            with contextlib.suppress(FileNotFoundError):
+                path.unlink()
+            continue
+        content, mode = saved
+        if not path.is_file() or path.read_bytes() != content:
+            _atomic_write_bytes(path, content, mode=mode)
+
+
 def _apply_file_operation(
     repo: pathlib.Path,
     operation: dict[str, Any],
@@ -6212,7 +6430,7 @@ def _apply_file_operation(
         changed.append(operation["path"])
 
 
-def _apply_index_operation(repo: pathlib.Path, plan: dict[str, Any], operation: dict[str, Any], materials: dict[str, dict[str, Any]], changed: list[str]) -> list[str]:
+def _apply_index_operation(repo: pathlib.Path, plan: dict[str, Any], operation: dict[str, Any], materials: dict[str, dict[str, Any]], changed: list[str], regenerated: list[str] | None = None) -> list[str]:
     transition = plan["transition"]
     index_paths = (
         _core_init_paths(operation["after_sha256"])
@@ -6269,16 +6487,24 @@ def _apply_index_operation(repo: pathlib.Path, plan: dict[str, Any], operation: 
             expected_before = operation["before_sha256"].get(relative)
             if current == operation["after_sha256"].get(relative):
                 continue
-            if current != expected_before:
+            drifted = current != expected_before
+            if drifted and (plan.get("source_type") != "owner_result" or plan.get("prior_same_area_bundle_digests")):
                 raise ContextError("precondition_changed", "area index precondition changed", {"path": relative}, EXIT_CONFLICT)
             material = by_path.get(relative)
-            rendered = (
-                material["content"]
-                if plan.get("source_type") == "owner_result" and material is not None
-                else render_area_index_from_repository(repo, area, repair_rows=True)
-            )
-            if sha256_bytes(file_bytes(rendered)) != operation["after_sha256"][relative]:
+            if drifted or plan.get("source_type") != "owner_result" or material is None:
+                # The projection changed underneath the approved plan (or was never bound):
+                # re-derive it from the artifacts now on disk, inside the root lock. The
+                # benign-drift guard in _validate_bundle already refused semantic conflicts.
+                rendered = render_area_index_from_repository(repo, area, repair_rows=True)
+            else:
+                rendered = material["content"]
+            rendered_digest = sha256_bytes(file_bytes(rendered))
+            if not drifted and rendered_digest != operation["after_sha256"][relative]:
                 raise ContextError("plan_preview_mismatch", "deterministic index output differs from preview", {"path": relative}, EXIT_INTEGRITY)
+            if drifted and regenerated is not None:
+                regenerated.append(relative)
+            if rendered_digest == current:
+                continue
             _atomic_write(path, rendered)
             changed.append(relative)
     return index_paths
@@ -6288,7 +6514,7 @@ def apply_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest: st
     if approval_source not in {"user", "explicit_init"}:
         raise ContextError("approval_required", "autonomous audit or maintenance cannot apply a durable mutation", exit_code=EXIT_CONFLICT)
     plan, materials = _validate_bundle(repo, bundle, approved_digest)
-    if approval_source == "explicit_init" and plan["transition"] not in {"core_init", "area_register", "policy_install"}:
+    if approval_source == "explicit_init" and plan["transition"] not in {"core_init", "area_register", *MANAGED_ROOT_TRANSITIONS}:
         raise ContextError(
             "approval_required",
             "explicit init authorizes only fixed core_init, area_register, and policy_install transitions",
@@ -6296,6 +6522,7 @@ def apply_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest: st
         )
     changed: list[str] = []
     index_paths: list[str] = []
+    regenerated: list[str] = []
     with _root_lock(repo):
         plan, materials = _validate_bundle(repo, bundle, approved_digest)
         plan_descriptor = plan.get("owner_descriptor")
@@ -6304,17 +6531,27 @@ def apply_bundle(repo: pathlib.Path, bundle: dict[str, Any], approved_digest: st
             if isinstance(plan_descriptor, dict) and plan_descriptor.get("schema") == "context-owner-descriptor/v2"
             else None
         )
-        for operation in plan["operations"]:
-            if operation["op"] == "index_rebuild":
-                index_paths = _apply_index_operation(repo, plan, operation, materials, changed)
-            else:
-                operation_descriptor = (
-                    profiled_descriptor
-                    if profiled_descriptor is not None and operation.get("area") == profiled_descriptor["kind"]
-                    else None
-                )
-                _apply_file_operation(repo, operation, materials, changed, operation_descriptor)
-    return {"applied": True, "plan_id": plan["plan_id"], "approval_digest": approved_digest, "changed_paths": sorted(set(changed)), "index_paths": index_paths, "warnings": []}
+        # Owner writes roll back as a unit; core_init/area_register/policy keep their
+        # resumable exact-prefix contract (a retried explicit init completes them).
+        journal = _journal_paths(repo, _plan_touched_paths(plan)) if plan.get("source_type") == "owner_result" else {}
+        try:
+            for operation in plan["operations"]:
+                if operation["op"] == "index_rebuild":
+                    index_paths = _apply_index_operation(repo, plan, operation, materials, changed, regenerated)
+                else:
+                    operation_descriptor = (
+                        profiled_descriptor
+                        if profiled_descriptor is not None and operation.get("area") == profiled_descriptor["kind"]
+                        else None
+                    )
+                    _apply_file_operation(repo, operation, materials, changed, operation_descriptor)
+        except BaseException:
+            # No partial owner write survives: artifacts and indexes return to their pre-apply bytes.
+            if journal:
+                _restore_journal(repo, journal)
+            raise
+    warnings = [f"index_regenerated:{relative}" for relative in regenerated]
+    return {"applied": True, "plan_id": plan["plan_id"], "approval_digest": approved_digest, "changed_paths": sorted(set(changed)), "index_paths": index_paths, "warnings": warnings}
 
 
 def _read_frozen_receipt(
@@ -6872,10 +7109,17 @@ def doctor_repository(repo: pathlib.Path) -> dict[str, Any]:
         result = refresh_repository(repo)
     except ContextError as error:
         return _doctor_result("partial", issues=[{"code": error.code, "path": error.details.get("path")}])
+    hygiene: list[dict[str, Any]] = []
+    if _git_metadata_root(repo) is not None and not _merge_attributes_installed(repo):
+        hygiene.append({
+            "code": "merge_attributes_missing",
+            "path": MERGE_ATTRIBUTES_TARGET,
+            "hint": "run init for your host again, or add the managed context-core-merge block so generated indexes union-merge and `refresh --fix index` re-derives them",
+        })
     return _doctor_result(
         "ready" if result["ok"] else "invalid",
         issues=result["issues"],
-        warnings=result["warnings"],
+        warnings=[*result["warnings"], *hygiene],
     )
 
 
@@ -7362,6 +7606,7 @@ def build_parser() -> argparse.ArgumentParser:
     archive_discard.add_argument("--json", action="store_true")
     refresh = sub.add_parser("refresh")
     refresh.add_argument("--fix", choices=("index",))
+    refresh.add_argument("--check", action="store_true", help="CI mode: exit non-zero when derived indexes drift from the artifacts or integrity issues exist.")
     refresh.add_argument("--json", action="store_true")
     return parser
 
@@ -7619,7 +7864,18 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "refresh":
         if args.fix:
             return repair_derived_indexes(repo)
-        return refresh_repository(repo)
+        result = refresh_repository(repo)
+        if getattr(args, "check", False):
+            drift = [
+                warning for warning in result["warnings"]
+                if str(warning.get("code", "")).startswith("index_") or warning.get("code") in {"root_index_drift", "area_index_mismatch"}
+            ]
+            if result["issues"]:
+                raise ContextError("integrity_issues", "context integrity issues are present", {"issues": result["issues"], "drift": drift}, EXIT_INTEGRITY)
+            if drift:
+                raise ContextError("projection_drift", "derived indexes differ from the artifacts; run `refresh --fix index` and commit the result", {"drift": drift}, EXIT_INTEGRITY)
+            return {**result, "check": "ok"}
+        return result
     raise ContextError("usage_invalid", "unsupported command")
 
 

@@ -523,12 +523,12 @@ def _receipt_plan_is_pending(receipt: dict[str, Any], repo: pathlib.Path) -> boo
         if kind == "index_rebuild":
             before = operation.get("before_sha256")
             after = operation.get("after_sha256")
-            if not isinstance(before, dict) or any(
-                current_digest(relative) != digest
-                for relative, digest in before.items()
-            ):
+            # The index is a projection: its bytes may drift under an approved plan
+            # (branch merge, unrelated write) and core re-derives it at apply, so only
+            # the operation shape decides pendingness here.
+            if not isinstance(before, dict) or not isinstance(after, dict) or set(after) != set(before):
                 return False
-            if not isinstance(after, dict) or set(after) != set(before):
+            if all(current_digest(relative) == digest for relative, digest in after.items()):
                 return False
             virtual_state.update(after)
         elif kind in {"file_create", "file_replace", "file_delete"}:

@@ -1194,60 +1194,65 @@ class DecisionWorkflowTests(unittest.TestCase):
             self.assertEqual("approval_digest_mismatch", json.loads(canonical_tampered.stdout)["error"]["code"])
             self.assertEqual(before, digest_tree(repo))
 
-    def test_stale_receipt_rejects_auto_and_explicit_apply_without_repository_write(self) -> None:
+    def test_index_only_drift_applies_while_semantic_staleness_rejects_auto_and_explicit_apply(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             repo = self._initialized_repository(root)
             environment, _ = self._workflow_environment(root)
+            attest = ["--attest-explicit-choice", "--attest-scope-identified", "--attest-commitment-present"]
             preview = run(
-                repo,
-                WORKFLOW,
-                "preview",
-                "--host",
-                "codex",
-                "--core-cli",
-                str(CORE_CLI),
-                *self._inline_arguments(),
-                "--attest-explicit-choice",
-                "--attest-scope-identified",
-                "--attest-commitment-present",
-                "--json",
-                environment=environment,
+                repo, WORKFLOW, "preview", "--host", "codex", "--core-cli", str(CORE_CLI),
+                *self._inline_arguments(), *attest, "--json", environment=environment,
             )
             self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
             preview_result = json.loads(preview.stdout)["result"]
-            approved_digest = preview_result["approval_digest"]
-            receipt_path = Path(preview_result["receipt_file"])
             index = repo / "context/decision/decision.index.md"
+            # Index-only drift (W3): the projection changed, the approved payload did not.
             index.write_text(index.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+            applied = run(
+                repo, WORKFLOW, "apply", "--core-cli", str(CORE_CLI),
+                "--approved-digest", preview_result["approval_digest"], "--json", environment=environment,
+            )
+            self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+            result = json.loads(applied.stdout)["result"]
+            self.assertTrue(result["applied"])
+            self.assertIn("index_regenerated:context/decision/decision.index.md", result["warnings"])
+            self.assertTrue((repo / "context/decision/인증-세션-소유권.md").is_file())
+            self.assertFalse(Path(preview_result["receipt_file"]).exists())
+
+            # Semantic staleness: a Current decision lands in the previewed slot before apply.
+            arguments = list(self._inline_arguments())
+            arguments[arguments.index("--candidate-id") + 1] = "cand_550e8400e29b41d4a716446655440001"
+            arguments[arguments.index("--title") + 1] = "인증 토큰 형식"
+            arguments[arguments.index("--decision-key") + 1] = "token-format"
+            second = run(
+                repo, WORKFLOW, "preview", "--host", "codex", "--core-cli", str(CORE_CLI),
+                *arguments, *attest, "--json", environment=environment,
+            )
+            self.assertEqual(0, second.returncode, second.stdout + second.stderr)
+            second_result = json.loads(second.stdout)["result"]
+            concurrent = list(arguments)
+            concurrent[concurrent.index("--candidate-id") + 1] = "cand_550e8400e29b41d4a716446655440002"
+            concurrent[concurrent.index("--title") + 1] = "인증 토큰은 opaque다"
+            recorded = run(
+                repo, WORKFLOW, "record", "--host", "codex", "--core-cli", str(CORE_CLI),
+                *concurrent, *attest, "--approved", "--json", environment=environment,
+            )
+            self.assertEqual(0, recorded.returncode, recorded.stdout + recorded.stderr)
             before = digest_tree(repo)
             stale_auto = run(
-                repo,
-                WORKFLOW,
-                "apply",
-                "--core-cli",
-                str(CORE_CLI),
-                "--approved-digest",
-                approved_digest,
-                "--json",
-                environment=environment,
+                repo, WORKFLOW, "apply", "--core-cli", str(CORE_CLI),
+                "--approved-digest", second_result["approval_digest"], "--json", environment=environment,
             )
             self.assertEqual(5, stale_auto.returncode, stale_auto.stdout + stale_auto.stderr)
-            self.assertEqual("receipt_selection_none", json.loads(stale_auto.stdout)["error"]["code"])
+            error = json.loads(stale_auto.stdout)["error"]
+            self.assertEqual("precondition_changed", error["code"])
+            self.assertEqual("State changed before storage; create a new preview.", error["message"])
             self.assertEqual(before, digest_tree(repo))
-
             stale_explicit = run(
-                repo,
-                WORKFLOW,
-                "apply",
-                "--core-cli",
-                str(CORE_CLI),
-                "--receipt-file",
-                str(receipt_path),
-                "--approved-digest",
-                approved_digest,
-                "--json",
-                environment=environment,
+                repo, WORKFLOW, "apply", "--core-cli", str(CORE_CLI),
+                "--receipt-file", second_result["receipt_file"],
+                "--approved-digest", second_result["approval_digest"], "--json", environment=environment,
             )
             self.assertEqual(5, stale_explicit.returncode, stale_explicit.stdout + stale_explicit.stderr)
             error = json.loads(stale_explicit.stdout)["error"]

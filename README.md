@@ -113,4 +113,15 @@ When saved context is relevant, the agent can recall it automatically. You can a
 
 Because the context lives with the project, it can also help another agent or teammate understand the choices already made.
 
+### 5. Branches, merges, and CI
+
+The Markdown files under `context/` are the source of truth. The `*.index.md` files next to them are generated projections used for fast lookup; they are committed so a fresh clone works without a build step.
+
+- When the project is a Git repository, `init` adds a managed block to `.gitattributes` so generated indexes merge as a union instead of conflicting when two branches each record a decision. If the vault sits outside a Git checkout, add `context/**/*.index.md merge=union` yourself; `doctor` reminds you with `merge_attributes_missing`.
+- After a merge, the next context write re-derives the index. To do it immediately, run `context_cli.py refresh --fix index`; `context_cli.py` is the `context-core` entrypoint inside the installed plugin directory (see [DEVELOPMENT.md](./DEVELOPMENT.md)).
+- If two branches recorded different decisions for the same scope and key, `doctor` reports `duplicate_current_slot`. Writes to that slot hold until one record is withdrawn or superseded; other slots keep working, and nothing is picked automatically.
+- In CI, run `context_cli.py refresh --check --json` from the project root. It exits non-zero when an index drifted from the artifacts or an integrity issue exists.
+
+Only the decision text you approved is bound to a write. If another branch merged in the meantime, the write still lands and the index is regenerated under the lock. It stops only when the target record itself changed, or a competing decision landed in the same or an overlapping scope and key.
+
 Context Plugins is available under the [Apache License 2.0](./LICENSE).

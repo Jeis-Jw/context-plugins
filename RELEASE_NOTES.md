@@ -12,6 +12,14 @@ This is the unreleased lean v6 source candidate. Distribution manifests still de
 - Re-stem queries and stored terms at query time; the stem changes require no migration of stored `search_terms`.
 - Instruct the semantic owner to reuse a returned Current scope/key for the same governing choice. Existing comparison results already contain these fields; no extra slot-list payload or context read is added.
 
+- Treat generated indexes as projections at write time (W3). An approved write binds the artifact payload, target digests, and lifecycle effect; when the area index drifted since preview (branch merge, unrelated write, reordered rows), core re-derives it from the artifacts under the root lock and reports `index_regenerated:<path>` instead of refusing. The write still fails closed when the target artifact changed, when a Current decision the plan never saw occupies the same or an overlapping scope/key, when the target slot already holds two Current decisions, or for chained same-area proposals. Core-controlled `core_init`/`area_register` keep their exact-prefix preconditions.
+- `init` installs a managed `.gitattributes` block (`context/**/*.index.md merge=union`) when the vault is inside a Git checkout, preserving existing attributes; non-Git vaults are untouched. `doctor` warns `merge_attributes_missing` when a Git vault lacks it. Two branches that each record a decision now merge without an index conflict; `refresh --fix index` (or the next write) restores the canonical bytes and a second run is a no-op.
+- Add `refresh --check` for CI: exit 6 with `projection_drift` when a derived index differs from the artifacts, or `integrity_issues` when issues exist; plain `refresh` keeps its warning-only contract.
+- Report merge-created duplicate Current slots as `duplicate_current_slot` and hold only that slot: the semantic owner refuses new records for it (`decision_slot_conflict` with both candidates) until one is withdrawn or superseded, while other slots keep recording. No record is chosen or retired automatically.
+- Roll back owner writes as a unit: if the artifact or index step fails mid-apply, every touched path returns to its pre-apply bytes and the frozen receipt stays valid for a retry.
+- The workflow's pending-receipt selection no longer treats index drift as staleness; semantic staleness (a competing Current in the previewed slot) still rejects both automatic and explicit apply with `precondition_changed`.
+- Regression coverage: `tests/context-v1/test_index_projection.py` (union merge of two branches, duplicate-slot hold, `refresh --check`, index-only drift apply, same/overlapping-slot and target-artifact blocks, rollback); acceptance case 55 now distinguishes artifact tamper (blocked) from index tamper (re-derived).
+
 ### Measured evidence and limits
 
 The previously collected v4 Codex experiment measured input tokens, not document characters. At N=0, mean input tokens per session fell from approximately 200K for `0.13.0` to 78K for lean v6 (adr-lite: 77K). At N=200, mean recall-session input was 85K for v6 versus 342K for adr-lite. These are different denominators: the N=0 figures cover all three session types; N=200 figures here cover semantic recall only.
@@ -27,6 +35,7 @@ The B1 review regression adds ten component siblings per target at N=200/1000. A
 - Code and policy change sets each pass the complete Python 3.11 and 3.13 suites: 362 passed, 602 subtests.
 - The subsequent W2 ranking and scale-regression change passes both complete suites: 365 passed, 624 subtests. The experiment corpus checks pass on both interpreters as well.
 - The B1 follow-up passes both complete suites: 368 passed, 640 subtests, including record supersede/withdraw and ambiguous same-major core-cache regressions.
+- The W3 index-projection change passes both complete suites: 378 passed, 646 subtests on Python 3.11 and 3.13, plus `compileall` and `claude plugin validate` for the marketplace, core, and decision packages. The parent decision `integrity-write-boundary` was superseded by `ctx_292f1a32eeae4c0db02f4276ab7e0073` in the coordinating vault before this change landed.
 - Both interpreters pass `compileall`; `claude plugin validate` passes for the marketplace, core, and decision packages using isolated local configuration.
 - The generated policy body, distributed rule, and repository managed block are identical. Core EN/KO SKILL files remain within the existing 3,000-byte limits.
 
