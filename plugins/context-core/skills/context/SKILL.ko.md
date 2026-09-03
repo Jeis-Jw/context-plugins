@@ -1,20 +1,19 @@
 ---
 name: context
-description: 새 대화 delta를 audit하고 답을 바꿀 맥락만 recall해 성숙한 후보를 semantic owner로 route한다.
+description: 대화 delta를 audit하고 맥락을 recall해 성숙한 후보를 owner로 route한다.
 ---
 
-# Context (한국어)
+# Context
 
-전역 옵션: `--vault DIR`.
+vault: 가장 가까운 `context/` 상위 또는 cwd. `references/`, manifest, `context/*.index.md`, plugin script는 읽지 않는다. DEC recall은 로드된 `decision` skill의 `decision_cli.py check --statement '<요청>' --json` 한 번이다. 다른 kind는 로드된 skill을 따른다. `--help`는 실행하지 않는다.
 
-각 user turn의 새 의미만 한 번 audit한다. durable signal이 없으면 context tool call 0이고 audit 표시·capture 질문도 없다. 행동·계약 중립인 기계적 편집은 AGENTS/guidance 탐색을 생략하고 `context/`를 제외한다. 요청에 path가 있으면 그 target만 확인한다. 아니면 요청의 task noun으로 subtree 하나를 정해 한 번만 탐색하고 exact file만 쓴다. `.`, `--hidden`, repository-wide glob, repository root는 쓰지 않는다. 안전하지 않으면 범위를 넓히지 말고 path를 묻는다. `context/` artifact read 0, context 언급 0이다. scope·anchor, 본문이 남은 Current `{id,sha256}`, pending·dismissed·deferred 참조만 session ledger에 두고 저장·재제안하지 않는다.
+새 turn 의미만 한 번 audit한다. durable signal이 없으면 context tool call 0이고 audit 표시·capture 질문도 없다. 행동·계약 중립인 기계적 편집은 AGENTS/guidance 탐색을 생략하고 `context/`를 제외한다. 요청에 path가 있으면 그 target만 확인한다. 아니면 요청의 task noun으로 subtree 하나를 정해 한 번만 탐색하고 exact file만 쓴다. 파일 목록과 내용을 함께 검색한다. miss면 후보를 열고 subtree 부재면 관례 파일을 만든다. `.`, `--hidden`, repository-wide glob, repository root는 쓰지 않는다. 안전하지 않으면 범위를 넓히지 말고 path를 묻는다. `context/` artifact read 0, context 언급 0이다. scope·anchor, 본문이 남은 Current `{id,sha256}`, pending·dismissed·deferred 참조만 세션에 두며 저장·재제안하지 않는다.
 
-1. 이전 맥락이 판단을 바꿀 때만 metadata-first로 recall한다. 필요할 때만 조용한 index 확인→match일 때 선택 본문 읽기→행동 변경 시 사용자 언급→답이 필요할 때 질문한다. healthy miss는 body를 읽지 않는다.
-2. semantic owner가 실제 claim·section·scope·rationale를 비교한다. hash·ID·metadata는 의미 근거가 아니다. conflict나 rationale change를 먼저 알리고 행동을 보류한다. keep이면 수행하지 않고 supersede면 그 명시적 선택 뒤에만 진행한다. 조건 충족은 재평가 권한이지 구현 권한이 아니다. 그 선택이 decision payload를 확정하므로 별도 저장 승인을 묻지 않는다.
-3. 원 요청을 먼저 마치고 성숙한 후보만 milestone당 제안한다. sibling entrypoint를 쓰고 cache scan·runtime 대체를 하지 않는다. doctor는 cache version만 나열한다. 설명되지 않는 interface failure 뒤에만 구현을 읽는다.
-4. candidate 8개, common claim 2,000 codepoint, owner input 8 KiB, batch 16 KiB 상한을 유지한다.
-5. core만 owner result, lifecycle, index, target bytes, vault identity, CAS, lock과 frozen bundle을 검증한 뒤 실제로 쓴다.
+1. 이전 맥락이 판단을 바꿀 때만 recall한다. 신호는 사용자 선택이며 요청 수행은 아니다. 조용한 index 확인→선택 본문 읽기→행동 변경 시 사용자 언급→필요한 질문으로 진행한다.
+2. semantic owner가 실제 claim·section·scope·rationale를 비교한다. hash·ID·metadata는 의미 근거가 아니다. conflict나 rationale change를 먼저 알리고 행동을 보류한다. keep이면 수행하지 않고 supersede면 그 명시적 선택 뒤에만 진행한다. 조건 충족은 재평가 권한이지 구현 권한이 아니다. 그 선택이 decision payload를 확정하며 별도 저장 질문은 없다.
+3. 원 요청을 먼저 마치고 성숙한 후보만 milestone당 제안한다. 설명되지 않는 interface failure 뒤에만 구현을 읽는다.
+4. core만 owner, lifecycle, index, target bytes, vault identity, CAS, lock, frozen bundle 검증 뒤 쓴다.
 
-semantic payload·scope·lifecycle effect를 직접적·명시적·무조건적으로 확정하면 승인이다. 미확정 부분만 짧게 묻는다. 단순 확인·칭찬·조건·수정 요청·화제 전환은 승인이 아니다. 저장 파일의 렌더링 본문을 보여주거나 별도 저장 승인을 묻지 않는다. 승인 뒤 내부 preview에 semantic delta가 없음을 확인하고 `approval_digest`를 그대로 같은 응답의 apply에 전달한다. transport detail은 비공개다. delta면 write를 보류하고 그 차이만 확인한다. 승인 뒤 재생성하지 않는다.
+semantic payload·scope·lifecycle를 직접적·명시적·무조건적으로 확정하면 승인이다. 미확정 부분만 묻는다. 단순 확인·칭찬·조건·수정 요청·화제 전환은 승인이 아니다. 저장 파일의 렌더링 본문을 보여주거나 별도 저장 승인을 묻지 않는다. 같은 응답에서 로드된 owner의 capture를 쓴다. DEC는 `record --approved` 한 번으로 internal preview와 변경 없는 apply를 수행하며 `approval_digest`는 비공개다. semantic delta면 write를 보류하고 차이만 묻는다. 승인 뒤 재생성하지 않으며 성공 출력이 확인이다.
 
-audit, recall, routing, claiming, drafting, validation, preview와 거절된 apply는 repository와 host policy bytes를 바꾸지 않는다.
+사용자 텍스트는 active language, machine field는 English다.

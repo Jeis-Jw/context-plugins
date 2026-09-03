@@ -79,3 +79,7 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 0.11.0은 release set을 정렬하고 handshake 실패 뒤에만 호환 core 후보를 안내하며 revisit·복수 relation 입력 도움말을 명확히 합니다. DEC semantics와 저장 bytes는 변경하지 않으며 tag나 publication을 의미하지 않습니다.
 
 0.12.0은 명시적으로 확정된 선택을 semantic approval로 보고 rendered-file preview를 사용자 승인 단계에서 제거합니다. 내부 frozen receipt와 unchanged apply integrity는 유지하며 저장 DEC bytes는 migration이 필요 없습니다. tag나 publication을 의미하지 않습니다.
+
+### One-call record
+
+대화에서 사용자가 명시적으로 승인한 뒤 agent는 `record --approved` 명령 하나를 실행한다. 한 프로세스 안에서 preview, frozen receipt 생성, 변경 없는 apply가 이루어지므로 digest를 채팅으로 전달하지 않는다. 2단계 `preview`·`apply`는 orchestration용으로 남는다.

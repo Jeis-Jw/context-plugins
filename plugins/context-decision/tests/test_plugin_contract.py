@@ -417,9 +417,10 @@ class PluginContractTests(unittest.TestCase):
         )
         for skill in (decision, decision_ko):
             canonical_commands = skill.split("```bash", 1)[1].split("```", 1)[0]
-            for low_level_locator in ("--candidate-id", "--captured-from", "--receipt-file"):
+            for low_level_locator in ("--candidate-id", "--captured-from", "--receipt-file", "--approved-digest", "--core-cli"):
                 self.assertNotIn(low_level_locator, canonical_commands)
-            self.assertIn("--approved-digest", canonical_commands)
+            self.assertIn("decision_workflow.py record", canonical_commands)
+            self.assertIn("--approved", canonical_commands)
             self.assertIn("preview stdout", skill)
             self.assertIn("--supersede", skill)
             self.assertIn("--withdraw", skill)

@@ -76,3 +76,7 @@ Version `0.11.0` aligns the release set, lists compatible core candidates only a
 Version `0.12.0` treats an explicit settled choice as semantic approval and removes the rendered-file preview as a user-facing approval step. Internal frozen-receipt and unchanged-apply integrity remain. Stored DEC bytes require no migration. No tag or publication is implied.
 
 See the [owner protocol](./skills/decision/references/decision-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).
+
+### One-call record
+
+After the user's explicit approval in conversation, the agent runs one `record --approved` command. It previews, freezes the receipt, and applies it unchanged in a single process, so no digest is relayed through the chat. The two-phase `preview` and `apply` commands remain available for orchestration.
