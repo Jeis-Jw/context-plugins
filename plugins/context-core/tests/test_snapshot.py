@@ -182,6 +182,67 @@ class SnapshotTests(unittest.TestCase):
             ]
             self.assertEqual(1, len(artifacts))
 
+    def test_save_and_update_approved_apply_in_one_call_and_leave_no_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repository"
+            private_temp = root / "private-temp"
+            repo.mkdir()
+            private_temp.mkdir(mode=0o700)
+            initialize(repo)
+            before = tree_digest(repo)
+            environment = {"TMPDIR": str(private_temp)}
+            saved = run_cli(
+                repo,
+                "snapshot", "save", "--approved",
+                "--title", "CLI export step 1 handoff",
+                "--summary", "Step 1 is done; step 2 remains.",
+                "--captured-from", "conversation",
+                "--attest-handoff-requested",
+                "--attest-unfinished-context-present",
+                "--sec-context", "The export subcommand writes a header-only CSV.",
+                "--sec-open-items", "Write one row per in-stock item.",
+                "--sec-next-steps", "Return exit code 3 when nothing was exported.",
+                "--json",
+                environment=environment,
+            )
+            self.assertEqual(0, saved.returncode, saved.stdout + saved.stderr)
+            result = json.loads(saved.stdout)["result"]
+            self.assertTrue(result["applied"])
+            self.assertEqual("applied", result["state"])
+            self.assertTrue(result["receipt_removed"])
+            self.assertNotIn("approval_digest", result)
+            self.assertNotIn("receipt_file", result)
+            artifact = result["artifacts"][0]
+            self.assertTrue(artifact["id"].startswith("ctx_"))
+            self.assertTrue((repo / artifact["path"]).is_file())
+            self.assertIn("Return exit code 3", (repo / artifact["path"]).read_text(encoding="utf-8"))
+            self.assertIn(artifact["id"], (repo / "context/snapshot/snapshot.index.md").read_text(encoding="utf-8"))
+            self.assertNotEqual(before, tree_digest(repo))
+            leftovers = [p for p in private_temp.rglob("*") if p.is_file() and "context-core-locks" not in p.parts]
+            self.assertEqual([], leftovers, "no frozen receipt survives a one-call save")
+            self.assertEqual("ready", context_cli.doctor_repository(repo)["repository_state"])
+
+            updated = run_cli(
+                repo,
+                "snapshot", "update", "--approved", "--id", artifact["id"], "--merge",
+                "--sec-next-steps", "Run the full suite after step 2.",
+                "--json",
+                environment=environment,
+            )
+            self.assertEqual(0, updated.returncode, updated.stdout + updated.stderr)
+            self.assertTrue(json.loads(updated.stdout)["result"]["applied"])
+            body = (repo / artifact["path"]).read_text(encoding="utf-8")
+            self.assertIn("Run the full suite after step 2.", body)  # merged section replaced
+            self.assertIn("The export subcommand writes a header-only CSV.", body)  # untouched section kept
+            self.assertNotIn("Return exit code 3", body)
+            self.assertEqual([], [p for p in private_temp.rglob("*") if p.is_file() and "context-core-locks" not in p.parts])
+            loaded = run_cli(repo, "snapshot", "load", "--id", artifact["id"], "--json", environment=environment)
+            self.assertEqual(0, loaded.returncode, loaded.stdout + loaded.stderr)
+            listed = run_cli(repo, "snapshot", "list", "--json", environment=environment)
+            self.assertEqual(0, listed.returncode, listed.stdout + listed.stderr)
+            self.assertIn(artifact["id"], listed.stdout)
+
     def test_attestation_file_and_snapshot_flags_are_mutually_exclusive(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

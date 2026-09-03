@@ -20,6 +20,8 @@ This is the unreleased lean v6 source candidate. Distribution manifests still de
 - The workflow's pending-receipt selection no longer treats index drift as staleness; semantic staleness (a competing Current in the previewed slot) still rejects both automatic and explicit apply with `precondition_changed`.
 - Regression coverage: `tests/context-v1/test_index_projection.py` (union merge of two branches, duplicate-slot hold, `refresh --check`, index-only drift apply, same/overlapping-slot and target-artifact blocks, rollback); acceptance case 55 now distinguishes artifact tamper (blocked) from index tamper (re-derived).
 
+- Give SNAP the same lean surface as DEC: `snapshot save --approved` and `snapshot update --approved` preview, freeze, and apply in one process after the caller attests the user's handoff approval; the two-phase receipt path stays for orchestration. The snapshot skill now names `snapshot list` and `snapshot load --id` as the resume path and forbids script, reference, and index reads. Motivated by the W4 resume smoke lane where the v6 agent grepped the core CLI for snapshot flags (258K/367K input tokens versus 112K/163K for a seven-line NOTES.md convention).
+
 ### Measured evidence and limits
 
 The previously collected v4 Codex experiment measured input tokens, not document characters. At N=0, mean input tokens per session fell from approximately 200K for `0.13.0` to 78K for lean v6 (adr-lite: 77K). At N=200, mean recall-session input was 85K for v6 versus 342K for adr-lite. These are different denominators: the N=0 figures cover all three session types; N=200 figures here cover semantic recall only.

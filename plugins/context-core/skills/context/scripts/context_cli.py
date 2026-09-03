@@ -3183,6 +3183,37 @@ def _maybe_freeze_bundle_receipt(
     return freeze_bundle_receipt(repo, preview_result, receipt_file)
 
 
+def apply_approved_bundle(
+    repo: pathlib.Path,
+    preview_result: dict[str, Any],
+    receipt_file: str | pathlib.Path | None = None,
+) -> dict[str, Any]:
+    """One-call capture after the caller attests the user's semantic approval.
+
+    Freezes the receipt and applies it unchanged in the same process, exactly like the
+    two-phase path; the approval digest, receipt path, and CAS/lock guards stay internal.
+    """
+    if preview_result.get("noop") is True:
+        return preview_result
+    frozen = freeze_bundle_receipt(repo, preview_result, receipt_file)
+    applied = apply_receipt(repo, frozen["receipt_file"], frozen["approval_digest"])
+    preview = preview_result.get("approval_preview", {})
+    paths = {artifact.get("effect_id"): artifact.get("path") for artifact in preview.get("artifacts", [])}
+    warnings = list(applied.get("warnings", []))
+    return {
+        "applied": True,
+        "state": "applied",
+        "plan_id": applied.get("plan_id"),
+        "changed_paths": applied.get("changed_paths", []),
+        "artifacts": [
+            {"id": effect.get("id"), "path": paths.get(effect.get("effect_id")), "action": effect.get("action")}
+            for effect in preview.get("effects", [])
+        ],
+        "receipt_removed": "receipt_cleanup_failed" not in warnings,
+        "warnings": warnings,
+    }
+
+
 def _capture_bundle(repo: pathlib.Path, owner_result: dict[str, Any]) -> dict[str, Any]:
     draft = owner_result["artifact_drafts"][0]
     area = owner_result["target_kind"]
@@ -7458,6 +7489,7 @@ def build_parser() -> argparse.ArgumentParser:
     snapshot_save.add_argument("--attest-handoff-requested", action="store_true")
     snapshot_save.add_argument("--attest-unfinished-context-present", action="store_true")
     snapshot_save.add_argument("--receipt-file")
+    snapshot_save.add_argument("--approved", action="store_true", help="Attest the user's direct, explicit, unconditional handoff approval given in conversation; preview and apply in one call.")
     snapshot_save.add_argument("--sec-context", required=True)
     snapshot_save.add_argument("--sec-open-items", required=True)
     snapshot_save.add_argument("--sec-next-steps", required=True)
@@ -7486,6 +7518,7 @@ def build_parser() -> argparse.ArgumentParser:
     snapshot_update.add_argument("--search-term", action="append")
     snapshot_update.add_argument("--clear", action="append", default=[])
     snapshot_update.add_argument("--receipt-file")
+    snapshot_update.add_argument("--approved", action="store_true", help="Attest the user's direct, explicit, unconditional approval given in conversation; preview and apply in one call.")
     snapshot_update.add_argument("--json", action="store_true")
     for name in ("list", "search", "load", "discard"):
         command = snapshot_sub.add_parser(name)
@@ -7710,34 +7743,31 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 search_terms=args.search_term,
             )
             attestation, flag_based = _capture_attestation(args, candidate, "snapshot")
-            return _maybe_freeze_bundle_receipt(
-                repo,
-                build_snapshot_save_bundle(repo, candidate, attestation, filename=args.filename),
-                args.receipt_file,
-                use_default=flag_based,
-            )
+            saved = build_snapshot_save_bundle(repo, candidate, attestation, filename=args.filename)
+            if args.approved:
+                return apply_approved_bundle(repo, saved, args.receipt_file)
+            return _maybe_freeze_bundle_receipt(repo, saved, args.receipt_file, use_default=flag_based)
         if args.snapshot_command == "update":
             sections = _section_arguments(args, (
                 ("sec_context", "Current context"), ("sec_open_items", "Open items"), ("sec_next_steps", "Next steps"),
                 ("sec_decided", "Decided"), ("sec_refs", "References"), ("sec_candidates", "Capture candidates"),
             ))
-            return _maybe_freeze_bundle_receipt(
+            updated = build_snapshot_update_bundle(
                 repo,
-                build_snapshot_update_bundle(
-                    repo,
-                    args.id,
-                    merge=args.merge,
-                    sections=sections,
-                    title=args.title,
-                    summary=args.summary,
-                    tags=args.tag,
-                    search_terms=args.search_term,
-                    source_refs=args.source_ref,
-                    anchors=args.anchor,
-                    clear=args.clear,
-                ),
-                args.receipt_file,
+                args.id,
+                merge=args.merge,
+                sections=sections,
+                title=args.title,
+                summary=args.summary,
+                tags=args.tag,
+                search_terms=args.search_term,
+                source_refs=args.source_ref,
+                anchors=args.anchor,
+                clear=args.clear,
             )
+            if args.approved:
+                return apply_approved_bundle(repo, updated, args.receipt_file)
+            return _maybe_freeze_bundle_receipt(repo, updated, args.receipt_file)
         if args.snapshot_command == "list":
             return snapshot_list(repo, args.limit)
         if args.snapshot_command == "search":

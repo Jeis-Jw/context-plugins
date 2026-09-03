@@ -1,24 +1,23 @@
 ---
 name: snapshot
-description: When explicitly requested, preview, save, update, load, or discard a named SNAP handoff for unfinished work.
+description: Save, update, load, or discard a named SNAP handoff for unfinished work when the user explicitly asks; load it when a session resumes earlier work.
 ---
 
 # Snapshot
 
-SNAP is mutable resume context with `authority: staging`; it is not authoritative decision or evidence history.
+SNAP is mutable resume context with `authority: staging`; it is not authoritative decision or evidence history. Do not read `references/`, plugin manifests, `context/*.index.md`, or plugin scripts, and never run `--help`; the commands below are complete. Use the active language for user text and English for machine fields; preserve user-authored artifact prose.
 
-1. Require both unfinished context and explicit handoff intent.
-2. Use only the snapshot capability descriptor. `save` is create-only and fills Current context, Open items, and Next steps.
-3. `update` is full replacement unless deliberate `--merge`; `load.freshness` is only a warning.
-4. `discard` targets one SNAP. SNAP has no archive, history, or retired state.
+1. Resume: when the user asks to continue earlier work without restating it, run one `snapshot list`, then `snapshot load --id <id>` for the matching SNAP, and continue from its Next steps and Open items under its stated constraints. Do not ask the user to restate what the SNAP already says.
+2. Save only with both unfinished context and explicit handoff intent. `save` is create-only and fills Current context, Open items, and Next steps; state the exact next step and any constraint the user gave.
+3. `update` is full replacement unless deliberate `--merge`; `load.freshness` is only a warning. `discard` targets one SNAP. SNAP has no archive, history, or retired state.
 
-Follow the active-language contract in `../context/references/active-language.md`. Write user-facing responses, questions, previews, and explanatory errors in the active language. Preserve user-authored artifact prose in its original language; identifiers and machine-readable fields remain English.
-
-Treat a direct, explicit, unconditional handoff request that settles the snapshot content and scope as semantic approval. If meaning is unresolved, ask one concise semantic question; acknowledgement, praise, a condition, edit request, or topic change is not approval. Do not show the rendered file body or ask a second storage question. After approval, run internal preview, verify it adds no semantic delta, and pass its receipt path and `approval_digest` unchanged to apply in the same response. Keep all transport details private. If a delta appears, hold the write and confirm only that delta. Never regenerate the candidate, timestamp, content, or plan after approval. Receipt self-digests are damage checks, not approval evidence, and no directory scan is allowed. Successful apply removes the receipt; a cleanup-only warning means the write succeeded and must not be retried.
-
-Use `../context/scripts/context_cli.py snapshot ...`; preview writes nothing and context-core keeps ID and path, vault identity, CAS, lock, and atomic-write guards.
+A direct, explicit, unconditional handoff request that settles the snapshot content and scope is semantic approval. If meaning is unresolved, ask one concise semantic question; acknowledgement, praise, a condition, an edit request, or a topic change is not approval. Do not show the rendered file body or ask a second storage question. Then run one `save --approved` (or `update --approved`) in the same response: it runs the internal preview, freezes the receipt, and applies it unchanged; keep every transport detail private and never regenerate after approval. If rendering adds or changes meaning, it stops: hold the write and confirm only that semantic delta. The command output is the confirmation; do not re-read the file afterwards. `approval_digest` stays internal either way. Low-level orchestration: `save` without `--approved` writes nothing and returns a frozen receipt; pass `result.receipt_file` and `result.approval_digest` unchanged to `transaction apply --receipt-file ... --approved-digest ...`. Receipt self-digests are damage checks, not approval evidence, and no directory scan is allowed.
 
 ```bash
-python3 /loaded/context-core/skills/context/scripts/context_cli.py snapshot save --title '<title>' --summary '<summary>' --captured-from conversation --attest-handoff-requested --attest-unfinished-context-present --sec-context '<context>' --sec-open-items '<open item>' --sec-next-steps '<next step>' --json
-python3 /loaded/context-core/skills/context/scripts/context_cli.py transaction apply --receipt-file '<agent-retained result.receipt_file>' --approved-digest '<agent-retained result.approval_digest>' --json
+python3 /loaded/context-core/skills/context/scripts/context_cli.py snapshot list --json
+python3 /loaded/context-core/skills/context/scripts/context_cli.py snapshot load --id '<id>' --json
+python3 /loaded/context-core/skills/context/scripts/context_cli.py snapshot save --approved \
+  --title '<title>' --summary '<summary>' --captured-from conversation \
+  --attest-handoff-requested --attest-unfinished-context-present \
+  --sec-context '<current context>' --sec-open-items '<open item>' --sec-next-steps '<next step>' --json
 ```
