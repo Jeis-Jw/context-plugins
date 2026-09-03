@@ -357,7 +357,7 @@ class DecisionSchemaTests(unittest.TestCase):
 
     def test_decision_owner_is_stdlib_only_and_has_no_write_primitive(self) -> None:
         module = ast.parse(CLI_PATH.read_text(encoding="utf-8"))
-        allowed = {"__future__", "argparse", "datetime", "hashlib", "importlib", "json", "os", "pathlib", "re", "stat", "subprocess", "sys", "typing", "unicodedata", "uuid"}
+        allowed = {"__future__", "argparse", "datetime", "hashlib", "importlib", "json", "math", "os", "pathlib", "re", "stat", "subprocess", "sys", "typing", "unicodedata", "uuid"}
         imported = set()
         banned_attributes = {"write_text", "write_bytes", "mkdir", "rename", "unlink", "rmdir", "touch"}
         seen_banned = set()

@@ -7,6 +7,7 @@ import datetime
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import pathlib
 import re
@@ -2140,6 +2141,13 @@ def stem_token(token: str) -> str:
             if word.endswith(suffix) and len(word) - len(suffix) >= 4:
                 word = word[: -len(suffix)]
                 break
+    # Normalize silent-e and consonant-y variants on both query and stored
+    # metadata: preserve/preserving, replace/replacing, boundary/boundaries.
+    if word.isascii() and len(word) > 4:
+        if word.endswith("e") and not word.endswith("ee"):
+            word = word[:-1]
+        elif word.endswith("y") and word[-2] not in "aeiou":
+            word = word[:-1]
     return word
 
 
@@ -2231,6 +2239,8 @@ def prepare_decision_check(
         for row in current_rows
     ]
     tokens = {stem_token(token) for token in tokens if len(token) >= 4 and token not in _STOPWORDS}
+    title_stems = [set(_content_stems(str(row.get("title", "")))) for row in current_rows]
+    key_stems = [set(_content_stems(str(row.get("decision_key", "")))) for row in current_rows]
     token_frequency = {
         token: sum(token in haystack for haystack in metadata_haystacks)
         for token in tokens
@@ -2243,13 +2253,19 @@ def prepare_decision_check(
         for token, frequency in token_frequency.items()
         if 0 < frequency <= frequency_cutoff
     }
+    inverse_frequency = {
+        token: math.log1p(len(current_rows) / token_frequency[token])
+        for token in distinctive_tokens
+    }
 
-    ranked: list[tuple[int, list[str], dict[str, Any]]] = []
+    ranked: list[tuple[float, list[str], dict[str, Any]]] = []
+    lexical_scores: dict[str, float] = {}
+    metadata_by_id = {row["id"]: words for row, words in zip(current_rows, metadata_haystacks, strict=True)}
     mandatory_ids: set[str] = set()
-    for row, haystack in zip(current_rows, metadata_haystacks, strict=True):
+    for row, haystack, title_words, key_words in zip(current_rows, metadata_haystacks, title_stems, key_stems, strict=True):
         row_scope = row.get("scope")
         row_key = row.get("decision_key")
-        score = 0
+        score = 0.0
         reasons: list[str] = []
         if coverage == "exact_slot":
             assert scope is not None and decision_key is not None
@@ -2271,8 +2287,16 @@ def prepare_decision_check(
                 score += 20
                 reasons.append("related_scope")
         hits = sorted(token for token in distinctive_tokens if token in haystack)
-        if hits and (score > 0 or len(hits) >= 2 or any(token_frequency[token] == 1 for token in hits)):
-            score += min(len(hits), 8)
+        heading_hits = set(hits) & (title_words | key_words)
+        if hits and (score > 0 or len(hits) >= 2 or heading_hits or any(token_frequency[token] == 1 for token in hits)):
+            lexical_score = math.fsum(
+                inverse_frequency[token] * (1 + (token in title_words) + (token in key_words))
+                for token in hits
+            )
+            lexical_scores[row["id"]] = lexical_score
+            # Preserve structural scope/slot priority while retaining the full
+            # ordering of IDF scores. Every lexical contribution stays below 8.
+            score += 8 * lexical_score / (1 + lexical_score)
             reasons.append("lexical:" + ",".join(hits[:4]))
         ranked.append((score, reasons, row))
 
@@ -2285,7 +2309,28 @@ def prepare_decision_check(
         )
     ranked.sort(key=lambda item: (-item[0], str(item[2].get("path", "")), item[2]["id"]))
     eligible = [item for item in ranked if item[0] > 0]
-    if len(eligible) <= limit:
+    if coverage == "discovery_only" and eligible:
+        # Near-duplicate metadata must not consume the whole body-read budget.
+        # Diversify lexical discovery only; exact-slot/overlap coverage below
+        # remains mandatory. Similarity selects candidates, never semantics.
+        remaining = list(eligible)
+        selected = [remaining.pop(0)]
+        while remaining and len(selected) < limit:
+            def discovery_priority(item: tuple[float, list[str], dict[str, Any]]) -> tuple[float, str, str]:
+                row = item[2]
+                words = metadata_by_id[row["id"]]
+                similarity = max(
+                    len(words & metadata_by_id[chosen[2]["id"]])
+                    / max(1, len(words | metadata_by_id[chosen[2]["id"]]))
+                    for chosen in selected
+                )
+                score = lexical_scores[row["id"]] * (1 - 0.8 * similarity)
+                return -score, str(row.get("path", "")), row["id"]
+
+            chosen = min(remaining, key=discovery_priority)
+            selected.append(chosen)
+            remaining.remove(chosen)
+    elif len(eligible) <= limit:
         selected = eligible
     else:
         selected = [item for item in eligible if item[2]["id"] in mandatory_ids]

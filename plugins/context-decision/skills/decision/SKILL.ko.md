@@ -5,7 +5,7 @@ description: 선택 신호가 있을 때 Current DEC 실제 본문을 비교하�
 
 # Decision (한국어)
 
-같은-major context-core와 함께 쓴다. semantic owner는 대화를 재-audit하거나 쓰지 않고 core만 쓴다. `references/`, plugin manifest, `context/*.index.md`는 읽지 않는다. `check`가 index 확인이다. `--help`를 실행하지 않고 plugin script를 읽거나 grep하지 않는다. 아래 명령이 전부다. usage 오류면 명령을 그대로 다시 실행한다. 설명되지 않는 interface failure 뒤에만 script source를 읽는다.
+같은-major context-core만 의존한다. 대화 재-audit·직접 쓰기는 금지하며 core만 쓴다. `references/`, manifest, `context/*.index.md`는 읽지 않는다. `check`가 index 확인이다. `--help`·plugin script read·grep은 금지다. usage 오류면 아래 명령을 다시 실행한다. 설명되지 않는 interface failure 뒤에만 script source를 읽는다.
 
 ## 조회와 판정
 
@@ -16,6 +16,8 @@ description: 선택 신호가 있을 때 Current DEC 실제 본문을 비교하�
 5. 현재·미래 행동을 지배하는 명시적 선택, canonical scope, commitment evidence가 모두 caller에게서 왔을 때만 claim한다. 원래 요청을 먼저 끝내고 성숙한 후보를 한 번 묶어 제안한다. 새 근거 없이 dismissed/deferred 후보를 재제안하지 않는다. payload·scope·lifecycle effect가 미확정이면 그 semantic delta만 묻는다.
 
 신규 canonical section은 `Decision`, `Rationale`, `Rejected alternatives`이며 기존 한국어 heading은 legacy read/round-trip alias다.
+
+같은 범위를 지배하는 동일 선택이면 반환된 `scope`·`decision_key`를 재사용하고 유사어 key를 만들지 않는다.
 
 ## Capture
 
@@ -40,4 +42,4 @@ python3 /loaded/context-decision/skills/decision/scripts/decision_workflow.py re
   --json
 ```
 
-`/loaded/...`는 이 파일의 skill catalog 경로에서 푼다. sibling core는 자동으로 찾는다(`core_cli_required` 오류 뒤에만 `--core-cli <path>`를 추가한다). Inline `--sec-*`는 literal이다. `@file`만 UTF-8 file을 읽고 `@@literal`은 `@`를 보존한다. 제한: DEC decision 1,200 codepoint, common claim 2,000, owner input 8 KiB, envelope 16 KiB.
+`/loaded/...`는 이 파일의 skill catalog 경로에서 푼다. core는 자동 해석하며 `core_cli_required` 뒤에만 `--core-cli <path>`를 준다. 입력은 literal이며 `@file`은 UTF-8, `@@literal`은 `@`를 보존한다. 제한: DEC decision 1,200 codepoint, common claim 2,000, owner input 8 KiB, envelope 16 KiB.

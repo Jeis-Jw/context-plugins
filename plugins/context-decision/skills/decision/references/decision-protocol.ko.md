@@ -91,6 +91,8 @@ JSON success는 `{"ok":true,"result":...}`, error는 `{"ok":false,"error":{"code
 
 `--search-term`을 생략한 direct candidate는 Decision, Rejected alternatives, Rationale, Revisit conditions에서 metadata term을 최대 12개 파생한다. title·summary의 term은 이미 index에 있으므로 파생 목록에서 제외한다. discovery는 결정적인 stem으로 distinctive hit를 비교·정렬하며 `frequency_cutoff`의 잡음 제거 의미를 유지한다. 저장 본문과 명시적 search term이 입력 정본이며 검색 점수로 의미 충돌을 판정하지 않는다.
 
+Discovery는 기존 frequency cutoff(Current의 1/4을 올림한 상한)로 corpus 공통 잡음을 제거한다. 나머지 hit에는 IDF와 title·decision_key 가중치를 적용하고 preserve/preserving, boundary/boundaries 같은 어형도 정규화한다. 첫 결과는 lexical 점수가 가장 높다. 이후 후보는 이미 선택한 metadata와의 중복을 감점해 비슷한 주제의 반복 문서가 본문 읽기 예산을 독점하지 않게 한다. 이 metadata-only 보정은 exact-slot·scope-overlap coverage에는 적용하지 않고 저장 byte나 의미 동일성·conflict 판정을 바꾸지 않는다. 같은 범위를 지배하는 동일 선택이면 반환된 scope·decision_key를 재사용하고 유사어 key를 만들지 않는다.
+
 ## One-call record
 
 `decision_workflow.py record`는 같은 `preview`와 같은 `apply`를 변경 없는 frozen receipt에 대해 한 프로세스 안에서 실행한다. caller는 사용자의 직접적·명시적·무조건적 semantic approval 뒤에만 `--approved`를 준다. `approval_digest`, 결박된 core SHA, vault identity, CAS, lock, atomic write는 2단계 경로와 동일하게 내부에서 결박되며 성공 시 receipt는 `--keep-receipt`가 없으면 제거된다. `--supersede`와 `--withdraw`는 `record`에서도 동일하다. `preview`, `apply`, `record`의 `--core-cli`는 선택이다. 같은 major의 manifest 검증된 sibling `context-core`가 정확히 하나일 때만 결정적으로 해석하고, 0개 또는 여러 개면 `core_cli_required`와 후보 목록으로 fail closed한다. 2단계 `preview`·`apply`는 orchestration용으로 유지된다.
