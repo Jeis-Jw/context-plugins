@@ -2197,10 +2197,12 @@ def _canonical_terms(text: str) -> list[str]:
             continue
         word = _strip_josa(token) if is_hangul else stem_token(token)
         minimum = 2 if _contains_hangul(word) else 3
+        # English keeps the base pre-stem stopword filter only, so ASCII stems stay
+        # byte-identical to the previous _content_stems output. Hangul stopwords
+        # are checked after particle stripping (것은 -> 것).
         if (
             minimum <= len(word) <= 40
-            and word not in _STOPWORDS
-            and word not in _HANGUL_STOPWORDS
+            and not (is_hangul and word in _HANGUL_STOPWORDS)
             and word not in out
         ):
             out.append(word)

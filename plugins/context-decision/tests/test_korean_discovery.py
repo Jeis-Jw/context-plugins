@@ -254,5 +254,13 @@ class KoreanDiscoveryTests(unittest.TestCase):
         )
 
 
+    def test_english_stopword_stems_keep_the_base_prefilter_only(self) -> None:
+        # Base applied the English stopword list before stemming only; a stem that
+        # happens to equal a stopword (makes -> make) must still be indexed and queried.
+        for word, expected in (("makes", ["make"]), ("takes", ["take"]), ("keeping", ["keep"]), ("used", []), ("using", [])):
+            with self.subTest(word=word):
+                self.assertEqual(expected, decision_cli._canonical_terms(word))
+
+
 if __name__ == "__main__":
     unittest.main()

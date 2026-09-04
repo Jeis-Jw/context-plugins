@@ -2,11 +2,13 @@
 
 All notable changes to Context Plugins are documented here. The project uses release-set versions; individual plugin versions may differ within one compatible set. Older entries marked as developer previews were sometimes prepared without a public tag.
 
-## Unreleased
+## 0.15.0 - 2026-09-04
+
+Release set `0.15.0` contains `context-core` 0.14.0 (unchanged), `context-decision` 0.14.0, `context-assumption` 0.12.0, `context-term` 0.12.0, `context-intent` 0.12.0, and `context-document` 0.13.0. Only the decision component changes; same-major compatibility is unchanged.
 
 ### Added
 
-- W1: add deterministic Korean lexical discovery for short Hangul terms and common particles while keeping the existing English stems and retrieval bounds.
+- W1: add deterministic Korean lexical discovery for short Hangul terms and common particles. English stems, query terms, and retrieval bounds are byte-identical to 0.14.0.
 - W2: separate user guides, contributor guidance, release history, and reproducible evidence.
 - W3: add issue and pull-request templates, security reporting guidance, and a community code of conduct.
 
