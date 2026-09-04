@@ -26,10 +26,10 @@ PLUGIN_NAMES = (
     "context-intent",
     "context-document",
 )
-RELEASE_SET_VERSION = "0.14.0"
+RELEASE_SET_VERSION = "0.15.0"
 PLUGIN_VERSIONS = {
     "context-core": "0.14.0",
-    "context-decision": "0.13.0",
+    "context-decision": "0.14.0",
     "context-assumption": "0.12.0",
     "context-term": "0.12.0",
     "context-intent": "0.12.0",
@@ -768,7 +768,7 @@ class DistributionProofTests(unittest.TestCase):
         self.assertIn("Apache License 2.0", changelog)
         for stale_license_claim in ("공개 라이선스는 아직 선택하지 않았습니다", "A public license has not been selected"):
             self.assertNotIn(stale_license_claim, changelog)
-        for token in ("W1", "W2", "W3", "## 0.14.0", "## 0.2.0"):
+        for token in ("W1", "W2", "W3", "## 0.15.0", "## 0.14.0", "## 0.2.0"):
             self.assertIn(token, changelog)
         for token in (
             "not end-to-end model token measurements",

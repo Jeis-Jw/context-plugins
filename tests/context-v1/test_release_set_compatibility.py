@@ -22,10 +22,10 @@ PLUGIN_NAMES = (
     "context-intent",
     "context-document",
 )
-RELEASE_SET_VERSION = "0.14.0"
+RELEASE_SET_VERSION = "0.15.0"
 PLUGIN_VERSIONS = {
     "context-core": "0.14.0",
-    "context-decision": "0.13.0",
+    "context-decision": "0.14.0",
     "context-assumption": "0.12.0",
     "context-term": "0.12.0",
     "context-intent": "0.12.0",

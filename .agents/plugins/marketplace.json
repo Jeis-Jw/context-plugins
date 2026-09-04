@@ -6,12 +6,12 @@
   "metadata": {
     "release_set": {
       "schema": "context-plugin-release-set/v1",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "runtime_compatibility": "same-major-plus-runtime-handshake",
       "automatic_update": false,
       "members": {
         "context-core": "0.14.0",
-        "context-decision": "0.13.0",
+        "context-decision": "0.14.0",
         "context-assumption": "0.12.0",
         "context-term": "0.12.0",
         "context-intent": "0.12.0",
@@ -40,7 +40,7 @@
         "source": "local",
         "path": "./plugins/context-decision"
       },
-      "version": "0.13.0",
+      "version": "0.14.0",
       "description": "Decision continuity with actual-body comparison, proactive conflict notices, and approval-gated capture.",
       "policy": {
         "installation": "AVAILABLE",
