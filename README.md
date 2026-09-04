@@ -1,5 +1,7 @@
 # Context Plugins
 
+[![test](https://github.com/Jeis-Jw/context-plugins/actions/workflows/test.yml/badge.svg)](https://github.com/Jeis-Jw/context-plugins/actions/workflows/test.yml)
+
 [한국어](./README.ko.md)
 
 Context Plugins helps Codex and Claude Code remember your project. It keeps the choices you've made, the reasons behind them, and where you left off, so you can carry them into a new conversation.
@@ -100,5 +102,7 @@ When saved notes are relevant to your work, the AI can refer to them in a new co
 > Check the project’s saved decisions before continuing this work.
 
 Sharing the project lets another AI or someone working with you refer to the same notes.
+
+Contributions are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development and pull-request checks, and use [SECURITY.md](./SECURITY.md) for private vulnerability reports.
 
 Context Plugins is available under the [Apache License 2.0](./LICENSE).

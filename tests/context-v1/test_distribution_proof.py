@@ -254,7 +254,7 @@ class DistributionProofTests(unittest.TestCase):
             for document in (claude, codex, claude_entries[name], codex_entries[name]):
                 self.assertFalse(FORBIDDEN_KEYS & recursive_keys(document))
             plugin_readme = (root / "README.md").read_text(encoding="utf-8")
-            self.assertIn(PLUGIN_VERSIONS[name], plugin_readme)
+            self.assertIn("../../CHANGELOG.md", plugin_readme)
             if name in {"context-core", "context-decision"}:
                 self.assertTrue((root / "README.ko.md").is_file())
 
@@ -761,15 +761,38 @@ class DistributionProofTests(unittest.TestCase):
         for token in ("mode `0600`", "approval_digest", "receipt_digest", "core absolute path/pinned SHA-256"):
             self.assertIn(token, decision_protocol)
 
-        release_notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
+        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        benchmarks = (ROOT / "BENCHMARKS.md").read_text(encoding="utf-8")
+        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
         migration = (ROOT / "MIGRATION.md").read_text(encoding="utf-8")
-        self.assertIn("Apache License 2.0", release_notes)
+        self.assertIn("Apache License 2.0", changelog)
         for stale_license_claim in ("공개 라이선스는 아직 선택하지 않았습니다", "A public license has not been selected"):
-            self.assertNotIn(stale_license_claim, release_notes)
-        for token in ("W1", "W2", "W3", "not a token-savings measurement"):
-            self.assertIn(token, release_notes)
-        for token in ("W1-W3", "context-common/v2", "vault_identity", "--vault", "@file", "@@literal"):
+            self.assertNotIn(stale_license_claim, changelog)
+        for token in ("W1", "W2", "W3", "## 0.14.0", "## 0.2.0"):
+            self.assertIn(token, changelog)
+        for token in (
+            "not end-to-end model token measurements",
+            "not a token-savings measurement",
+            "Reproducible model-free checks",
+            "Historical, one-repeat Codex experiment",
+            "raw evidence is not published",
+            "test_token_io_evidence.py",
+            "test_recall_at_scale.py",
+        ):
+            self.assertIn(token, benchmarks)
+        for token in ("0.15.0 Korean decision discovery", "context-common/v2", "--scope", "--decision-key", "annotate --search-term"):
             self.assertIn(token, migration)
+        self.assertIn("materially authored the change", contributing)
+        self.assertIn("request, approval, review, or accountability role alone is not co-authorship", contributing)
+        for name in PLUGIN_NAMES:
+            for language in ("README.md", "README.ko.md"):
+                plugin_readme = ROOT / "plugins" / name / language
+                text = plugin_readme.read_text(encoding="utf-8")
+                self.assertIn("CHANGELOG", text, plugin_readme)
+                self.assertIsNone(
+                    re.search(r"(?m)^(?:Version\s+`?|`?)0\.\d+\.\d+", text),
+                    plugin_readme,
+                )
         korean_readme = (ROOT / "README.ko.md").read_text(encoding="utf-8")
         baseline_prompt_chars = 3_147
         prompt_values = [
@@ -785,7 +808,7 @@ class DistributionProofTests(unittest.TestCase):
             f"from {baseline_prompt_chars:,} to {actual_prompt_chars:,} characters, "
             f"a {reduction_percent:.1f}% character reduction"
         )
-        self.assertIn(english_measurement, release_notes)
+        self.assertIn(english_measurement, benchmarks)
         for token in (
             "Codex와 Claude Code",
             "프로젝트의 중요한 내용을 기억",
@@ -805,6 +828,60 @@ class DistributionProofTests(unittest.TestCase):
             "검증 상태",
         ):
             self.assertNotIn(developer_only_token, korean_readme)
+
+    def test_community_files_and_links_have_the_expected_public_shape(self) -> None:
+        expected = (
+            ROOT / ".github/ISSUE_TEMPLATE/bug_report.yml",
+            ROOT / ".github/ISSUE_TEMPLATE/feature_request.yml",
+            ROOT / ".github/PULL_REQUEST_TEMPLATE.md",
+            ROOT / "SECURITY.md",
+            ROOT / "CODE_OF_CONDUCT.md",
+            ROOT / "CONTRIBUTING.md",
+            ROOT / "CHANGELOG.md",
+            ROOT / "BENCHMARKS.md",
+        )
+        for path in expected:
+            self.assertTrue(path.is_file(), path)
+            self.assertTrue(path.read_text(encoding="utf-8").strip(), path)
+
+        issue_forms = expected[:2]
+        for path in issue_forms:
+            text = path.read_text(encoding="utf-8")
+            self.assertRegex(text, r"(?m)^name: .+$")
+            self.assertRegex(text, r"(?m)^description: .+$")
+            self.assertRegex(text, r"(?m)^body:$")
+            self.assertNotIn("\t", text)
+            item_types = re.findall(r"(?m)^  - type: ([a-z_]+)$", text)
+            self.assertTrue(item_types, path)
+            self.assertLessEqual(set(item_types), {"markdown", "dropdown", "input", "textarea", "checkboxes"})
+            ids = re.findall(r"(?m)^    id: ([a-z_]+)$", text)
+            self.assertEqual(len(ids), len(set(ids)), path)
+
+        bug_template = issue_forms[0].read_text(encoding="utf-8")
+        for token in ("Host", "Plugin versions", "Doctor output", "Remove secrets", "home-directory paths"):
+            self.assertIn(token, bug_template)
+        security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+        self.assertIn("https://github.com/Jeis-Jw/context-plugins/security/advisories/new", security)
+        self.assertIn("approval and lifecycle binding", security)
+        conduct = (ROOT / "CODE_OF_CONDUCT.md").read_text(encoding="utf-8")
+        self.assertIn("Contributor Covenant, version 2.1", conduct)
+
+        markdown_paths = (
+            ROOT / "README.md",
+            ROOT / "README.ko.md",
+            ROOT / "CONTRIBUTING.md",
+            ROOT / "SECURITY.md",
+            ROOT / "CODE_OF_CONDUCT.md",
+            ROOT / "CHANGELOG.md",
+            *tuple(ROOT.glob("plugins/*/README.md")),
+            *tuple(ROOT.glob("plugins/*/README.ko.md")),
+        )
+        for path in markdown_paths:
+            for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", path.read_text(encoding="utf-8")):
+                if target.startswith(("https://", "http://", "#")):
+                    continue
+                relative = target.split("#", 1)[0]
+                self.assertTrue((path.parent / relative).resolve().exists(), f"{path}: {target}")
 
     def test_public_help_exposes_capture_limits_and_core_trust(self) -> None:
         environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}

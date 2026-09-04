@@ -56,31 +56,7 @@ context-core가 각 대화 delta를 같은 응답 pass에서 가볍게 audit하�
 
 기존 `wiki/` 자동 migration은 제공하지 않습니다. PCMS는 조직 권한·승인 workflow·cross-project search·policy·audit·conflict queue의 control-plane 경계이며, 이 local plugin은 결정 기록과 recall 자체에 집중합니다.
 
-0.2.0은 legacy fingerprint field와 batch-local claim key를 제거한 breaking release입니다. Owner-result 연결용 transport reference는 의미를 갖지 않습니다. 혼합 설치는 `context-common/v2` handshake에서 fail-closed합니다. 구형 artifact의 제거된 field는 읽을 수 있고 다음 승인 rewrite에서 lazy-clean합니다. 신규 candidate/draft에는 `schema_removed_field`로 계속 거부하며 fingerprint를 의미상 동일성 근거로 사용하지 않습니다.
-
-0.2.1은 `context-common/v2` 호환 patch release입니다. core doctor의 `partial|invalid` 진단은 전역 preflight 실패가 아니라 warning으로 전달하고, 실제 decision target과 겹치는 blocking issue만 해당 operation을 중단합니다. init target 자체의 schema·owner·path가 안전하지 않을 때만 core bootstrap이 write 0으로 실패합니다.
-
-0.3.0은 core audit가 선택 형성·변경 신호를 찾았을 때만 decision 비교를 수행합니다. `check`는 metadata로 후보를 먼저 좁히고 무관한 score-0 본문을 열지 않으며, 실제 관련 DEC 본문·scope·rationale 비교와 승인형 capture 경계는 그대로 유지합니다.
-
-0.4.0은 exact dependency를 `context-core@context-plugins`, source `Jeis-Jw/context-plugins`로 옮긴 distribution breaking release입니다. `context-common/v2` artifact 호환성은 유지하지만 기존 marketplace 설치를 자동 전환하지 않습니다.
-
-0.4.1은 `context-core`의 판정·비용 계약 개선과 distribution version을 맞춘 patch release이며 decision semantics와 `context-common/v2` 계약은 변경하지 않습니다.
-
-0.5.0은 Current DEC의 canonical `Decision`·`Rationale`만 조립하는 read-only `spec-view`와 네 plugin distribution parity를 추가합니다. legacy 한국어 heading도 읽지만 자동 migration은 하지 않습니다. DEC storage schema와 `context-common/v2`는 유지되고 ASM·TERM 설치 또는 기존 artifact migration은 자동으로 일어나지 않습니다.
-
-0.5.1은 frozen receipt golden path, repository/core identity 결박, release-pinned core handshake, bounded recall recovery와 actual semantic input limit을 추가한 developer-preview patch입니다.
-
-0.7.1은 자연어 승인 질문, discovery-only read, supersede/withdraw golden path와 deterministic receipt lifecycle을 통합합니다. Core와 decision의 semantic ownership 및 package 경계는 유지하며 root profile installer만 설치 동작을 묶습니다. `v0.7.1` tag와 publication은 아직 완료되지 않았습니다.
-
-0.9.0은 package version 호환성을 major 기준으로 바꾸고, protocol·capability handshake와 operation-bound actual runtime digest를 fail-closed 실행 경계로 유지합니다. `v0.9.0` tag와 publication은 아직 완료되지 않았습니다.
-
-0.10.0은 standalone decision과 legacy artifact bytes를 유지하면서 optional typed relation input을 추가합니다. tag나 publication을 의미하지 않습니다.
-
-0.11.0은 release set을 정렬하고 handshake 실패 뒤에만 호환 core 후보를 안내하며 revisit·복수 relation 입력 도움말을 명확히 합니다. DEC semantics와 저장 bytes는 변경하지 않으며 tag나 publication을 의미하지 않습니다.
-
-0.13.0은 `record --approved` 한 번으로 결정을 기록하고, 결정 본문에서 검색어를 파생해 충돌하는 요청이 많은 기록 속에서도 맞는 결정을 찾게 하며, 구별력 있는 hit에 코퍼스 빈도 역수 가중치를 주되 상위 후보는 diversity 감점에서 보호합니다. 브랜치 병합으로 Current가 둘이 된 slot은 그 slot의 write만 보류합니다. 저장 DEC bytes는 migration이 필요 없습니다.
-
-0.12.0은 명시적으로 확정된 선택을 semantic approval로 보고 rendered-file preview를 사용자 승인 단계에서 제거합니다. 내부 frozen receipt와 unchanged apply integrity는 유지하며 저장 DEC bytes는 migration이 필요 없습니다. tag나 publication을 의미하지 않습니다.
+릴리스 이력은 프로젝트 [CHANGELOG](../../CHANGELOG.md)를 참고하세요.
 
 ### One-call record
 

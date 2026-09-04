@@ -1,5 +1,13 @@
 # Repository extraction
 
+## 0.15.0 Korean decision discovery
+
+Korean lexical discovery now keeps two-syllable Hangul terms and removes a conservative set of common particles before comparing query and index terms. English stemming, decision ranking, result limits, artifact schemas, and `context-common/v2` remain unchanged.
+
+Existing DEC artifacts and their stored `search_terms` are not rewritten or backfilled automatically. Title, summary, key, tag, and existing search terms are normalized at check time, but a body term omitted by an older recorder is unavailable to scope-less discovery if it appears nowhere in that metadata. Use an exact-slot `check` with both `--scope` and `--decision-key`, or explicitly approve an `annotate --search-term` lifecycle update for records that need the missing discovery term.
+
+Particle stripping is intentionally dependency-free and conservative. Ambiguous suffixes `나`, `도`, and `만` are not stripped. Some longer nouns ending in a retained particle-like syllable can still normalize too aggressively; actual DEC bodies, scope, and rationale remain the only semantic comparison evidence.
+
 ## 0.14.0 generated indexes as projections
 
 Area indexes remain committed, but an approved write no longer requires their bytes to be unchanged since preview: core re-derives the index from the artifacts under the root lock and reports `index_regenerated:<path>`. Target-artifact drift, a competing Current decision in the same or an overlapping scope/key, a slot that already holds two Current decisions, and chained same-area proposals still fail closed. Existing `context-common/v2` artifacts and indexes need no migration; pending receipts stay valid.

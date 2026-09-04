@@ -10,7 +10,7 @@ DEC remains standalone: an Intent is optional. Existing artifacts keep descripto
 2. Reload the host or open a new session.
 3. Run `$context-decision:init` once in the target vault directory.
 
-There is no bundle or meta-plugin, and decision code is not embedded in core. The root installer is explicit distribution tooling; this plugin never changes host installation state. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. The `v0.12.0` tag is not published yet; tag creation and publication remain owner-gated.
+There is no bundle or meta-plugin, and decision code is not embedded in core. The root installer is explicit distribution tooling; this plugin never changes host installation state. The init adapter uses the separately installed core to create or repair core storage, register the DEC area, and install one managed policy block. Re-running it against a ready repository is a no-op. Release history and publication state are tracked in the project changelog rather than this usage guide.
 
 Core and decision package versions are compatible when their major versions match. Minor versions add or change functionality and patch versions contain small fixes; for the current `0.x` line, any `0.*` pair passes the package-version gate. The runtime handshake below still rejects a same-major implementation whose actual surface is incompatible.
 
@@ -67,17 +67,7 @@ A healthy index miss opens zero indexed bodies; missing or stale index recovery 
 
 Existing DEC bytes and `context-common/v2` remain compatible. ASM and TERM are optional experimental owners and are not installed, enabled, initialized, or migrated automatically.
 
-Version `0.9.0` introduces the major-based package compatibility policy and keeps protocol/capability handshakes plus operation-bound actual runtime digests as the fail-closed execution boundary.
-
-Version `0.10.0` adds optional typed relation inputs while preserving standalone decisions and legacy artifact bytes. No tag or publication is implied.
-
-Version `0.11.0` aligns the release set, lists compatible core candidates only after handshake failure, and clarifies revisit and repeated relation inputs. DEC semantics and stored bytes are unchanged. No tag or publication is implied.
-
-Version `0.12.0` treats an explicit settled choice as semantic approval and removes the rendered-file preview as a user-facing approval step. Internal frozen-receipt and unchanged-apply integrity remain. Stored DEC bytes require no migration. No tag or publication is implied.
-
-Version `0.13.0` records a decision in one `record --approved` call, derives search terms from the decision body so a conflicting request finds the right record among many, weights distinctive hits by inverse corpus frequency while protecting the strongest candidates from diversity penalties, and holds writes to a decision slot that a branch merge left with two current records. Stored DEC bytes require no migration.
-
-See the [owner protocol](./skills/decision/references/decision-protocol.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).
+See the [owner protocol](./skills/decision/references/decision-protocol.md), [project changelog](../../CHANGELOG.md), [root release status](../../README.md), and [한국어 문서](./README.ko.md).
 
 ### One-call record
 

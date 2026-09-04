@@ -1,5 +1,7 @@
 # Context Plugins
 
+[![test](https://github.com/Jeis-Jw/context-plugins/actions/workflows/test.yml/badge.svg)](https://github.com/Jeis-Jw/context-plugins/actions/workflows/test.yml)
+
 [English](./README.md)
 
 Context Plugins는 Codex와 Claude Code가 프로젝트의 중요한 내용을 기억하도록 돕는 플러그인입니다. 결정한 내용과 그 이유, 하던 일을 남겨 새 대화에서도 이어갈 수 있게 합니다.
@@ -100,5 +102,7 @@ $context-decision:init
 > 이 작업을 계속하기 전에 프로젝트에 저장된 결정을 먼저 확인해줘.
 
 프로젝트를 공유하면 다른 AI나 함께 일하는 사람도 같은 기록을 참고할 수 있습니다.
+
+기여 방법과 pull request 검증 항목은 [CONTRIBUTING.md](./CONTRIBUTING.md)를 참고하세요. 보안 문제는 [SECURITY.md](./SECURITY.md)의 비공개 경로로 알려주세요.
 
 Context Plugins는 [Apache License 2.0](./LICENSE)으로 제공됩니다.

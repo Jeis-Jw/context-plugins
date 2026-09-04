@@ -2140,6 +2140,11 @@ also only just very more most less least such same other another any some all ea
 because until unless whether which who whom whose what where why how here there now today again still yet already ever never
 should would could can may might must shall will use used using make made keep keeps kept take taken get got put set let
 """.split())
+_HANGUL_STOPWORDS = frozenset("것 수 등 및 또는 그리고 하다 있다 없다 한다 된다".split())
+_JOSA_SUFFIXES = (
+    "에서", "에게", "으로", "부터", "까지", "처럼", "보다", "이나", "든지", "라도",
+    "은", "는", "이", "가", "을", "를", "의", "에", "로", "과", "와",
+)
 _STEM_SUFFIXES = ("ations", "ation", "ments", "ment", "ities", "ity", "ings", "ing", "ness", "ies", "ers", "ely", "ly", "ed", "es", "al", "s")
 
 
@@ -2161,13 +2166,43 @@ def stem_token(token: str) -> str:
     return word
 
 
-def _content_stems(text: str) -> list[str]:
+def _contains_hangul(token: str) -> bool:
+    return any(
+        "\u1100" <= char <= "\u11ff"
+        or "\u3130" <= char <= "\u318f"
+        or "\ua960" <= char <= "\ua97f"
+        or "\uac00" <= char <= "\ud7a3"
+        or "\ud7b0" <= char <= "\ud7ff"
+        for char in token
+    )
+
+
+def _strip_josa(token: str) -> str:
+    for suffix in _JOSA_SUFFIXES:
+        if token.endswith(suffix):
+            candidate = token[: -len(suffix)]
+            # One-syllable lexical roots stay intact, except known stopwords
+            # that must still be discarded after particle normalization.
+            if len(candidate) >= 2 or candidate in _HANGUL_STOPWORDS:
+                return candidate
+    return token
+
+
+def _canonical_terms(text: str) -> list[str]:
     out: list[str] = []
     for token in re.findall(r"[^\W_]+", normalized_key(text), flags=re.UNICODE):
-        if len(token) < 4 or len(token) > 40 or token.isdecimal() or token in _STOPWORDS:
+        is_hangul = _contains_hangul(token)
+        minimum = 2 if is_hangul else 4
+        if len(token) < minimum or len(token) > 40 or token.isdecimal() or token in _STOPWORDS:
             continue
-        word = stem_token(token)
-        if 3 <= len(word) <= 40 and word not in out:
+        word = _strip_josa(token) if is_hangul else stem_token(token)
+        minimum = 2 if _contains_hangul(word) else 3
+        if (
+            minimum <= len(word) <= 40
+            and word not in _STOPWORDS
+            and word not in _HANGUL_STOPWORDS
+            and word not in out
+        ):
             out.append(word)
     return out
 
@@ -2179,29 +2214,20 @@ def derive_search_terms(title: str, summary: str, values: dict[str, Any], *, max
     conflicting request tends to share (the rejected alternative, the rationale).
     Order: decision, rejected alternatives, rationale, revisit conditions.
     """
-    already = set(_content_stems(f"{title} {summary}"))
+    already = set(_canonical_terms(f"{title} {summary}"))
     ordered: list[str] = []
     parts = [values.get("decision", "")]
     parts.extend(values.get("rejected_alternatives", []) or [])
     parts.append(values.get("rationale", ""))
     parts.extend(values.get("revisit_when", []) or [])
     for part in parts:
-        for word in _content_stems(str(part)):
+        for word in _canonical_terms(str(part)):
             if word in already or word in ordered:
                 continue
             ordered.append(word)
             if len(ordered) >= maximum:
                 return ordered
     return ordered
-
-
-def _comparison_tokens(*values: str) -> set[str]:
-    text = normalized_key(" ".join(value for value in values if value))
-    return {
-        token
-        for token in re.findall(r"[^\W_]+", text, flags=re.UNICODE)
-        if len(token) >= 2 and not token.isdecimal()
-    }
 
 
 def prepare_decision_check(
@@ -2236,11 +2262,11 @@ def prepare_decision_check(
         scope = canonical_scope(scope)
         decision_key = canonical_decision_key(decision_key)
     index_text, current_rows, _ = _index(repo)
-    tokens = _comparison_tokens(statement, rationale, query)
+    tokens = set(_canonical_terms(" ".join(value for value in (statement, rationale, query) if value)))
 
     metadata_haystacks = [
         set(
-            _content_stems(
+            _canonical_terms(
                 " ".join(str(row.get(field, "")) for field in ("title", "summary", "decision_key"))
                 + " "
                 + " ".join(str(term) for term in row.get("terms", []))
@@ -2248,9 +2274,8 @@ def prepare_decision_check(
         )
         for row in current_rows
     ]
-    tokens = {stem_token(token) for token in tokens if len(token) >= 4 and token not in _STOPWORDS}
-    title_stems = [set(_content_stems(str(row.get("title", "")))) for row in current_rows]
-    key_stems = [set(_content_stems(str(row.get("decision_key", "")))) for row in current_rows]
+    title_stems = [set(_canonical_terms(str(row.get("title", "")))) for row in current_rows]
+    key_stems = [set(_canonical_terms(str(row.get("decision_key", "")))) for row in current_rows]
     token_frequency = {
         token: sum(token in haystack for haystack in metadata_haystacks)
         for token in tokens

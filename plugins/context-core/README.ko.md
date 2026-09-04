@@ -38,30 +38,4 @@ vault는 `context/`를 담는 일반 디렉터리이며 Git은 공유·버전관
 
 `typed-relations/v1`은 additive이며 기존 relation-map 저장 shape를 유지합니다. `<predicate>:<target-kind>` 형식의 key만 preview, apply 재검증, refresh, doctor에서 live target kind와 대조합니다. `:` 없는 key는 legacy 동작을 유지합니다. inverse edge를 저장하거나 artifact migration을 수행하지 않습니다.
 
-0.2.0은 의미 판정에 쓰던 legacy fingerprint field와 batch-local claim key를 제거한 breaking release입니다. Owner-result 연결용 transport reference는 의미를 갖지 않습니다. 혼합 설치를 호환으로 오판하지 않도록 wire/storage handshake를 `context-common/v2`로 올렸습니다. 제거된 field가 남은 0.1.x artifact는 `schema_removed_field` warning으로 읽고 다음 승인 rewrite에서 lazy-clean합니다. 신규 artifact/candidate에는 계속 허용하지 않습니다.
-
-0.2.1은 `context-common/v2` 호환 patch release입니다. corpus 전체 drift가 아니라 실제 target write의 CAS·index·path·lock·approval 경계만 fail-closed하고, read는 index-first 조회와 bounded fallback을 사용합니다. addon 등록은 root lock 안에서 exact-empty directory를 다시 확인해 preview 이후의 directory race도 차단합니다.
-
-0.3.0은 각 대화의 새 의미만 같은 응답 pass에서 audit하고, durable signal이 있을 때만 metadata-first recall과 선택된 실제 본문 read를 수행합니다. session-local ledger는 읽은 `{id,sha256}`와 pending·dismissed 참조만 유지해 중복 읽기와 반복 제안을 줄이며, addon은 core의 단일 audit 결과를 재사용합니다.
-
-0.4.0은 source repository와 marketplace를 `Jeis-Jw/context-plugins` / `context-plugins`로 분리한 distribution breaking release입니다. storage protocol은 `context-common/v2`를 유지하며 기존 설치를 자동 변경하지 않습니다.
-
-0.4.1은 목적에 맞는 context 판정 기준과 recall 비용 경계를 명문화하고, managed policy의 정본과 runtime 설치 본문을 함께 정렬한 patch release입니다.
-
-0.5.0은 read-only DEC spec view, generic `context-owner-descriptor/v2` structural validation, optional ASM·TERM owner 등록, full-envelope candidate batch 상한을 하나의 호환 release unit으로 묶습니다. `context-common/v2`와 기존 SNAP·OBS·DEC bytes는 유지하며 addon 설치나 artifact migration을 자동 수행하지 않습니다.
-
-0.5.1은 vault identity에 결박된 approval, frozen DEC receipt, release-pinned core 실행 전 검증, healthy miss/recovery body-open 경계와 actual semantic input limit을 추가한 developer-preview patch입니다.
-
-0.7.1은 자연어 승인 UX와 deterministic receipt lifecycle을 통합하고, core와 semantic owner package를 분리한 채 root profile installer로 설치 동작만 묶습니다. `v0.7.1` tag와 publication은 아직 완료되지 않았습니다.
-
-0.9.0은 package 호환성 경계를 major로 두고 minor는 기능 변화, patch는 작은 수정에 사용합니다. 같은-major package도 protocol·capability handshake가 맞지 않으면 fail-closed합니다. `v0.9.0` tag와 publication은 아직 완료되지 않았습니다.
-
-0.10.0은 filesystem-vault와 approval model을 바꾸지 않고 typed relation 검증과 optional INTENT/DOCUMENT owner 등록 surface를 추가합니다. tag나 publication을 의미하지 않습니다.
-
-0.11.0은 OBS preview의 미적용 상태를 명시하고, 공용 inline owner workflow transport와 same-major cache pin 진단을 추가합니다. approval과 저장 artifact bytes는 변경하지 않으며 tag나 publication을 의미하지 않습니다.
-
-0.12.0은 immutable ARCHIVE capture/read/search/discard, bounded OBS-to-context evidence reference와 DOCUMENT freshness hygiene 진단을 추가합니다. approval과 filesystem-vault 경계는 유지하며 tag나 publication을 의미하지 않습니다.
-
-0.14.0은 생성 index를 write 시점의 투영으로 다룹니다. 승인된 write는 artifact payload와 lifecycle effect에만 결박되고, preview 이후 area index가 바뀌었으면 core가 root lock 안에서 재생성합니다. artifact 변경, 같거나 겹치는 decision slot의 경쟁 Current, 중복 Current slot은 계속 fail-closed입니다. Git vault에서는 `init`이 `.gitattributes` union-merge 블록을 설치하고, `refresh --check`가 CI용 projection drift를 보고하며, `snapshot save/update --approved`는 한 번의 호출로 preview와 apply를 수행합니다. 저장 artifact bytes와 `context-common/v2`는 migration이 필요 없습니다.
-
-0.13.0은 확정된 semantic payload·scope·lifecycle effect를 capture 승인으로 사용합니다. 렌더링된 Markdown은 내부 integrity 단계로만 유지하며 두 번째 승인 화면으로 보여주지 않습니다. 저장 artifact bytes와 `context-common/v2`는 migration이 필요 없습니다. tag나 publication을 의미하지 않습니다.
+릴리스 이력은 프로젝트 [CHANGELOG](../../CHANGELOG.md)를 참고하세요.
