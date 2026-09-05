@@ -19,7 +19,7 @@
         "host": "codex",
         "message": "The exact context-core is absent from the current host inventory.",
         "manual_actions": [
-          "Install bobbin@bobbin explicitly from provider marketplace bobbin (source Jeis-Jw/context-plugins).",
+          "Install bobbin@bobbin explicitly from provider marketplace bobbin (source Jeis-Jw/bobbin).",
           "Choose the installation scope explicitly.",
           "Reload the host or start a new session, then run bobbin:init again."
         ]
@@ -58,7 +58,7 @@
         "host": "claude-code",
         "message": "A same-named core has a different marketplace or source coordinate.",
         "manual_actions": [
-          "Install the exact bobbin@bobbin coordinate from source Jeis-Jw/context-plugins explicitly.",
+          "Install the exact bobbin@bobbin coordinate from source Jeis-Jw/bobbin explicitly.",
           "A same-named plugin from another marketplace does not satisfy the requirement.",
           "Reload the host or start a new session, then run bobbin:init again."
         ]
@@ -72,7 +72,7 @@
           {
             "marketplace": "bobbin",
             "plugin": "bobbin",
-            "source": "Jeis-Jw/context-plugins",
+            "source": "Jeis-Jw/bobbin",
             "enabled": false,
             "protocols": ["context-common/v2"]
           }
@@ -87,7 +87,7 @@
       "expected_observed": {
         "marketplace": "bobbin",
         "plugin": "bobbin",
-        "source": "Jeis-Jw/context-plugins",
+        "source": "Jeis-Jw/bobbin",
         "enabled": false,
         "protocol": "context-common/v2",
         "repository_state": "ready"
@@ -110,7 +110,7 @@
           {
             "marketplace": "bobbin",
             "plugin": "bobbin",
-            "source": "Jeis-Jw/context-plugins",
+            "source": "Jeis-Jw/bobbin",
             "enabled": true,
             "protocols": ["context-common/v1"]
           }
@@ -125,7 +125,7 @@
       "expected_observed": {
         "marketplace": "bobbin",
         "plugin": "bobbin",
-        "source": "Jeis-Jw/context-plugins",
+        "source": "Jeis-Jw/bobbin",
         "enabled": true,
         "protocol": "context-common/v1",
         "repository_state": "ready"
@@ -148,7 +148,7 @@
           {
             "marketplace": "bobbin",
             "plugin": "bobbin",
-            "source": "Jeis-Jw/context-plugins",
+            "source": "Jeis-Jw/bobbin",
             "enabled": true,
             "protocols": ["context-common/v2"]
           }
@@ -163,7 +163,7 @@
       "expected_observed": {
         "marketplace": "bobbin",
         "plugin": "bobbin",
-        "source": "Jeis-Jw/context-plugins",
+        "source": "Jeis-Jw/bobbin",
         "enabled": true,
         "protocol": "context-common/v2",
         "repository_state": "absent"
@@ -186,7 +186,7 @@
           {
             "marketplace": "bobbin",
             "plugin": "bobbin",
-            "source": "Jeis-Jw/context-plugins",
+            "source": "Jeis-Jw/bobbin",
             "enabled": true,
             "protocols": ["context-common/v2"]
           }
@@ -202,7 +202,7 @@
       "expected_observed": {
         "marketplace": "bobbin",
         "plugin": "bobbin",
-        "source": "Jeis-Jw/context-plugins",
+        "source": "Jeis-Jw/bobbin",
         "enabled": true,
         "protocol": "context-common/v2",
         "repository_state": "partial"
@@ -223,7 +223,7 @@
           {
             "marketplace": "bobbin",
             "plugin": "bobbin",
-            "source": "Jeis-Jw/context-plugins",
+            "source": "Jeis-Jw/bobbin",
             "enabled": true,
             "protocols": ["context-common/v2"]
           }
@@ -238,7 +238,7 @@
       "expected_observed": {
         "marketplace": "bobbin",
         "plugin": "bobbin",
-        "source": "Jeis-Jw/context-plugins",
+        "source": "Jeis-Jw/bobbin",
         "enabled": true,
         "protocol": "context-common/v2",
         "repository_state": "ready"

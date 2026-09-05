@@ -14,21 +14,21 @@ Bobbin은 AI 코딩 세션이 바뀌어도 프로젝트의 결정과 이유, 확
 ## 설치
 
 Bobbin 1.0.0은 Python 3.11 이상과 Codex 또는 Claude Code가 필요합니다.
-소스 저장소는 `Jeis-Jw/context-plugins`이며, GitHub 이름 변경 없이 사용할 수
-있습니다. Checkout에서 설치하려면 실제 경로를 등록합니다.
+소스 저장소는 [Jeis-Jw/bobbin](https://github.com/Jeis-Jw/bobbin)입니다.
 
 ```bash
 # Codex
-codex plugin marketplace add /path/to/checkout
+codex plugin marketplace add https://github.com/Jeis-Jw/bobbin.git
 codex plugin add bobbin@bobbin
 
 # Claude Code
-claude plugin marketplace add /path/to/checkout --scope user
+claude plugin marketplace add https://github.com/Jeis-Jw/bobbin.git --scope user
 claude plugin install bobbin@bobbin --scope user
 ```
 
 기존 `context-*` 플러그인은 먼저 비활성화해 중복 실행을 막습니다.
 설치 후 호스트를 다시 로드하거나 새 세션을 시작합니다.
+로컬 개발 시에는 Git URL 대신 실제 Bobbin checkout 경로를 사용합니다.
 
 ## 사용
 

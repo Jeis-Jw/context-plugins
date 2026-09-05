@@ -4,7 +4,8 @@ These measurements cover bytes and tool I/O bounds; they are not end-to-end mode
 
 ## Bobbin 1.0.0 regression check
 
-On 2026-09-05, compare Bobbin with release-set 0.15.0 commit
+On 2026-09-05, compare Bobbin commit `64d0e3f822b267b25d5373abc1487ee87c51f194`
+(before the repository-coordinate rename) with release-set 0.15.0 commit
 `5bac7b22beb751d2964f93567b4f84b4408063fb` on the same machine, using Python
 3.13.2 and warm filesystem caches. Each read workload has three untimed warmups
 and 31 measured CLI invocations per version, alternating version order. CLI

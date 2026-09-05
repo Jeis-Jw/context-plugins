@@ -12,9 +12,10 @@ Bobbin has one public package version. Historical 0.x entries describe Context P
 - `explicit`, `auto` and LLM-assessed `adaptive` recording policies, enforced at
   the common apply boundary with frozen project-policy bindings.
 - Existing Markdown artifact schemas and lifecycle are preserved. The source
-  repository remains `Jeis-Jw/context-plugins`; the Bobbin product name does not
-  imply a GitHub repository rename. Host installation, tags and marketplace
-  publication remain separate actions.
+  repository is now `Jeis-Jw/bobbin` (formerly `Jeis-Jw/context-plugins`), with the
+  same repository identity and retained history. The primary checkout, remote,
+  source coordinates and current documentation use Bobbin. Host installation,
+  tags and marketplace publication remain separate actions.
 - Added reproducible before/after runtime measurements; see [BENCHMARKS.md](./BENCHMARKS.md).
 
 ## 0.15.0 - 2026-09-04

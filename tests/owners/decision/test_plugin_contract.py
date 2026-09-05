@@ -128,7 +128,7 @@ class PluginContractTests(unittest.TestCase):
 
             self.assertEqual("core_missing", rendered["code"])
             self.assertEqual("bobbin@bobbin", rendered["required_plugin"]["selector"])
-            self.assertEqual("Jeis-Jw/context-plugins", rendered["required_plugin"]["source"])
+            self.assertEqual("Jeis-Jw/bobbin", rendered["required_plugin"]["source"])
             self.assertIn("Install", " ".join(rendered["manual_actions"]))
             self.assertEqual({"repository": "none", "host_configuration": "none"}, rendered["write_policy"])
             self.assertEqual(before, (digest_tree(repo), digest_tree(host)))
@@ -143,7 +143,8 @@ class PluginContractTests(unittest.TestCase):
         for token in ("entrypoint path", "SHA-256", "protocol", "repository_state=absent"):
             self.assertIn(token, protocol)
         self.assertIn("`context-owner-descriptor/v1`", protocol)
-        for forbidden in ("install", "enable", "update", "marketplace", "plugin caches", "embed a core"):
+        self.assertIn("uses the core embedded in the same Bobbin package", protocol)
+        for forbidden in ("install", "enable", "update", "marketplace", "plugin caches", "copy a separate runtime"):
             self.assertIn(forbidden, protocol)
         self.assertIn("bobbin_init.py", init)
         self.assertIn("--features", init)

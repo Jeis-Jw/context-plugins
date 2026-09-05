@@ -2,7 +2,7 @@
   "marketplace": "bobbin",
   "plugin": "bobbin",
   "selector": "bobbin@bobbin",
-  "source": "Jeis-Jw/context-plugins",
+  "source": "Jeis-Jw/bobbin",
   "provider": "Jinwuk-Lee (Jeis-Jw)",
   "required_protocol": "context-common/v2",
   "entrypoint": "skills/context/scripts/context_cli.py",

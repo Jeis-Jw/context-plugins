@@ -20,21 +20,21 @@ project chooses which semantic features participate.
 ## Install
 
 Bobbin 1.0.0 requires Python 3.11+ and Codex or Claude Code. The source repository
-remains `Jeis-Jw/context-plugins`; a GitHub rename is not required to use Bobbin.
-To install from a checkout, register its actual path:
+is [Jeis-Jw/bobbin](https://github.com/Jeis-Jw/bobbin).
 
 ```bash
 # Codex
-codex plugin marketplace add /path/to/checkout
+codex plugin marketplace add https://github.com/Jeis-Jw/bobbin.git
 codex plugin add bobbin@bobbin
 
 # Claude Code
-claude plugin marketplace add /path/to/checkout --scope user
+claude plugin marketplace add https://github.com/Jeis-Jw/bobbin.git --scope user
 claude plugin install bobbin@bobbin --scope user
 ```
 
 Disable old `context-*` providers first; do not run both generations together.
 Reload the host or start a new session after installation.
+For local development, substitute the actual Bobbin checkout path for the Git URL.
 
 ## How to use it
 

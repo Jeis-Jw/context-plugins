@@ -44,7 +44,7 @@ REQUIRED_PLUGIN = {
     "marketplace": "bobbin",
     "plugin": "bobbin",
     "selector": "bobbin@bobbin",
-    "source": "Jeis-Jw/context-plugins",
+    "source": "Jeis-Jw/bobbin",
     "provider": "Jinwuk-Lee (Jeis-Jw)",
     "required_protocol": PROTOCOL,
     "entrypoint": "skills/context/scripts/context_cli.py",

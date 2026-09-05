@@ -1,9 +1,12 @@
 # Bobbin 1.0.0 transition
 
 Bobbin replaces the six independently installed `context-*` packages with one
-`bobbin@bobbin` package. Its single public version is 1.0.0. The repository's
-local directory, actual Git remote and prior release tags are not renamed by
-this source change. Publication and installed-host changes require separate action.
+`bobbin@bobbin` package. Its single public version is 1.0.0. The canonical source
+is `Jeis-Jw/bobbin`, and the primary local checkout is named `bobbin/`. Update
+existing clones with `git remote set-url origin https://github.com/Jeis-Jw/bobbin.git`.
+GitHub's old repository URL redirects to the same repository; do not reuse that
+old name for another repository. Prior release tags and commit history are retained.
+Installed-host changes and tag/Release publication remain separate actions.
 
 1. Keep a normal backup/versioned copy of the consumer vault and host settings.
 2. Disable all old context providers in the chosen host. Do not enable both

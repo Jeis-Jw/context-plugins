@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Portable signal precedence for the context-plugins active-language contract."""
+"""Portable signal precedence for the Bobbin active-language contract."""
 from __future__ import annotations
 
 

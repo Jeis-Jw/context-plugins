@@ -81,7 +81,7 @@ def public_preflight(root: Path, repo: Path, *, prefix: str) -> tuple[Path, Path
         "plugins": [{
             "marketplace": "bobbin",
             "plugin": "bobbin",
-            "source": "Jeis-Jw/context-plugins",
+            "source": "Jeis-Jw/bobbin",
             "enabled": True,
             "protocols": ["context-common/v2"],
             "entrypoint": str(CORE_CLI.resolve()),

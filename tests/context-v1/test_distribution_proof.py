@@ -416,7 +416,7 @@ class DistributionProofTests(unittest.TestCase):
         for token in ("Host", "Plugin versions", "Doctor output", "Remove secrets", "home-directory paths"):
             self.assertIn(token, bug_template)
         security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
-        self.assertIn("https://github.com/Jeis-Jw/context-plugins/security/advisories/new", security)
+        self.assertIn("https://github.com/Jeis-Jw/bobbin/security/advisories/new", security)
         self.assertIn("approval and lifecycle binding", security)
         conduct = (ROOT / "CODE_OF_CONDUCT.md").read_text(encoding="utf-8")
         self.assertIn("Contributor Covenant, version 2.1", conduct)

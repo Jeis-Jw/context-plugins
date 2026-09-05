@@ -6,10 +6,10 @@ Bobbin 1.0.0 uses one package and one `$bobbin:init` entrypoint. User-approval i
 
 ## Dependency and executable boundary
 
-- marketplace: `context-plugins`
-- plugin: `context-core`
-- selector: `context-core@context-plugins`
-- repository source: `Jeis-Jw/context-plugins`
+- marketplace: `bobbin`
+- plugin: `bobbin`
+- selector: `bobbin@bobbin`
+- repository source: `Jeis-Jw/bobbin`
 - protocol: `context-common/v2`
 - core entrypoint suffix: `skills/context/scripts/context_cli.py`
 
@@ -17,7 +17,7 @@ Bobbin 1.0.0 uses one package and one `$bobbin:init` entrypoint. User-approval i
 
 Canonical init and workflow first validate the absolute core entrypoint path suffix, matching adjacent Claude/Codex manifests, and the compatible major, then bind the actual SHA-256 for the operation. Before executing further subprocess work they directly validate `context-core-schema/v1`, `context-common/v2`, required doctor/bootstrap/transaction commands, `context-owner-descriptor/v2`, `filesystem-vault/v1`, and the exact doctor shape/state. This executable handshake does not attest marketplace provenance, source, scope, or enabled state.
 
-The decision owner does not install, enable, update, add a marketplace, probe plugin caches, or embed a core runtime. `repository_state=absent` is bootstrap-required; partial/invalid diagnostics are not a global semantic-operation failure unless they overlap an actual target.
+The decision owner uses the core embedded in the same Bobbin package. It does not install, enable, update, add a marketplace, probe plugin caches, or copy a separate runtime. `repository_state=absent` is bootstrap-required; partial/invalid diagnostics are not a global semantic-operation failure unless they overlap an actual target.
 
 ## Semantic claim gate
 

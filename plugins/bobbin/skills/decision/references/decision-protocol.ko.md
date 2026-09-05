@@ -6,13 +6,13 @@ Bobbin 1.0.0의 설치·설정은 단일 `$bobbin:init`을 사용한다. 아래 
 
 ## Dependency boundary
 
-- marketplace: `context-plugins`
-- plugin: `context-core`
-- selector: `context-core@context-plugins`
-- source: `Jeis-Jw/context-plugins`
+- marketplace: `bobbin`
+- plugin: `bobbin`
+- selector: `bobbin@bobbin`
+- source: `Jeis-Jw/bobbin`
 - protocol: `context-common/v2`
 
-`schema`, `capabilities`, `check`, `search`, `read`, `brief`, `spec-view`, `conflicts`, `revisit`는 core 없이 호출할 수 있다. 저수준 write pipeline은 compatibility mode로 `--host`, `--core-inventory @file`, `--core-doctor @file`을 받는다. 일반 workflow와 init은 release contract의 entrypoint path·SHA-256 pin을 먼저 확인한 뒤 그 core의 schema와 doctor를 직접 handshake한다. `doctor.repository_state=absent`는 bootstrap-required state이고 partial/invalid diagnostics는 전역 차단하지 않는다. decision owner는 install, enable, update, marketplace add, cache probing 또는 embedded core를 수행하지 않는다.
+`schema`, `capabilities`, `check`, `search`, `read`, `brief`, `spec-view`, `conflicts`, `revisit`는 core 없이 호출할 수 있다. 저수준 write pipeline은 compatibility mode로 `--host`, `--core-inventory @file`, `--core-doctor @file`을 받는다. 일반 workflow와 init은 같은 Bobbin 패키지에 포함된 core의 entrypoint path·SHA-256 pin을 먼저 확인한 뒤 schema와 doctor를 직접 handshake한다. `doctor.repository_state=absent`는 bootstrap-required state이고 partial/invalid diagnostics는 전역 차단하지 않는다. decision owner는 install, enable, update, marketplace add, cache probing 또는 별도 runtime 복제를 수행하지 않는다.
 
 ## Semantic claim gate
 

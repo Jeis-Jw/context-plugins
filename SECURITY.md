@@ -2,9 +2,9 @@
 
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/Jeis-Jw/context-plugins/security/advisories/new). Do not disclose exploit details, private repository paths, credentials, pending receipts, or user context in a public issue.
+Please report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/Jeis-Jw/bobbin/security/advisories/new). Do not disclose exploit details, private repository paths, credentials, pending receipts, or user context in a public issue.
 
-Bobbin is the product name; the reporting URL remains on the existing repository until its remote rename is explicitly published.
+Bobbin is maintained in the `Jeis-Jw/bobbin` repository.
 
 Security-sensitive areas include vault path containment, approval and lifecycle binding, runtime identity, CAS and lock enforcement, atomic writes and rollback, symlink handling, and protection against applying altered or replayed frozen material.
 

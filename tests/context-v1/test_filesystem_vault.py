@@ -97,7 +97,7 @@ def test_addon_init_and_reads_select_explicit_vault_from_another_project(tmp_pat
 
     preflight = []
     if owner != "decision":
-        inventory = {"plugins": [{"marketplace": "bobbin", "plugin": "bobbin", "source": "Jeis-Jw/context-plugins", "enabled": True, "protocols": ["context-common/v2"], "entrypoint": str(CORE)}]}
+        inventory = {"plugins": [{"marketplace": "bobbin", "plugin": "bobbin", "source": "Jeis-Jw/bobbin", "enabled": True, "protocols": ["context-common/v2"], "entrypoint": str(CORE)}]}
         (caller / "inventory.json").write_text(json.dumps(inventory))
         (caller / "doctor.json").write_text(json.dumps(invoke(CORE, caller, no_git, "--vault", vault, "doctor")))
         preflight = ["--host", "codex", "--core-inventory", "@inventory.json", "--core-doctor", "@doctor.json"]

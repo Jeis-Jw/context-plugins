@@ -114,7 +114,7 @@ def capture(repo: Path, *, identifier: str = "ctx_550e8400e29b41d4a7164466554400
 def write_preflight(root: Path, state: str = "ready", *, entrypoint: Path | None = None) -> tuple[Path, Path]:
     inventory = root / "inventory.json"
     doctor = root / "doctor.json"
-    inventory.write_text(json.dumps({"plugins": [{"marketplace": "bobbin", "plugin": "bobbin", "source": "Jeis-Jw/context-plugins", "enabled": True, "protocols": ["context-common/v2"], "entrypoint": str((entrypoint or CORE_CLI_PATH).resolve())}]}), encoding="utf-8")
+    inventory.write_text(json.dumps({"plugins": [{"marketplace": "bobbin", "plugin": "bobbin", "source": "Jeis-Jw/bobbin", "enabled": True, "protocols": ["context-common/v2"], "entrypoint": str((entrypoint or CORE_CLI_PATH).resolve())}]}), encoding="utf-8")
     doctor.write_text(json.dumps({"schema": "context-core-doctor/v1", "owner": "context-core", "supported_protocols": ["context-common/v2"], "repository_state": state, "root": "context/", "issues": [], "warnings": [], "plugin_version": "1.0.0", "entrypoint": str((entrypoint or CORE_CLI_PATH).resolve()), "protocol": "context-common/v2"}), encoding="utf-8")
     return inventory, doctor
 
