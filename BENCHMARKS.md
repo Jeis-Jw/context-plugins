@@ -2,6 +2,54 @@
 
 These measurements cover bytes and tool I/O bounds; they are not end-to-end model token measurements.
 
+## Bobbin 1.0.0 regression check
+
+On 2026-09-05, compare Bobbin with release-set 0.15.0 commit
+`5bac7b22beb751d2964f93567b4f84b4408063fb` on the same machine, using Python
+3.13.2 and warm filesystem caches. Each read workload has three untimed warmups
+and 31 measured CLI invocations per version, alternating version order. CLI
+startup is included. Reads share the same 4,100 Current + 1,000 History records.
+The candidate uses an explicit-mode project configuration with a shared vault.
+
+| CLI workload | Before median | Bobbin median | Change |
+| --- | ---: | ---: | ---: |
+| Metadata hit | 166.840 ms | 167.575 ms | +0.4% |
+| Metadata miss | 192.966 ms | 195.001 ms | +1.1% |
+| Cross-area recall | 240.197 ms | 240.865 ms | +0.3% |
+| Selected body pack | 171.537 ms | 172.548 ms | +0.6% |
+| Decision check | 299.421 ms | 300.658 ms | +0.4% |
+| Decision record, explicit | 493.876 ms | 501.878 ms | +1.6% |
+
+Auto and adaptive record medians were 500.655 ms and 500.112 ms respectively.
+Writes rotate four lanes in separate, initially empty vaults, each growing
+identically from three warmup records through 31 measured additions. Every write
+must apply, remove its receipt, retain the correct authorization source, and pass
+the final index check. Adaptive timing includes a supplied assessment; it does
+not include the LLM's work to decide whether to ask.
+
+All compared recall results and selected decision bodies were equal. Instrumented
+artifact/index I/O counts and result byte sizes were also equal. Metadata hit and
+miss opened zero artifact bodies; the selected pack opened exactly one. These
+metrics do not include the new project-config reads; their cost is included in
+the CLI timings. Index reads and scoring still scale with corpus size.
+
+This run found a small overhead, not exact performance parity: +0.7–2.0 ms for
+reads and +8.0 ms for explicit recording. It does not establish host/LLM latency,
+token use, answer quality, cold-cache behavior, or large-vault write performance.
+Raw samples, p95 values, I/O counters and runtime source hashes are in
+[the measured evidence](tests/context-v1/evidence/bobbin-1.0.0-regression-python313.json).
+
+To reproduce, extract the baseline into a separate temporary directory without
+switching or resetting the candidate checkout, then run:
+
+```bash
+python3.13 scripts/benchmark_regression.py --baseline /path/to/extracted-0.15.0 --repeats 31
+```
+
+The script writes only temporary fixtures and prints JSON. Timings are observations,
+not a universal performance threshold. The assertions fail on changed read results,
+changed instrumented I/O, failed recording or inconsistent final indexes.
+
 ## Reproducible model-free checks
 
 Run the committed token-I/O fixture from the repository root:

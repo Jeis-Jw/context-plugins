@@ -19,9 +19,9 @@
         "host": "codex",
         "message": "The exact context-core is absent from the current host inventory.",
         "manual_actions": [
-          "Install context-core@context-plugins explicitly from provider marketplace context-plugins (source Jeis-Jw/context-plugins).",
+          "Install bobbin@bobbin explicitly from provider marketplace bobbin (source Jeis-Jw/context-plugins).",
           "Choose the installation scope explicitly.",
-          "Reload the host or start a new session, then run context-decision:init again."
+          "Reload the host or start a new session, then run bobbin:init again."
         ]
       }
     },
@@ -32,7 +32,7 @@
         "plugins": [
           {
             "marketplace": "other-marketplace",
-            "plugin": "context-core",
+            "plugin": "bobbin",
             "source": "Other/context-core",
             "enabled": true,
             "protocols": ["context-common/v2"]
@@ -47,7 +47,7 @@
       "expected_code": "core_source_mismatch",
       "expected_observed": {
         "marketplace": "other-marketplace",
-        "plugin": "context-core",
+        "plugin": "bobbin",
         "source": "Other/context-core",
         "enabled": true,
         "protocol": "context-common/v2",
@@ -58,9 +58,9 @@
         "host": "claude-code",
         "message": "A same-named core has a different marketplace or source coordinate.",
         "manual_actions": [
-          "Install the exact context-core@context-plugins coordinate from source Jeis-Jw/context-plugins explicitly.",
+          "Install the exact bobbin@bobbin coordinate from source Jeis-Jw/context-plugins explicitly.",
           "A same-named plugin from another marketplace does not satisfy the requirement.",
-          "Reload the host or start a new session, then run context-decision:init again."
+          "Reload the host or start a new session, then run bobbin:init again."
         ]
       }
     },
@@ -70,8 +70,8 @@
       "inventory": {
         "plugins": [
           {
-            "marketplace": "context-plugins",
-            "plugin": "context-core",
+            "marketplace": "bobbin",
+            "plugin": "bobbin",
             "source": "Jeis-Jw/context-plugins",
             "enabled": false,
             "protocols": ["context-common/v2"]
@@ -85,8 +85,8 @@
       },
       "expected_code": "core_disabled",
       "expected_observed": {
-        "marketplace": "context-plugins",
-        "plugin": "context-core",
+        "marketplace": "bobbin",
+        "plugin": "bobbin",
         "source": "Jeis-Jw/context-plugins",
         "enabled": false,
         "protocol": "context-common/v2",
@@ -97,8 +97,8 @@
         "host": "codex",
         "message": "The exact context-core is disabled in the current scope.",
         "manual_actions": [
-          "Enable the exact context-core@context-plugins explicitly in the intended scope.",
-          "Reload the host or start a new session, then run context-decision:init again."
+          "Enable the exact bobbin@bobbin explicitly in the intended scope.",
+          "Reload the host or start a new session, then run bobbin:init again."
         ]
       }
     },
@@ -108,8 +108,8 @@
       "inventory": {
         "plugins": [
           {
-            "marketplace": "context-plugins",
-            "plugin": "context-core",
+            "marketplace": "bobbin",
+            "plugin": "bobbin",
             "source": "Jeis-Jw/context-plugins",
             "enabled": true,
             "protocols": ["context-common/v1"]
@@ -123,8 +123,8 @@
       },
       "expected_code": "core_incompatible",
       "expected_observed": {
-        "marketplace": "context-plugins",
-        "plugin": "context-core",
+        "marketplace": "bobbin",
+        "plugin": "bobbin",
         "source": "Jeis-Jw/context-plugins",
         "enabled": true,
         "protocol": "context-common/v1",
@@ -135,8 +135,8 @@
         "host": "claude-code",
         "message": "The exact context-core failed the context-common/v2 handshake.",
         "manual_actions": [
-          "Update the exact context-core@context-plugins explicitly to a context-common/v2-compatible version.",
-          "Reload the host or start a new session, then run context-decision:init again."
+          "Update the exact bobbin@bobbin explicitly to a context-common/v2-compatible version.",
+          "Reload the host or start a new session, then run bobbin:init again."
         ]
       }
     },
@@ -146,8 +146,8 @@
       "inventory": {
         "plugins": [
           {
-            "marketplace": "context-plugins",
-            "plugin": "context-core",
+            "marketplace": "bobbin",
+            "plugin": "bobbin",
             "source": "Jeis-Jw/context-plugins",
             "enabled": true,
             "protocols": ["context-common/v2"]
@@ -161,8 +161,8 @@
       },
       "expected_code": "core_uninitialized",
       "expected_observed": {
-        "marketplace": "context-plugins",
-        "plugin": "context-core",
+        "marketplace": "bobbin",
+        "plugin": "bobbin",
         "source": "Jeis-Jw/context-plugins",
         "enabled": true,
         "protocol": "context-common/v2",
@@ -173,7 +173,7 @@
         "host": "codex",
         "message": "The exact core is ready but the repository requires bootstrap.",
         "manual_actions": [
-          "context-decision:init calls the installed context-core public bootstrap surface.",
+          "bobbin:init calls the installed Bobbin core public bootstrap surface.",
           "The same explicit invocation continues with decision-area registration after core init."
         ]
       }
@@ -184,8 +184,8 @@
       "inventory": {
         "plugins": [
           {
-            "marketplace": "context-plugins",
-            "plugin": "context-core",
+            "marketplace": "bobbin",
+            "plugin": "bobbin",
             "source": "Jeis-Jw/context-plugins",
             "enabled": true,
             "protocols": ["context-common/v2"]
@@ -200,8 +200,8 @@
       },
       "expected_code": "ready",
       "expected_observed": {
-        "marketplace": "context-plugins",
-        "plugin": "context-core",
+        "marketplace": "bobbin",
+        "plugin": "bobbin",
         "source": "Jeis-Jw/context-plugins",
         "enabled": true,
         "protocol": "context-common/v2",
@@ -221,8 +221,8 @@
       "inventory": {
         "plugins": [
           {
-            "marketplace": "context-plugins",
-            "plugin": "context-core",
+            "marketplace": "bobbin",
+            "plugin": "bobbin",
             "source": "Jeis-Jw/context-plugins",
             "enabled": true,
             "protocols": ["context-common/v2"]
@@ -236,8 +236,8 @@
       },
       "expected_code": "ready",
       "expected_observed": {
-        "marketplace": "context-plugins",
-        "plugin": "context-core",
+        "marketplace": "bobbin",
+        "plugin": "bobbin",
         "source": "Jeis-Jw/context-plugins",
         "enabled": true,
         "protocol": "context-common/v2",

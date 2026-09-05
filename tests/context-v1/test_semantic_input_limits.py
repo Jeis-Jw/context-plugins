@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pytest.ini").is_file())
 
 
 def load(name: str, path: Path):
@@ -22,10 +22,10 @@ def load(name: str, path: Path):
     return module
 
 
-core_cli = load("context_core_semantic_limits", ROOT / "plugins/context-core/skills/context/scripts/context_cli.py")
-decision_cli = load("context_decision_semantic_limits", ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py")
-assumption_cli = load("context_assumption_semantic_limits", ROOT / "plugins/context-assumption/skills/assumption/scripts/assumption_cli.py")
-term_cli = load("context_term_semantic_limits", ROOT / "plugins/context-term/skills/term/scripts/term_cli.py")
+core_cli = load("context_core_semantic_limits", ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py")
+decision_cli = load("context_decision_semantic_limits", ROOT / "plugins/bobbin/skills/decision/scripts/decision_cli.py")
+assumption_cli = load("context_assumption_semantic_limits", ROOT / "plugins/bobbin/skills/assumption/scripts/assumption_cli.py")
+term_cli = load("context_term_semantic_limits", ROOT / "plugins/bobbin/skills/term/scripts/term_cli.py")
 
 
 def decision_candidate(decision: str) -> dict:

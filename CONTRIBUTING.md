@@ -1,6 +1,6 @@
-# Contributing to Context Plugins
+# Contributing to Bobbin
 
-Thank you for helping improve Context Plugins. Start with the user-facing [README](./README.md), then read [AGENTS.md](./AGENTS.md) before changing code or contracts.
+Thank you for helping improve Bobbin. Start with the user-facing [README](./README.md), then read [AGENTS.md](./AGENTS.md) before changing code or contracts.
 
 ## Development setup
 
@@ -22,6 +22,8 @@ python3.11 -m pytest -q
 python3.13 -m pytest -q
 python3.11 -m compileall -q plugins tests
 python3.13 -m compileall -q plugins tests
+python3 scripts/sync_distribution.py --check
+python3 scripts/sync_guidance.py --check
 git diff --check
 ```
 
@@ -33,6 +35,8 @@ When changing a public behavior or contract:
 - keep canonical runtime instructions, schemas, identifiers, commands, and machine fields in English;
 - preserve semantic approval, actual-body comparison, core-only physical writes, and bounded recall unless the change explicitly redesigns those contracts;
 - add a record-created regression for retrieval behavior and retain the model-free scale and token-I/O checks;
+- use `plugins/bobbin/.codex-plugin/plugin.json` as the single package/version source; run `scripts/sync_distribution.py` to regenerate the Claude manifest, both catalogs and the profile;
+- use core's `POLICY_BODY` as the managed-guidance source; run `scripts/sync_guidance.py` after changes;
 - update both host catalogs, both plugin manifests, profiles, fixtures, and distribution tests together when source, marketplace, protocol, or version surfaces change.
 
 ## Pull requests and commits

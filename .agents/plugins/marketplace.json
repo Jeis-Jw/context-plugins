@@ -1,103 +1,28 @@
 {
-  "name": "context-plugins",
+  "name": "bobbin",
   "interface": {
-    "displayName": "Context Plugins"
+    "displayName": "Bobbin"
   },
   "metadata": {
     "release_set": {
       "schema": "context-plugin-release-set/v1",
-      "version": "0.15.0",
-      "runtime_compatibility": "same-major-plus-runtime-handshake",
+      "version": "1.0.0",
+      "runtime_compatibility": "single-package",
       "automatic_update": false,
       "members": {
-        "context-core": "0.14.0",
-        "context-decision": "0.14.0",
-        "context-assumption": "0.12.0",
-        "context-term": "0.12.0",
-        "context-intent": "0.12.0",
-        "context-document": "0.13.0"
+        "bobbin": "1.0.0"
       }
     }
   },
   "plugins": [
     {
-      "name": "context-core",
+      "name": "bobbin",
+      "version": "1.0.0",
+      "description": "Keep the thread: durable project context with project-selected features and recording policies.",
       "source": {
         "source": "local",
-        "path": "./plugins/context-core"
+        "path": "./plugins/bobbin"
       },
-      "version": "0.14.0",
-      "description": "Proactive scoped recall and approval-gated context capture with coordinated writes.",
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Productivity"
-    },
-    {
-      "name": "context-decision",
-      "source": {
-        "source": "local",
-        "path": "./plugins/context-decision"
-      },
-      "version": "0.14.0",
-      "description": "Decision continuity with actual-body comparison, proactive conflict notices, and approval-gated capture.",
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Productivity"
-    },
-    {
-      "name": "context-assumption",
-      "source": {
-        "source": "local",
-        "path": "./plugins/context-assumption"
-      },
-      "version": "0.12.0",
-      "description": "Provisional project assumptions with explicit verification conditions and evidence-bound lifecycle transitions.",
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Productivity"
-    },
-    {
-      "name": "context-term",
-      "source": {
-        "source": "local",
-        "path": "./plugins/context-term"
-      },
-      "version": "0.12.0",
-      "description": "Authoritative project terminology with scoped canonical slots and bounded lifecycle transitions.",
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Productivity"
-    },
-    {
-      "name": "context-intent",
-      "source": {
-        "source": "local",
-        "path": "./plugins/context-intent"
-      },
-      "version": "0.12.0",
-      "description": "Authoritative desired directions with scoped slots, optional success criteria, and supersede lifecycle.",
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Productivity"
-    },
-    {
-      "name": "context-document",
-      "source": {
-        "source": "local",
-        "path": "./plugins/context-document"
-      },
-      "version": "0.13.0",
-      "description": "Authoritative living documents with stable scoped slots and same-ID content replacement.",
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"

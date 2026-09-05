@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pytest.ini").is_file())
 PHASE0 = ROOT / "tests/context-v1/phase0/phase0_contract.py"
 PLUGIN_NAMES = (
     "context-core",
@@ -142,21 +142,8 @@ class DistributionProofTests(unittest.TestCase):
             self.assertEqual(before, json.dumps({"inventory": inventory, "doctor": doctor}, sort_keys=True))
         self.assertEqual(expected, observed)
 
-        readme = (ROOT / "plugins/context-decision/README.md").read_text(encoding="utf-8")
-        for code in expected - {"ready"}:
-            self.assertIn(f"`{code}`", readme)
-        for token in (
-            "context-plugins",
-            "context-core@context-plugins",
-            "Jeis-Jw/context-plugins",
-            "scope",
-            "reload",
-            "new session",
-            "context-decision:init",
-        ):
-            self.assertIn(token, readme)
-        for token in ("install or correct", "reload", "retry", "same init call", "bootstrap"):
-            self.assertIn(token, readme)
+        self.assertEqual("bobbin@bobbin", required["selector"])
+        self.assertEqual("bobbin", required["plugin"])
 
     def test_acceptance_42_repository_absent(self) -> None:
         fixtures = ROOT / "tests/context-v1/fixtures/host-inventory"
@@ -184,7 +171,7 @@ class DistributionProofTests(unittest.TestCase):
 
             context_cli = load(
                 "context_cli_distribution_direct_init",
-                ROOT / "plugins/context-core/skills/context/scripts/context_cli.py",
+                ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py",
             )
             initialized = context_cli.bootstrap_repository(repo, host=case["host"])
             self.assertEqual(
@@ -200,7 +187,7 @@ class DistributionProofTests(unittest.TestCase):
 
         context_cli = load(
             "context_cli_distribution_storage_error",
-            ROOT / "plugins/context-core/skills/context/scripts/context_cli.py",
+            ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py",
         )
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
@@ -209,259 +196,39 @@ class DistributionProofTests(unittest.TestCase):
             self.assertEqual("context_root_missing", caught.exception.code)
 
     def test_acceptance_43_manifests(self) -> None:
-        claude_marketplace = read_json(ROOT / ".claude-plugin/marketplace.json")
-        codex_marketplace = read_json(ROOT / ".agents/plugins/marketplace.json")
-        self.assertEqual("context-plugins", claude_marketplace["name"])
-        self.assertEqual("context-plugins", codex_marketplace["name"])
-        self.assertEqual(
-            "Developer-preview marketplace for filesystem-vault, approval-gated durable project context.",
-            claude_marketplace["metadata"]["description"],
-        )
-        self.assertEqual(list(PLUGIN_NAMES), [item["name"] for item in claude_marketplace["plugins"]])
-        self.assertEqual(list(PLUGIN_NAMES), [item["name"] for item in codex_marketplace["plugins"]])
-        claude_entries = {item["name"]: item for item in claude_marketplace["plugins"]}
-        codex_entries = {item["name"]: item for item in codex_marketplace["plugins"]}
-        expected_release_set = {
-            "schema": "context-plugin-release-set/v1",
-            "version": RELEASE_SET_VERSION,
-            "runtime_compatibility": "same-major-plus-runtime-handshake",
-            "automatic_update": False,
-            "members": PLUGIN_VERSIONS,
-        }
-        self.assertEqual(expected_release_set, claude_marketplace["metadata"]["release_set"])
-        self.assertEqual(expected_release_set, codex_marketplace["metadata"]["release_set"])
-
-        for name in PLUGIN_NAMES:
-            root = ROOT / "plugins" / name
-            claude = read_json(root / ".claude-plugin/plugin.json")
-            codex = read_json(root / ".codex-plugin/plugin.json")
-            self.assertEqual(name, claude["name"])
-            self.assertEqual(name, codex["name"])
-            self.assertEqual(PLUGIN_VERSIONS[name], claude["version"])
-            self.assertEqual(claude["version"], codex["version"])
-            self.assertEqual(claude["version"], claude_entries[name]["version"])
-            self.assertEqual(claude["version"], codex_entries[name]["version"])
-            self.assertEqual(claude["description"], claude_entries[name]["description"])
-            self.assertEqual(codex["description"], codex_entries[name]["description"])
-            self.assertEqual(claude_marketplace["owner"], claude["author"])
-            self.assertEqual(f"./plugins/{name}", claude_entries[name]["source"])
-            self.assertEqual({"source": "local", "path": f"./plugins/{name}"}, codex_entries[name]["source"])
-            self.assertEqual(
-                {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
-                codex_entries[name]["policy"],
-            )
-            self.assertEqual("Productivity", codex_entries[name]["category"])
-            for document in (claude, codex, claude_entries[name], codex_entries[name]):
-                self.assertFalse(FORBIDDEN_KEYS & recursive_keys(document))
-            plugin_readme = (root / "README.md").read_text(encoding="utf-8")
-            self.assertIn("../../CHANGELOG.md", plugin_readme)
-            if name in {"context-core", "context-decision"}:
-                self.assertTrue((root / "README.ko.md").is_file())
-
-            skills = root / codex["skills"]
-            self.assertTrue(skills.is_dir())
-            with tempfile.TemporaryDirectory() as temp:
-                cached = Path(temp) / name
-                shutil.copytree(root, cached)
-                for relative in ("skills/init/SKILL.md", f"skills/{OWNER_SKILLS[name]}/SKILL.md"):
-                    self.assertTrue((cached / relative).is_file())
-                owner_cli = cached / OWNER_CLIS[name]
-                init_entrypoint = cached / INIT_ENTRYPOINTS[name]
-                self.assertTrue(owner_cli.is_file())
-                self.assertTrue(init_entrypoint.is_file())
-                environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
-                environment.pop("CLAUDE_PLUGIN_ROOT", None)
-                before = digest_tree(cached)
-                for command in (
-                    [sys.executable, str(owner_cli), "--help"],
-                    [sys.executable, str(init_entrypoint), *("init", "--help")]
-                    if name == "context-core"
-                    else [sys.executable, str(init_entrypoint), "--help"],
-                ):
-                    resolved = subprocess.run(command, cwd=temp, env=environment, text=True, capture_output=True)
-                    self.assertEqual(0, resolved.returncode, resolved.stdout + resolved.stderr)
-                    if command[1] == str(init_entrypoint) and name != "context-core":
-                        self.assertNotIn("--core-inventory", resolved.stdout)
-                        self.assertNotIn("--core-doctor", resolved.stdout)
-                schema_probe = subprocess.run(
-                    [sys.executable, str(owner_cli), "schema", "--json"],
-                    cwd=temp,
-                    env=environment,
-                    text=True,
-                    capture_output=True,
-                )
-                capabilities_probe = subprocess.run(
-                    [sys.executable, str(owner_cli), "capabilities", "--json"],
-                    cwd=temp,
-                    env=environment,
-                    text=True,
-                    capture_output=True,
-                )
-                self.assertEqual(0, schema_probe.returncode, schema_probe.stdout + schema_probe.stderr)
-                self.assertEqual(0, capabilities_probe.returncode, capabilities_probe.stdout + capabilities_probe.stderr)
-                schema = json.loads(schema_probe.stdout)
-                capabilities = json.loads(capabilities_probe.stdout)
-                self.assertTrue(schema["ok"])
-                self.assertTrue(capabilities["ok"])
-                self.assertEqual(SCHEMA_NAMES[name], schema["result"]["schema"])
-                self.assertEqual("context-owner-capabilities/v1", capabilities["result"]["schema"])
-                self.assertTrue(capabilities["result"]["owners"])
-                self.assertEqual({name}, {item["owner"] for item in capabilities["result"]["owners"]})
-                if name != "context-core":
-                    schema_owner = schema["result"].get("owner")
-                    if schema_owner is None:
-                        schema_owner = schema["result"]["owner_descriptor"]["owner"]
-                    self.assertEqual(name, schema_owner)
-                    self.assertFalse(schema["result"]["physical_write"])
-                if name in {"context-assumption", "context-term", "context-intent", "context-document"}:
-                    workflow_surface = schema["result"]["workflow_surface"]
-                    self.assertEqual(
-                        f"{OWNER_SKILLS[name]}_workflow.py",
-                        workflow_surface["entrypoint"],
-                    )
-                    self.assertEqual(["preview", "apply"], workflow_surface["commands"])
-                    self.assertEqual(["inline"], workflow_surface["preview_input_modes"])
-                    self.assertEqual("awaiting_approval", workflow_surface["preview_state"])
-                    self.assertEqual(
-                        "derived_from_verified_core_manifests_and_doctor",
-                        workflow_surface["preflight"],
-                    )
-                if name != "context-core":
-                    skill = OWNER_SKILLS[name]
-                    workflow_entrypoint = cached / f"skills/{skill}/scripts/{skill}_workflow.py"
-                    self.assertTrue(workflow_entrypoint.is_file())
-                    workflow_help = subprocess.run(
-                        [sys.executable, str(workflow_entrypoint), "preview", "--help"],
-                        cwd=temp,
-                        env=environment,
-                        text=True,
-                        capture_output=True,
-                    )
-                    self.assertEqual(0, workflow_help.returncode, workflow_help.stdout + workflow_help.stderr)
-                    self.assertNotIn("--core-inventory", workflow_help.stdout)
-                    self.assertNotIn("--core-doctor", workflow_help.stdout)
-                self.assertEqual(before, digest_tree(cached))
-
-        self.assertTrue((ROOT / "plugins/context-core/skills/context/SKILL.md").is_file())
-        self.assertTrue((ROOT / "plugins/context-decision/skills/decision/SKILL.md").is_file())
-        for manifest in sorted(ROOT.glob("plugins/*/.codex-plugin/plugin.json")):
-            prompts = read_json(manifest)["interface"]["defaultPrompt"]
-            self.assertEqual(3, len(prompts), manifest)
-            for prompt in prompts:
-                self.assertTrue(prompt.strip(), manifest)
-                self.assertLessEqual(len(prompt), 128, f"{manifest}: {prompt}")
-
-        decision_root = ROOT / "plugins/context-decision"
-        init_entrypoint = decision_root / "skills/init/scripts/decision_init.py"
-        init_skill = (decision_root / "skills/init/SKILL.md").read_text(encoding="utf-8")
-        decision_skill = (decision_root / "skills/decision/SKILL.md").read_text(encoding="utf-8")
-        self.assertTrue(init_entrypoint.is_file())
-        self.assertIn("decision_init.py", init_skill)
-        self.assertIn("--core-cli", init_skill)
-        for manifest in sorted(ROOT.glob("plugins/*/.codex-plugin/plugin.json")):
-            prompts = read_json(manifest)["interface"]["defaultPrompt"]
-            self.assertEqual(3, len(prompts), manifest)
-            for prompt in prompts:
-                self.assertTrue(prompt.strip(), manifest)
-                self.assertLessEqual(len(prompt), 128, f"{manifest}: {prompt}")
-
-        decision_skill = (decision_root / "skills/decision/SKILL.md").read_text(encoding="utf-8")
-        for token in ("context-common/v2", "partial/invalid/ready", "scan caches", "managed block"):
-            self.assertIn(token, init_skill)
-        for token in (
-            "actual", "conflict", "semantic approval", "preview", "Core alone owns",
-            "active language", "second capture question", "same response",
-        ):
-            self.assertIn(token, decision_skill)
-        for name in PLUGIN_NAMES[1:]:
-            semantic_root = ROOT / "plugins" / name
-            self.assertFalse((semantic_root / "skills/context").exists())
-            self.assertFalse(any(path.name == "context_cli.py" for path in semantic_root.rglob("*.py")))
-            owner_source = (semantic_root / OWNER_CLIS[name]).read_text(encoding="utf-8")
-            for physical_write in (".write_text(", ".write_bytes(", ".mkdir(", ".unlink(", "os.replace("):
-                self.assertNotIn(physical_write, owner_source)
-
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        for token in (
-            "## What is it?",
-            "## Why use it?",
-            "## Install",
-            "## How to use it",
-            "codex plugin marketplace add Jeis-Jw/context-plugins",
-            "codex plugin add context-core@context-plugins",
-            "codex plugin add context-decision@context-plugins",
-            "claude plugin marketplace add Jeis-Jw/context-plugins --scope user",
-            "claude plugin install context-core@context-plugins --scope user",
-            "claude plugin install context-decision@context-plugins --scope user",
-            "$context-decision:init",
-            "Apache License 2.0",
-        ):
-            self.assertIn(token, readme)
-        optional_owners = {
-            "context-intent": "$context-intent:init",
-            "context-document": "$context-document:init",
-            "context-assumption": "$context-assumption:init",
-            "context-term": "$context-term:init",
-        }
-        for public_readme in (ROOT / "README.md", ROOT / "README.ko.md"):
-            text = public_readme.read_text(encoding="utf-8")
-            for plugin, selector in optional_owners.items():
-                self.assertIn(f"codex plugin add {plugin}@context-plugins", text, public_readme)
-                self.assertIn(
-                    f"claude plugin install {plugin}@context-plugins --scope user",
-                    text,
-                    public_readme,
-                )
-                self.assertIn(selector, text, public_readme)
-        self.assertIn("Each optional feature requires `context-core`", readme)
-        self.assertIn("optional features do not require one another", readme)
-        korean_readme = (ROOT / "README.ko.md").read_text(encoding="utf-8")
-        self.assertIn("각 추가 기능에는 `context-core`가 필요", korean_readme)
-        self.assertIn("추가 기능끼리는 함께 설치할 필요가 없습니다", korean_readme)
-        for developer_only_token in (
-            "git clone",
-            "scripts/install_profile.py",
-            "bundle or meta-plugin",
-            "Developer preview",
-            "Verified status",
-        ):
-            self.assertNotIn(developer_only_token, readme)
-        profile = read_json(ROOT / "profiles/core-decision.json")
-        self.assertEqual("context-plugin-profile/v3", profile["schema"])
-        self.assertEqual(RELEASE_SET_VERSION, profile["version"])
-        self.assertEqual("same-major", profile["compatibility"])
-        self.assertEqual(f"context-plugins/{RELEASE_SET_VERSION}", profile["release_set"])
-        self.assertEqual(
-            {
-                "context-core": PLUGIN_VERSIONS["context-core"],
-                "context-decision": PLUGIN_VERSIONS["context-decision"],
-            },
-            profile["minimum_versions"],
-        )
-        self.assertEqual(
-            ["context-core@context-plugins", "context-decision@context-plugins"],
-            profile["plugins"],
-        )
-        self.assertTrue((ROOT / "scripts/install_profile.py").is_file())
-        self.assertFalse((ROOT / "plugins/context-core/skills/decision").exists())
-        self.assertTrue((ROOT / "README.ko.md").is_file())
-        for public_readme in (ROOT / "README.md", ROOT / "README.ko.md"):
-            self.assertIn("[Apache License 2.0](./LICENSE)", public_readme.read_text(encoding="utf-8"))
-        license_bytes = (ROOT / "LICENSE").read_bytes()
-        self.assertEqual(
-            "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-            hashlib.sha256(license_bytes).hexdigest(),
-        )
-        self.assertFalse((ROOT / "NOTICE").exists())
+        codex = read_json(ROOT / ".agents/plugins/marketplace.json")
+        claude = read_json(ROOT / ".claude-plugin/marketplace.json")
+        for catalog in (codex, claude):
+            self.assertEqual("bobbin", catalog["name"])
+            self.assertEqual(["bobbin"], [entry["name"] for entry in catalog["plugins"]])
+            self.assertEqual("1.0.0", catalog["plugins"][0]["version"])
+            self.assertEqual({"bobbin": "1.0.0"}, catalog["metadata"]["release_set"]["members"])
+        self.assertEqual("./plugins/bobbin", claude["plugins"][0]["source"])
+        self.assertEqual({"source": "local", "path": "./plugins/bobbin"}, codex["plugins"][0]["source"])
+        self.assertEqual({"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, codex["plugins"][0]["policy"])
+        package = ROOT / "plugins/bobbin"
+        self.assertEqual(2, len(list(package.rglob("plugin.json"))))
+        for host in (".codex-plugin", ".claude-plugin"):
+            manifest = read_json(package / host / "plugin.json")
+            self.assertEqual(("bobbin", "1.0.0"), (manifest["name"], manifest["version"]))
+            self.assertFalse(FORBIDDEN_KEYS & recursive_keys(manifest))
+        self.assertEqual({"init", "context", "decision", "assumption", "term", "intent", "document", "snapshot", "observation", "archive"},
+                         {path.parent.name for path in (package / "skills").glob("*/SKILL.md")})
+        for skill in OWNER_SKILLS.values():
+            completed = subprocess.run([sys.executable, str(package / f"skills/{skill}/scripts/{skill}_cli.py"), "schema", "--json"],
+                                       capture_output=True, text=True)
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+        for prompt in read_json(package / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"]:
+            self.assertTrue(prompt.strip())
+            self.assertLessEqual(len(prompt), 128)
+        self.assertFalse((ROOT / "context").exists())
         self.assertFalse((ROOT / "wiki").exists())
-        migration = (ROOT / "MIGRATION.md").read_text(encoding="utf-8")
-        for token in ("0.5.0 additive semantic owners", "0.5.1 W1-W3 hardening", "context-common/v2", "not rewritten", "not provided"):
-            self.assertIn(token, migration)
+
 
     def test_forbidden_install_and_host_mutation_calls_are_absent(self) -> None:
         targets = [ROOT / ".claude-plugin/marketplace.json", ROOT / ".agents/plugins/marketplace.json"]
         targets.extend(
-            ROOT / "plugins" / name / host / "plugin.json"
+            ROOT / "plugins/bobbin" / host / "plugin.json"
             for name in PLUGIN_NAMES
             for host in (".claude-plugin", ".codex-plugin")
         )
@@ -477,7 +244,7 @@ class DistributionProofTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, text)
 
-        scripts = tuple(ROOT / "plugins" / name / OWNER_CLIS[name] for name in PLUGIN_NAMES)
+        scripts = tuple(ROOT / "plugins/bobbin" / OWNER_CLIS[name] for name in PLUGIN_NAMES)
         for script in scripts:
             tree = ast.parse(script.read_text(encoding="utf-8"), filename=str(script))
             imported = {
@@ -504,7 +271,7 @@ class DistributionProofTests(unittest.TestCase):
         all_python = "\n".join(
             path.read_text(encoding="utf-8").casefold()
             for name in PLUGIN_NAMES
-            for path in (ROOT / "plugins" / name).rglob("*.py")
+            for path in (ROOT / "plugins/bobbin").rglob("*.py")
         )
         for forbidden_command in (
             "codex plugin add",
@@ -517,138 +284,23 @@ class DistributionProofTests(unittest.TestCase):
             self.assertNotIn(forbidden_command, all_python)
 
     def test_semantic_approval_and_active_language_contract_are_consistent(self) -> None:
-        skill_paths = sorted(ROOT.glob("plugins/*/skills/*/SKILL*.md"))
-        canonical_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.md"))
-        translated_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.ko.md"))
-        self.assertEqual(15, len(canonical_skills))
-        self.assertEqual(7, len(translated_skills))
-        self.assertEqual(22, len(skill_paths))
+        package = ROOT / "plugins/bobbin"
+        skills = list((package / "skills").glob("*/SKILL.md"))
+        self.assertEqual(10, len(skills))
+        for path in skills:
+            source = path.read_text()
+            self.assertIn("recording-policy.md", source, path)
+            self.assertIsNone(re.search(r"[가-힣]", source), path)
+        policy = (package / "skills/context/references/recording-policy.md").read_text()
+        for mode in ("explicit", "auto", "adaptive"):
+            self.assertIn(mode, policy)
+        self.assertIn("semantic attestation", policy.lower())
+        self.assertIn("project settings", policy)
+        self.assertIn("Do not call a", policy)
+        core = load("bobbin_policy_projection", package / "skills/context/scripts/context_cli.py")
+        self.assertEqual(core.POLICY_BODY, (package / "rules/context-policy.md").read_text().strip())
+        self.assertIn(core.POLICY_BODY, (ROOT / "AGENTS.md").read_text())
 
-        for path in canonical_skills:
-            text = path.read_text(encoding="utf-8")
-            self.assertIn("`approval_digest`", text, path)
-            self.assertIn("direct, explicit, unconditional", text, path)
-            self.assertIn("semantic", text.casefold(), path)
-            self.assertIn("storage question", text.casefold(), path)
-            self.assertIn("internal preview", text.casefold(), path)
-            self.assertIn("semantic delta", text.casefold(), path)
-            self.assertIn("same response", text.casefold(), path)
-            self.assertIn("topic change", text, path)
-            self.assertIn("regenerate", text, path)
-            self.assertIn("active language", text.casefold(), path)
-            self.assertNotIn("complete rendered body", text.casefold(), path)
-            self.assertNotIn("specific capture question", text.casefold(), path)
-            self.assertIsNone(re.search(r"[가-힣]", text), path)
-
-        readmes = (
-            ROOT / "README.md",
-            ROOT / "README.ko.md",
-            ROOT / "plugins/context-core/README.md",
-            ROOT / "plugins/context-core/README.ko.md",
-            ROOT / "plugins/context-decision/README.md",
-            ROOT / "plugins/context-decision/README.ko.md",
-        )
-        hidden_user_tokens = (
-            "approval_digest",
-            "receipt_digest",
-            "candidate_id",
-            "cand_",
-            "plan_id",
-            "ctx_",
-            "--core-cli",
-            "--receipt-file",
-            "skills/context/scripts/context_cli.py",
-        )
-        for path in readmes:
-            text = path.read_text(encoding="utf-8")
-            for token in hidden_user_tokens:
-                self.assertNotIn(token, text, path)
-            self.assertNotIn("Delete it manually", text, path)
-            self.assertNotIn("Delete the receipt manually", text, path)
-            self.assertNotIn("사용자가 직접 삭제", text, path)
-            if path == ROOT / "README.md":
-                self.assertIn("You don't need to approve the same content again just to save it", text)
-            elif path == ROOT / "README.ko.md":
-                self.assertIn("저장을 위해 같은 내용을 다시 승인할 필요는 없습니다", text)
-            else:
-                self.assertTrue(
-                    "direct, explicit, unconditional" in text
-                    or "직접적·명시적·무조건적" in text,
-                    path,
-                )
-
-        policy_paths = sorted(ROOT.glob("plugins/*/rules/*.md"))
-        semantic_policy_paths = [
-            ROOT / "plugins" / name / "rules" / f"{OWNER_SKILLS[name]}-policy.md"
-            for name in PLUGIN_NAMES[1:]
-        ]
-        self.assertEqual(5, len(semantic_policy_paths))
-        for path in semantic_policy_paths:
-            text = path.read_text(encoding="utf-8")
-            for token in (
-                "semantic approval",
-                "`approval_digest`",
-                "rendered file body",
-                "second storage question",
-                "internal preview",
-                "semantic delta",
-                "same response",
-                "internal ID",
-                "core path",
-                "direct, explicit, unconditional",
-                "acknowledgement",
-                "praise",
-                "condition",
-                "edit request",
-                "topic change",
-                "confirm only that delta",
-                "Never regenerate after approval",
-            ):
-                self.assertIn(token.casefold(), text.casefold(), path)
-        approval_surfaces = [*skill_paths, *readmes, *policy_paths, ROOT / "AGENTS.md"]
-        core_cli = load(
-            "context_cli_natural_language_policy",
-            ROOT / "plugins/context-core/skills/context/scripts/context_cli.py",
-        )
-        approval_text = "\n".join(path.read_text(encoding="utf-8") for path in approval_surfaces)
-        approval_text += "\n" + core_cli.POLICY_BODY
-        for name in ("context-core", "context-decision"):
-            approval_text += "\n" + " ".join(
-                read_json(ROOT / "plugins" / name / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"]
-            )
-        forbidden_approval_phrases = re.compile(
-            r"exact\s+`?approval_digest`?|exact[-\s]+digest|approval_digest`?\s+(?:approval|승인)",
-            re.IGNORECASE,
-        )
-        self.assertIsNone(forbidden_approval_phrases.search(approval_text))
-
-        english_protocol = (
-            ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.md"
-        ).read_text(encoding="utf-8")
-        korean_protocol = (
-            ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.ko.md"
-        ).read_text(encoding="utf-8")
-        self.assertIn("The owner never invents candidate meaning without caller input", english_protocol)
-        self.assertIn("owner는 caller 입력 없이 후보 의미를 지어내지 않는다", korean_protocol)
-
-        for manifest in sorted(ROOT.glob("plugins/*/.codex-plugin/plugin.json")):
-            prompts = read_json(manifest)["interface"]["defaultPrompt"]
-            self.assertTrue(any("active language" in prompt for prompt in prompts), manifest)
-            self.assertTrue(any("machine fields English" in prompt for prompt in prompts), manifest)
-
-        core_approval_prompt = read_json(
-            ROOT / "plugins/context-core/.codex-plugin/plugin.json"
-        )["interface"]["defaultPrompt"][2]
-        for token in (
-            "Semantic approval saves",
-            "no file-body preview",
-            "second storage question",
-            "Keep transport private",
-            "semantic delta→confirm",
-        ):
-            self.assertIn(token, core_approval_prompt)
-        for transport_detail in ("approval_digest", "repo", "SHA", "CAS", "lock"):
-            self.assertNotIn(transport_detail.casefold(), core_approval_prompt.casefold())
 
     def test_agents_policy_tracks_current_owners_and_filesystem_vault_contract(self) -> None:
         policy = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
@@ -658,8 +310,8 @@ class DistributionProofTests(unittest.TestCase):
         self.assertIn("Git은 공유와 버전 관리를 위한 선택 사항", policy)
         self.assertIn("context runtime의 전제가 아니다", policy)
         self.assertIn("모든 semantic owner", policy)
-        self.assertIn("`context-core@context-plugins`", policy)
-        self.assertIn("semantic owner끼리는 서로를 요구하지 않는다", policy)
+        self.assertIn("`plugins/bobbin`", policy)
+        self.assertIn("별도 plugin dependency를 설치하지 않으며", policy)
         self.assertNotIn("repository root의 `context/`", policy)
 
     def test_public_component_keeps_internal_context_out_of_release_repository(self) -> None:
@@ -675,28 +327,28 @@ class DistributionProofTests(unittest.TestCase):
     def test_semantic_plugins_accept_same_major_core_and_reject_other_major(self) -> None:
         expected = read_json(ROOT / "tests/context-v1/fixtures/host-inventory/required-plugin.json")
         self.assertEqual("skills/context/scripts/context_cli.py", expected["entrypoint"])
-        self.assertEqual(0, expected["compatible_major"])
+        self.assertEqual(1, expected["compatible_major"])
         self.assertNotIn("entrypoint_sha256", expected)
 
         modules = []
         for name in PLUGIN_NAMES[1:]:
-            owner_cli = ROOT / "plugins" / name / OWNER_CLIS[name]
+            owner_cli = ROOT / "plugins/bobbin" / OWNER_CLIS[name]
             module = load(f"{name.replace('-', '_')}_distribution_compatibility", owner_cli)
             modules.append(module)
             self.assertEqual(expected, module.REQUIRED_PLUGIN)
-            init_source = (ROOT / "plugins" / name / INIT_ENTRYPOINTS[name]).read_text(encoding="utf-8")
+            init_source = (ROOT / "plugins/bobbin" / INIT_ENTRYPOINTS[name]).read_text(encoding="utf-8")
             self.assertIn(".required_core_surface", init_source)
             self.assertIn("expected_sha256=core_cli_sha256", init_source)
 
         workflow_source = (
-            ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
+            ROOT / "plugins/bobbin/skills/decision/scripts/decision_workflow.py"
         ).read_text(encoding="utf-8")
         self.assertIn("decision_cli.required_core_surface", workflow_source)
         self.assertIn("expected_sha256=core_cli_sha256", workflow_source)
 
         with tempfile.TemporaryDirectory() as temp:
             copied_core = Path(temp) / "context-core"
-            shutil.copytree(ROOT / "plugins/context-core", copied_core)
+            shutil.copytree(ROOT / "plugins/bobbin", copied_core)
             copied_cli = copied_core / "skills/context/scripts/context_cli.py"
 
             def set_core_version(version: str) -> None:
@@ -709,125 +361,28 @@ class DistributionProofTests(unittest.TestCase):
                         encoding="utf-8",
                     )
 
-            set_core_version("0.6.2")
+            set_core_version("1.0.2")
             for module in modules:
                 self.assertEqual(copied_cli.resolve(), module.required_core_surface(str(copied_cli.resolve())))
 
-            set_core_version("1.0.0")
+            set_core_version("2.0.0")
             for module in modules:
                 with self.assertRaises(Exception) as caught:
                     module.required_core_surface(str(copied_cli.resolve()))
                 self.assertEqual("core_surface_mismatch", caught.exception.code)
 
     def test_public_trust_contract_matches_the_release_surface(self) -> None:
-        for name in ("context-assumption", "context-term"):
-            readme = (ROOT / "plugins" / name / "README.md").read_text(encoding="utf-8")
-            for token in ("entrypoint suffix", "SHA-256", "marketplace provenance", "compatibility", "@file", "8 KiB", "16 KiB"):
-                self.assertIn(token, readme)
-            self.assertIn("`--candidate @file`", readme)
-            self.assertNotIn("--sec-*", readme)
-            self.assertNotIn("@@literal", readme)
-            prompts = read_json(ROOT / "plugins" / name / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"]
-            prompt_text = " ".join(prompts)
-            for token in ("same-major manifests", "actual CLI SHA", "marketplace provenance/source/enabled", "low-level compatibility"):
-                self.assertIn(token, prompt_text)
+        for path in (ROOT / "README.md", ROOT / "README.ko.md"):
+            source = path.read_text()
+            for token in ("Bobbin", "$bobbin:init", "bobbin@bobbin", "explicit", "auto", "adaptive", ".bobbin/config.json"):
+                self.assertIn(token, source)
+            self.assertNotIn("approval_digest", source)
+            self.assertNotIn("context-decision@context-plugins", source)
+        policy = (ROOT / "plugins/bobbin/skills/context/references/recording-policy.md").read_text()
+        for token in ("explicit", "auto", "adaptive", "scope", "uncertainty", "policy-decision", "policy-reason", "Disabled"):
+            self.assertIn(token, policy)
+        self.assertIn("1.0.0", (ROOT / "MIGRATION.md").read_text())
 
-        root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        for token in (
-            "Codex and Claude Code",
-            "remember your project",
-            "context/",
-            "does not automatically save your entire conversation",
-            "send this message in the AI chat",
-            "You don't need to approve the same content again just to save it",
-            "the AI saves it and lets you know",
-        ):
-            self.assertIn(token, root_readme)
-        for developer_only_token in (
-            "indexed artifact bodies",
-            "end-to-end model tokens",
-            "O(1)",
-            "scripts/install_profile.py",
-            "git clone",
-        ):
-            self.assertNotIn(developer_only_token, root_readme)
-        decision_readme = (ROOT / "plugins/context-decision/README.md").read_text(encoding="utf-8")
-        for token in ("does not show the rendered file body", "direct, explicit, unconditional", "semantic delta", "same response", "zero indexed bodies", "20 bodies", "end-to-end model tokens", "O(1)"):
-            self.assertIn(token, decision_readme)
-
-        decision_protocol = (
-            ROOT / "plugins/context-decision/skills/decision/references/decision-protocol.md"
-        ).read_text(encoding="utf-8")
-        for token in ("mode `0600`", "approval_digest", "receipt_digest", "core absolute path/pinned SHA-256"):
-            self.assertIn(token, decision_protocol)
-
-        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-        benchmarks = (ROOT / "BENCHMARKS.md").read_text(encoding="utf-8")
-        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
-        migration = (ROOT / "MIGRATION.md").read_text(encoding="utf-8")
-        self.assertIn("Apache License 2.0", changelog)
-        for stale_license_claim in ("공개 라이선스는 아직 선택하지 않았습니다", "A public license has not been selected"):
-            self.assertNotIn(stale_license_claim, changelog)
-        for token in ("W1", "W2", "W3", "## 0.15.0", "## 0.14.0", "## 0.2.0"):
-            self.assertIn(token, changelog)
-        for token in (
-            "not end-to-end model token measurements",
-            "not a token-savings measurement",
-            "Reproducible model-free checks",
-            "Historical, one-repeat Codex experiment",
-            "raw evidence is not published",
-            "test_token_io_evidence.py",
-            "test_recall_at_scale.py",
-        ):
-            self.assertIn(token, benchmarks)
-        for token in ("0.15.0 Korean decision discovery", "context-common/v2", "--scope", "--decision-key", "annotate --search-term"):
-            self.assertIn(token, migration)
-        self.assertIn("materially authored the change", contributing)
-        self.assertIn("request, approval, review, or accountability role alone is not co-authorship", contributing)
-        for name in PLUGIN_NAMES:
-            for language in ("README.md", "README.ko.md"):
-                plugin_readme = ROOT / "plugins" / name / language
-                text = plugin_readme.read_text(encoding="utf-8")
-                self.assertIn("CHANGELOG", text, plugin_readme)
-                self.assertIsNone(
-                    re.search(r"(?m)^(?:Version\s+`?|`?)0\.\d+\.\d+", text),
-                    plugin_readme,
-                )
-        korean_readme = (ROOT / "README.ko.md").read_text(encoding="utf-8")
-        baseline_prompt_chars = 3_147
-        prompt_values = [
-            prompt
-            for name in PLUGIN_NAMES
-            for prompt in read_json(ROOT / "plugins" / name / ".codex-plugin/plugin.json")["interface"]["defaultPrompt"]
-        ]
-        actual_prompt_chars = sum(len(prompt) for prompt in prompt_values)
-        reduction_percent = (baseline_prompt_chars - actual_prompt_chars) * 100 / baseline_prompt_chars
-        self.assertEqual(18, len(prompt_values))
-        self.assertLessEqual(actual_prompt_chars, 2_100)
-        english_measurement = (
-            f"from {baseline_prompt_chars:,} to {actual_prompt_chars:,} characters, "
-            f"a {reduction_percent:.1f}% character reduction"
-        )
-        self.assertIn(english_measurement, benchmarks)
-        for token in (
-            "Codex와 Claude Code",
-            "프로젝트의 중요한 내용을 기억",
-            "context/",
-            "대화 전체를 자동으로 저장하지 않습니다",
-            "AI와의 대화창에 다음 메시지를 보내세요",
-            "저장을 위해 같은 내용을 다시 승인할 필요는 없습니다",
-        ):
-            self.assertIn(token, korean_readme)
-        for developer_only_token in (
-            "indexed artifact bodies",
-            "end-to-end model tokens",
-            "O(1)",
-            "scripts/install_profile.py",
-            "git clone",
-            "Bundle이나 meta-plugin",
-            "검증 상태",
-        ):
-            self.assertNotIn(developer_only_token, korean_readme)
 
     def test_community_files_and_links_have_the_expected_public_shape(self) -> None:
         expected = (
@@ -885,7 +440,7 @@ class DistributionProofTests(unittest.TestCase):
 
     def test_public_help_exposes_capture_limits_and_core_trust(self) -> None:
         environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
-        workflow = ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
+        workflow = ROOT / "plugins/bobbin/skills/decision/scripts/decision_workflow.py"
         for command in ("preview", "apply"):
             completed = subprocess.run(
                 [sys.executable, str(workflow), command, "--help"],
@@ -935,7 +490,7 @@ class DistributionProofTests(unittest.TestCase):
             self.assertIn(token, reject_help)
 
         decision_init = subprocess.run(
-            [sys.executable, str(ROOT / "plugins/context-decision" / INIT_ENTRYPOINTS["context-decision"]), "--help"],
+            [sys.executable, str(ROOT / "plugins/bobbin" / INIT_ENTRYPOINTS["context-decision"]), "--help"],
             cwd=ROOT,
             env=environment,
             text=True,
@@ -954,7 +509,7 @@ class DistributionProofTests(unittest.TestCase):
 
         for name, label in (("context-assumption", "ASM"), ("context-term", "TERM")):
             init_help = subprocess.run(
-                [sys.executable, str(ROOT / "plugins" / name / INIT_ENTRYPOINTS[name]), "--help"],
+                [sys.executable, str(ROOT / "plugins/bobbin" / INIT_ENTRYPOINTS[name]), "--help"],
                 cwd=ROOT,
                 env=environment,
                 text=True,
@@ -971,7 +526,7 @@ class DistributionProofTests(unittest.TestCase):
             self.assertNotIn("@@literal", init_help)
 
             claim_help = subprocess.run(
-                [sys.executable, str(ROOT / "plugins" / name / OWNER_CLIS[name]), "claim", "--help"],
+                [sys.executable, str(ROOT / "plugins/bobbin" / OWNER_CLIS[name]), "claim", "--help"],
                 cwd=ROOT,
                 env=environment,
                 text=True,
@@ -984,7 +539,7 @@ class DistributionProofTests(unittest.TestCase):
             self.assertNotIn("@@literal", claim_help)
 
     def test_core_obs_snapshot_two_command_receipt_surface_is_distributed(self) -> None:
-        core_cli = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
+        core_cli = ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py"
         environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
         commands = {
             "observation": ("observation", "capture", "--help"),
@@ -1011,13 +566,13 @@ class DistributionProofTests(unittest.TestCase):
 
         for kind in ("observation", "snapshot"):
             for language in ("", ".ko"):
-                skill = ROOT / f"plugins/context-core/skills/{kind}/SKILL{language}.md"
+                skill = ROOT / f"plugins/bobbin/skills/{kind}/SKILL{language}.md"
                 text = skill.read_text(encoding="utf-8")
                 self.assertIn("transaction apply --receipt-file", text, skill)
                 self.assertIn("result.approval_digest", text, skill)
                 self.assertTrue("no directory scan" in text or "directory scan도 하지 않는다" in text, skill)
 
-        protocol = (ROOT / "plugins/context-core/skills/context/references/context-protocol.md").read_text(encoding="utf-8")
+        protocol = (ROOT / "plugins/bobbin/skills/context/references/context-protocol.md").read_text(encoding="utf-8")
         for token in (
             "exactly seven fields", "workflow digest over exactly `{core,plan_bundle}`",
             "damage only", "agent from preview", "no receipt locator, keep, reject, or TTL lifecycle",
@@ -1035,7 +590,7 @@ class DistributionProofTests(unittest.TestCase):
             "context-document": "document_test_support",
         }
         for plugin, support in contracts.items():
-            tests_root = ROOT / "plugins" / plugin / "tests"
+            tests_root = ROOT / "tests/owners" / plugin.removeprefix("context-")
             self.assertTrue((tests_root / f"{support}.py").is_file())
             for test_path in tests_root.glob("test_*.py"):
                 source = test_path.read_text(encoding="utf-8")

@@ -11,8 +11,8 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
-CORE_CLI = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pytest.ini").is_file())
+CORE_CLI = ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py"
 CASES = {
     "intent": {
         "preview": [
@@ -76,8 +76,8 @@ class OwnerInlineWorkflowTests(unittest.TestCase):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temp:
                 vault = Path(temp) / "vault"
                 vault.mkdir()
-                owner_cli_path = ROOT / f"plugins/context-{kind}/skills/{kind}/scripts/{kind}_cli.py"
-                workflow_path = ROOT / f"plugins/context-{kind}/skills/{kind}/scripts/{kind}_workflow.py"
+                owner_cli_path = ROOT / f"plugins/bobbin/skills/{kind}/scripts/{kind}_cli.py"
+                workflow_path = ROOT / f"plugins/bobbin/skills/{kind}/scripts/{kind}_workflow.py"
                 owner_cli = load(f"context_owner_workflow_test_{kind}", owner_cli_path)
                 seed = getattr(owner_cli, f"{kind}_index_seed")()
                 core_cli.bootstrap_repository(vault, owner_cli.owner_descriptor(), seed, host="codex")
@@ -141,7 +141,7 @@ class OwnerInlineWorkflowTests(unittest.TestCase):
     def test_public_workflow_help_needs_no_manual_preflight_files(self) -> None:
         for kind in CASES:
             with self.subTest(kind=kind):
-                workflow_path = ROOT / f"plugins/context-{kind}/skills/{kind}/scripts/{kind}_workflow.py"
+                workflow_path = ROOT / f"plugins/bobbin/skills/{kind}/scripts/{kind}_workflow.py"
                 completed = subprocess.run(
                     [sys.executable, str(workflow_path), "preview", "--help"],
                     cwd=ROOT,

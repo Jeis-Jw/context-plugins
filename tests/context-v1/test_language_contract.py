@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pytest.ini").is_file())
 
 
 def load(name: str, relative: str):
@@ -23,12 +23,12 @@ def load(name: str, relative: str):
 
 active_language = load(
     "active_language_contract",
-    "plugins/context-core/skills/context/scripts/active_language.py",
+    "plugins/bobbin/skills/context/scripts/active_language.py",
 )
-core_cli = load("context_cli_language", "plugins/context-core/skills/context/scripts/context_cli.py")
-decision_cli = load("decision_cli_language", "plugins/context-decision/skills/decision/scripts/decision_cli.py")
-assumption_cli = load("assumption_cli_language", "plugins/context-assumption/skills/assumption/scripts/assumption_cli.py")
-term_cli = load("term_cli_language", "plugins/context-term/skills/term/scripts/term_cli.py")
+core_cli = load("context_cli_language", "plugins/bobbin/skills/context/scripts/context_cli.py")
+decision_cli = load("decision_cli_language", "plugins/bobbin/skills/decision/scripts/decision_cli.py")
+assumption_cli = load("assumption_cli_language", "plugins/bobbin/skills/assumption/scripts/assumption_cli.py")
+term_cli = load("term_cli_language", "plugins/bobbin/skills/term/scripts/term_cli.py")
 
 
 class ActiveLanguageContractTests(unittest.TestCase):
@@ -111,13 +111,13 @@ class ActiveLanguageContractTests(unittest.TestCase):
     def test_canonical_runtime_sources_are_english_and_share_one_contract(self) -> None:
         canonical_skills = sorted(ROOT.glob("plugins/*/skills/*/SKILL.md"))
         rules = sorted(ROOT.glob("plugins/*/rules/*.md"))
-        self.assertEqual(15, len(canonical_skills))
+        self.assertEqual(10, len(canonical_skills))
         for path in [*canonical_skills, *rules]:
             text = path.read_text(encoding="utf-8")
             self.assertIsNone(re.search(r"[가-힣]", text), path)
             self.assertIn("active language", text.casefold(), path)
 
-        contract = (ROOT / "plugins/context-core/skills/context/references/active-language.md").read_text(encoding="utf-8")
+        contract = (ROOT / "plugins/bobbin/skills/context/references/active-language.md").read_text(encoding="utf-8")
         ordered = (
             "explicit user language choice",
             "host's preferred response language",
@@ -129,13 +129,11 @@ class ActiveLanguageContractTests(unittest.TestCase):
         for token in ("OS locale", "Code, identifiers, filenames, quotations", "machine-readable surfaces", "semantic and language-independent"):
             self.assertIn(token, contract)
 
-        for manifest in sorted(ROOT.glob("plugins/*/.codex-plugin/plugin.json")):
-            prompts = json.loads(manifest.read_text(encoding="utf-8"))["interface"]["defaultPrompt"]
-            self.assertTrue(any("active language" in prompt for prompt in prompts), manifest)
-            self.assertTrue(any("machine fields English" in prompt for prompt in prompts), manifest)
+        # Starter prompts are user actions, not duplicated policy instructions.
+        self.assertIn("machine-readable surfaces in canonical English", core_cli.POLICY_BODY)
 
     def test_managed_policy_source_and_embedded_copy_are_identical(self) -> None:
-        rule = (ROOT / "plugins/context-core/rules/context-policy.md").read_text(encoding="utf-8")
+        rule = (ROOT / "plugins/bobbin/rules/context-policy.md").read_text(encoding="utf-8")
         begin = core_cli.POLICY_BEGIN
         end = core_cli.POLICY_END
         managed = rule[rule.index(begin):rule.index(end) + len(end)]
@@ -144,7 +142,7 @@ class ActiveLanguageContractTests(unittest.TestCase):
         self.assertEqual(1, agents.count(core_cli.POLICY_BODY))
 
     def test_public_docs_cannot_restore_korean_only_canonical_headings(self) -> None:
-        decision_root = ROOT / "plugins/context-decision"
+        decision_root = ROOT / "plugins/bobbin"
         protocol = (decision_root / "skills/decision/references/decision-protocol.md").read_text(encoding="utf-8")
         self.assertIn("canonical required body sections are `Decision`, `Rationale`, and `Rejected alternatives`", protocol)
         self.assertIn("canonical `Decision` and `Rationale` fields", protocol)
@@ -153,7 +151,7 @@ class ActiveLanguageContractTests(unittest.TestCase):
         self.assertNotIn("materializes only `결정` and `취지`", protocol)
 
         decision_korean_docs = (
-            decision_root / "README.ko.md",
+            ROOT / "docs/modules/decision.ko.md",
             decision_root / "skills/decision/SKILL.ko.md",
             decision_root / "skills/decision/references/decision-protocol.ko.md",
         )
@@ -168,14 +166,15 @@ class ActiveLanguageContractTests(unittest.TestCase):
             "context-term": ("`Definition`", ("`정의`",)),
         }
         for plugin, (canonical, legacy_aliases) in plugin_docs.items():
-            root = ROOT / "plugins" / plugin
-            english = (root / "README.md").read_text(encoding="utf-8")
-            korean = (root / "README.ko.md").read_text(encoding="utf-8")
-            self.assertIn("[한국어](./README.ko.md)", english, plugin)
-            self.assertIn("[English](./README.md)", korean, plugin)
+            root = ROOT / "docs/modules"
+            kind = plugin.removeprefix("context-")
+            english = (root / f"{kind}.md").read_text(encoding="utf-8")
+            korean = (root / f"{kind}.ko.md").read_text(encoding="utf-8")
+            self.assertIn(f"[한국어](./{kind}.ko.md)", english, plugin)
+            self.assertIn(f"[English](./{kind}.md)", korean, plugin)
             self.assertIn(canonical, english, plugin)
             self.assertIn(canonical, korean, plugin)
-            self.assertIn("canonical English", english, plugin)
+            self.assertIn("canonical english", english.casefold(), plugin)
             self.assertIn("legacy Korean", english, plugin)
             for alias in legacy_aliases:
                 self.assertIn(alias, english, plugin)

@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pytest.ini").is_file())
 
 
 def load(name: str, relative: str):
@@ -21,9 +21,9 @@ def load(name: str, relative: str):
     return module
 
 
-core_cli = load("context_core_document_freshness", "plugins/context-core/skills/context/scripts/context_cli.py")
-document_cli = load("context_document_freshness", "plugins/context-document/skills/document/scripts/document_cli.py")
-decision_cli = load("context_decision_document_freshness", "plugins/context-decision/skills/decision/scripts/decision_cli.py")
+core_cli = load("context_core_document_freshness", "plugins/bobbin/skills/context/scripts/context_cli.py")
+document_cli = load("context_document_freshness", "plugins/bobbin/skills/document/scripts/document_cli.py")
+decision_cli = load("context_decision_document_freshness", "plugins/bobbin/skills/decision/scripts/decision_cli.py")
 
 
 def claim_attestation(owner, candidate: dict, assertions: list[tuple[str, list[str]]]) -> dict:

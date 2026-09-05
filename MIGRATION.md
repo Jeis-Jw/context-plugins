@@ -1,6 +1,45 @@
-# Repository extraction
+# Bobbin 1.0.0 transition
 
-## 0.15.0 Korean decision discovery
+Bobbin replaces the six independently installed `context-*` packages with one
+`bobbin@bobbin` package. Its single public version is 1.0.0. The repository's
+local directory, actual Git remote and prior release tags are not renamed by
+this source change. Publication and installed-host changes require separate action.
+
+1. Keep a normal backup/versioned copy of the consumer vault and host settings.
+2. Disable all old context providers in the chosen host. Do not enable both
+   generations, including copies from `jeis-ai-plugins` or other marketplaces.
+3. Add the Bobbin checkout marketplace and install `bobbin@bobbin` once. The
+   optional `scripts/install_profile.py --host codex --dry-run` inspects collisions;
+   omitting `--dry-run` is an explicit installation action, never part of init.
+4. Reload/start a new host session. Run `$bobbin:init` in each consumer project.
+   The first init imports registered semantic areas with `explicit` approval.
+   Choose `auto` or `adaptive` explicitly if wanted; no silent policy switch occurs.
+5. For a shared vault, pass `--project PROJECT --vault VAULT` to
+   `plugins/bobbin/skills/init/scripts/bobbin_init.py --host HOST`. Guidance and
+   `.bobbin/config.json` belong to PROJECT; the corpus stays in VAULT.
+
+Reinit preserves omitted choices. `--features ''` leaves built-ins only. Disabled
+areas stay registered and readable, but cannot receive new records. Enabling an
+area reuses the existing corpus. Pending receipts from an older runtime or a
+different settings revision must be recreated; do not reuse their approval.
+
+No artifact migration is necessary: `context-common/v2`, schema identifiers,
+artifact IDs, scopes, actual bodies and lifecycle links are unchanged. Historical
+`context-plugins` scopes stay historical identifiers. Do not bulk-rewrite them.
+
+Rollback: disable Bobbin before re-enabling the prior plugins. Preserve the corpus.
+The old runtime does not understand `.bobbin/config.json`; restore the previous
+managed host-guidance block from backup (preserving unrelated user instructions)
+or explicitly reinitialize it with the old runtime. Never leave both policies
+active. New records use the existing artifact schemas and remain readable.
+
+## Historical 0.x migration notes
+
+The following sections describe the former multi-plugin distribution, not Bobbin setup.
+
+### Repository extraction
+
+### 0.15.0 Korean decision discovery
 
 Korean lexical discovery now keeps two-syllable Hangul terms and removes a conservative set of common particles before comparing query and index terms. English stemming, decision ranking, result limits, artifact schemas, and `context-common/v2` remain unchanged.
 
@@ -8,19 +47,19 @@ Existing DEC artifacts and their stored `search_terms` are not rewritten or back
 
 Particle stripping is intentionally dependency-free and conservative. Ambiguous suffixes `나`, `도`, and `만` are not stripped. Some longer nouns ending in a retained particle-like syllable can still normalize too aggressively; actual DEC bodies, scope, and rationale remain the only semantic comparison evidence.
 
-## 0.14.0 generated indexes as projections
+### 0.14.0 generated indexes as projections
 
 Area indexes remain committed, but an approved write no longer requires their bytes to be unchanged since preview: core re-derives the index from the artifacts under the root lock and reports `index_regenerated:<path>`. Target-artifact drift, a competing Current decision in the same or an overlapping scope/key, a slot that already holds two Current decisions, and chained same-area proposals still fail closed. Existing `context-common/v2` artifacts and indexes need no migration; pending receipts stay valid.
 
 For Git vaults, run your host's `init` once more to add the managed `.gitattributes` block (`context/**/*.index.md merge=union`), or add that line yourself. After a merge, run `refresh --fix index` or let the next write re-derive the index; use `refresh --check` in CI. If a merge left two Current decisions in one slot, `doctor` reports `duplicate_current_slot` and only that slot holds until one record is withdrawn or superseded.
 
-## 0.13.0 semantic approval
+### 0.13.0 semantic approval
 
 Capture approval now attaches to the settled semantic payload, canonical scope, and lifecycle effect expressed in conversation. The agent does not show the rendered Markdown or ask a second storage question merely to authorize persistence. If rendering introduces or changes meaning, it holds the write and confirms only that semantic delta.
 
 Internal preview, frozen receipts, `approval_digest`, runtime/vault binding, CAS, lock, atomic write, and unchanged apply remain integrity controls. `approval_digest` is a compatibility field name, not user-approval evidence. Existing `context-common/v2` artifacts and indexes require no migration; stale pending receipts should be discarded and regenerated under the current runtime. This section supersedes the user-facing complete-preview approval contract described for historical 0.6.0/0.7.1 releases.
 
-## 0.9.0 filesystem vaults
+### 0.9.0 filesystem vaults
 
 Storage, approval, and installation no longer require Git. A vault is an existing directory containing `context/`. Use global `--vault DIR` before core, owner, or workflow subcommands, or the same option on addon init adapters. Without it, the nearest current/ancestor `context` directory selects the vault; with none present, init uses cwd. Input file paths still resolve relative to the caller's cwd.
 
@@ -32,7 +71,7 @@ The profile installer accepts ordinary downloaded directories, including archive
 
 Rollback preserves saved artifact bytes. Do not reuse pending approval material after changing runtimes; the old runtime does not support `--vault` and may still require Git. The historical W2 description below is superseded by this vault contract.
 
-## Source provenance
+### Source provenance
 
 - Source repository: `Jeis-Jw/ai-plugins`
 - Source commit: `eea43c9386735aa6141203a8a8912b0256746a64`
@@ -44,7 +83,7 @@ Rollback preserves saved artifact bytes. Do not reuse pending approval material 
 
 The new repository starts with a clean import commit. This avoids publishing unrelated plugin history while retaining an exact source anchor for audit and comparison.
 
-## Distribution migration
+### Distribution migration
 
 | Field | Previous | New |
 |---|---|---|
@@ -56,11 +95,11 @@ The new repository starts with a clean import commit. This avoids publishing unr
 
 The coordinate change is a breaking distribution migration even though the storage protocol remains `context-common/v2`. Existing installations are not modified automatically. The GitHub source repository is public; marketplace publication, installation, reload, temporary-consumer bootstrap and rollback verification remain separate release work.
 
-## Knowledge boundary
+### Knowledge boundary
 
 The source repository's `wiki/` and `context/` corpus are not imported. This repository initializes a fresh `context/` root and decision area; any non-init DEC or OBS requires semantic confirmation of its content, scope, and lifecycle effect. Rendered storage bytes remain internal integrity material.
 
-## 0.5.0 additive semantic owners
+### 0.5.0 additive semantic owners
 
 `0.5.0` adds optional `context-assumption` and `context-term` plugins plus the generic `context-owner-descriptor/v2` registration path. The storage protocol remains `context-common/v2`; existing SNAP, OBS and DEC artifacts are not rewritten.
 
@@ -68,7 +107,7 @@ Users install only the owners they need and explicitly run each installed addon'
 
 Rollback is distribution-level: stop using or uninstall the optional addon while leaving its repository artifacts untouched. Automatic downgrade, descriptor mutation, area deletion and corpus cleanup are not provided.
 
-## 0.5.1 W1-W3 hardening
+### 0.5.1 W1-W3 hardening
 
 `0.5.1` keeps `context-common/v2` and existing artifact bytes while tightening the executable and approval boundaries. It requires no storage migration and is a new release identity distinct from existing `0.5.0` bytes.
 
@@ -80,7 +119,7 @@ Frozen workflow receipts contain decision material. They remain outside the vaul
 
 No storage migration is required. Existing callers of `--core-inventory` and `--core-doctor` may keep using the low-level compatibility surface, but canonical addon init and DEC workflow should provide the loaded same-major `--core-cli` instead.
 
-## 0.6.0 natural-language approval UX (unreleased)
+### 0.6.0 natural-language approval UX (unreleased)
 
 The 0.6.0 user contract shows one complete rendered preview and asks one natural-language capture question. Only a direct, explicit, unconditional affirmative answer authorizes apply; `알겠어` alone, conditions, edit requests, and topic changes do not. Digests, receipt locations, internal IDs, and core paths remain agent/CLI transport details.
 
@@ -94,7 +133,7 @@ For fresh core+decision installs, the distribution directory contains `profiles/
 
 An enabled `context-core@jeis-ai-plugins` or `context-decision@jeis-ai-plugins`, an existing `context-plugins` marketplace pointing at another checkout, a disabled target plugin, or a mixed target version fails before the installer mutates host state. The user must explicitly disable, uninstall or update those coordinates and then rerun the installer from a compatible distribution directory. Repository artifacts remain untouched throughout distribution migration.
 
-## 0.8.0 major-based package compatibility
+### 0.8.0 major-based package compatibility
 
 `0.8.0` changes the distribution policy without changing `context-common/v2` storage. Package major is the compatibility boundary, minor versions carry functional changes, and patch versions carry small fixes. This project applies that rule to pre-1.0 versions as well, so `0.*` packages pass the version gate together.
 

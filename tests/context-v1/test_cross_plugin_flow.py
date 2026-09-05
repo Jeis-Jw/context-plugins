@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pytest.ini").is_file())
 
 
 def load(name: str, path: Path):
@@ -26,15 +26,15 @@ def load(name: str, path: Path):
     return module
 
 
-context_cli = load("context_cli_cross", ROOT / "plugins/context-core/skills/context/scripts/context_cli.py")
-decision_cli = load("decision_cli_cross", ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py")
-assumption_cli = load("assumption_cli_cross", ROOT / "plugins/context-assumption/skills/assumption/scripts/assumption_cli.py")
-term_cli = load("term_cli_cross", ROOT / "plugins/context-term/skills/term/scripts/term_cli.py")
-CORE_CLI = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
-DECISION_CLI = ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py"
-DECISION_INIT = ROOT / "plugins/context-decision/skills/init/scripts/decision_init.py"
-ASSUMPTION_CLI = ROOT / "plugins/context-assumption/skills/assumption/scripts/assumption_cli.py"
-TERM_CLI = ROOT / "plugins/context-term/skills/term/scripts/term_cli.py"
+context_cli = load("context_cli_cross", ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py")
+decision_cli = load("decision_cli_cross", ROOT / "plugins/bobbin/skills/decision/scripts/decision_cli.py")
+assumption_cli = load("assumption_cli_cross", ROOT / "plugins/bobbin/skills/assumption/scripts/assumption_cli.py")
+term_cli = load("term_cli_cross", ROOT / "plugins/bobbin/skills/term/scripts/term_cli.py")
+CORE_CLI = ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py"
+DECISION_CLI = ROOT / "plugins/bobbin/skills/decision/scripts/decision_cli.py"
+DECISION_INIT = ROOT / "plugins/bobbin/skills/init/scripts/decision_init.py"
+ASSUMPTION_CLI = ROOT / "plugins/bobbin/skills/assumption/scripts/assumption_cli.py"
+TERM_CLI = ROOT / "plugins/bobbin/skills/term/scripts/term_cli.py"
 
 
 def run_cli(repo: Path, cli: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -79,8 +79,8 @@ def public_preflight(root: Path, repo: Path, *, prefix: str) -> tuple[Path, Path
     doctor = public_result(run_cli(repo, CORE_CLI, "doctor", "--json"))
     inventory = {
         "plugins": [{
-            "marketplace": "context-plugins",
-            "plugin": "context-core",
+            "marketplace": "bobbin",
+            "plugin": "bobbin",
             "source": "Jeis-Jw/context-plugins",
             "enabled": True,
             "protocols": ["context-common/v2"],

@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-CLI = ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py"
+CLI = ROOT / "plugins/bobbin/skills/decision/scripts/decision_cli.py"
 SPEC = importlib.util.spec_from_file_location("context_scale_recall", CLI)
 decision_cli = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(decision_cli)

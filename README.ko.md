@@ -1,108 +1,68 @@
-# Context Plugins
+# Bobbin
 
-[![test](https://github.com/Jeis-Jw/context-plugins/actions/workflows/test.yml/badge.svg)](https://github.com/Jeis-Jw/context-plugins/actions/workflows/test.yml)
+Keep the thread. 작업의 맥락을 이어갑니다.
 
-[English](./README.md)
-
-Context Plugins는 Codex와 Claude Code가 프로젝트의 중요한 내용을 기억하도록 돕는 플러그인입니다. 결정한 내용과 그 이유, 하던 일을 남겨 새 대화에서도 이어갈 수 있게 합니다.
+[English](README.md)
 
 ## 무엇인가요?
 
-AI와 함께 개발하다 보면 새 대화에서 프로젝트를 처음부터 다시 설명해야 할 때가 있습니다. Context Plugins는 대화가 바뀌어도 남아야 할 내용을 프로젝트에 보관합니다.
+Bobbin은 AI 코딩 세션이 바뀌어도 프로젝트의 결정과 이유, 확인된 사실,
+미완료 작업, 가정, 용어, 의도와 현재 문서를 이어주는 단일 플러그인입니다.
+기록은 로컬 `context/`의 Markdown 파일로 남습니다. Git은 선택 사항이며,
+별도 서버·데이터베이스·API 키가 필요하지 않습니다.
 
-- **결정** — 무엇을 선택했고, 왜 그렇게 했는지
-- **프로젝트 방향** — 누구를 위해 무엇을 만들고 있는지
-- **작업 중 알게 된 사실** — 잘된 방법이나 문제를 해결한 과정
-- **참고 자료** — 나중에 다시 확인할 원본 자료
-- **프로젝트 문서** — 작업하면서 계속 다듬어 가는 기획과 안내
-- **작업 현황** — 어디까지 했고 다음에 무엇을 해야 하는지
+## 설치
 
-저장된 내용은 기본적으로 프로젝트의 `context/` 폴더에 읽기 쉬운 Markdown 문서로 남습니다. 직접 열어보거나 함께 일하는 사람과 공유할 수 있습니다.
-
-Context Plugins는 대화 전체를 자동으로 저장하지 않습니다. 사용자가 분명히 확정하거나 기억해 달라고 요청한 내용만 저장합니다.
-
-## 왜 사용하나요?
-
-- 새 대화에서 같은 결정과 배경을 반복해서 설명하는 일을 줄일 수 있습니다.
-- 이미 제외한 방법이 다시 제안되는 일을 줄일 수 있습니다.
-- 새 요청이 기존 결정과 맞지 않을 때 AI가 먼저 확인하도록 돕습니다.
-- 남겨둔 결과와 다음 할 일을 참고해 하던 작업을 이어갈 수 있습니다.
-
-## 설치하기
-
-Codex 또는 Claude Code, macOS나 Linux의 프로젝트 폴더, Python 3.11 이상이 필요합니다.
-
-사용하는 도구에 맞춰 아래 명령을 터미널에 한 줄씩 붙여 넣고 실행하세요.
-
-### Codex
+Bobbin 1.0.0은 Python 3.11 이상과 Codex 또는 Claude Code가 필요합니다.
+소스 저장소는 `Jeis-Jw/context-plugins`이며, GitHub 이름 변경 없이 사용할 수
+있습니다. Checkout에서 설치하려면 실제 경로를 등록합니다.
 
 ```bash
-codex plugin marketplace add Jeis-Jw/context-plugins
-codex plugin add context-core@context-plugins
-codex plugin add context-decision@context-plugins
+# Codex
+codex plugin marketplace add /path/to/checkout
+codex plugin add bobbin@bobbin
+
+# Claude Code
+claude plugin marketplace add /path/to/checkout --scope user
+claude plugin install bobbin@bobbin --scope user
 ```
 
-### Claude Code
+기존 `context-*` 플러그인은 먼저 비활성화해 중복 실행을 막습니다.
+설치 후 호스트를 다시 로드하거나 새 세션을 시작합니다.
 
-```bash
-claude plugin marketplace add Jeis-Jw/context-plugins --scope user
-claude plugin install context-core@context-plugins --scope user
-claude plugin install context-decision@context-plugins --scope user
-```
+## 사용
 
-이 플러그인의 Marketplace를 이미 등록했다면 첫 번째 명령은 생략해도 됩니다. 설치가 끝나면 Codex 또는 Claude Code를 다시 시작하거나 새 대화를 여세요.
+프로젝트에서 `$bobbin:init`을 실행해 사용할 기능과 승인 모드를 선택합니다.
+init은 이미 설치된 코드를 프로젝트에 설정할 뿐, 플러그인을 설치하지 않습니다.
 
-처음 사용할 때는 `context-core`와 `context-decision`만 설치하면 됩니다.
+| 설정 | 선택 |
+|---|---|
+| 시맨틱 기능 | Decision, Assumption, Term, Intent, Document |
+| 기본 제공 | Observation, Snapshot, Archive |
+| 승인 모드 | `explicit`, `auto`, `adaptive` |
 
-<details>
-<summary>프로젝트 방향·문서·가정·용어도 기억하게 하고 싶다면</summary>
+새 프로젝트는 Decision과 `explicit`으로 시작합니다. 기존 프로젝트는 등록된
+기능을 가져오고 명시적 승인을 유지합니다. 재실행 시 생략한 설정은 보존하며,
+기능을 끄더라도 과거 기록과 명시적 읽기는 유지됩니다. 자동 참여와 새 기록만
+중단합니다.
 
-필요한 기능만 골라 추가할 수 있습니다. 각 추가 기능에는 `context-core`가 필요하며, 추가 기능끼리는 함께 설치할 필요가 없습니다. 사용하는 도구의 명령으로 설치한 뒤, 마지막 열의 명령을 AI와의 대화창에 보내세요.
+- **explicit — 명시적 승인:** 명확한 결정 발언이나 기억 요청 자체가 승인입니다.
+  의미·범위·기존 결정 변경이 불명확할 때만 확인합니다.
+- **auto — 자동 기록:** 기록 가치가 있는 맥락을 건별 질문 없이 저장합니다.
+- **adaptive — LLM 판단:** 의미의 명확성, 근거, 범위, 기존 기록과의 충돌,
+  변경의 영향을 보고 바로 기록할지 물어볼지 판단합니다.
 
-| 추가로 기억할 내용 | Codex 설치 | Claude Code 설치 | 대화창에서 처음 한 번 |
-| --- | --- | --- | --- |
-| 프로젝트 방향 | `codex plugin add context-intent@context-plugins` | `claude plugin install context-intent@context-plugins --scope user` | `$context-intent:init` |
-| 기획·안내 문서 | `codex plugin add context-document@context-plugins` | `claude plugin install context-document@context-plugins --scope user` | `$context-document:init` |
-| 확인이 필요한 가정 | `codex plugin add context-assumption@context-plugins` | `claude plugin install context-assumption@context-plugins --scope user` | `$context-assumption:init` |
-| 프로젝트 용어 | `codex plugin add context-term@context-plugins` | `claude plugin install context-term@context-plugins --scope user` | `$context-term:init` |
+자동 기록은 대화 전문 저장이 아닙니다. 어떤 모드에서도 검토 중인 제안을
+확정된 결정으로 바꾸거나 LLM의 선호를 사용자 결정으로 기록하지 않습니다.
+기록 설정이 코드 수정·외부 전송·배포 권한을 부여하지도 않습니다.
 
-</details>
+설정 정본은 프로젝트의 `.bobbin/config.json`입니다. 생성되는
+`AGENTS.md`/`CLAUDE.md` 지침과 기록 index는 별도 역할을 합니다.
+여러 프로젝트가 vault를 공유해도 기능 선택과 승인 모드는 프로젝트마다 다릅니다.
 
-## 사용하는 방법
+“이 선택을 한 이유가 뭐였지?”, “이 결정을 기억해”, “어디까지 했는지 저장해”처럼
+자연스럽게 사용합니다. 모든 모드에서 정확한 본문 결박과 안전한 쓰기 검증은
+유지됩니다.
 
-### 1. 프로젝트에서 처음 한 번 준비하기
-
-Codex 또는 Claude Code에서 프로젝트를 연 뒤, AI와의 대화창에 다음 메시지를 보내세요.
-
-```text
-$context-decision:init
-```
-
-프로젝트마다 한 번만 실행하면 됩니다. 필요한 폴더와 AI가 참고할 안내를 준비해줍니다.
-
-### 2. 평소처럼 대화하기
-
-따로 명령어를 외울 필요 없이 평소 말하듯 요청하면 됩니다.
-
-- “첫 버전은 회원가입 없이 쓸 수 있게 만들기로 했어. 이 결정을 기억해줘.”
-- “로그인 기능을 추가하기 전에 관련해서 정한 내용이 있는지 확인해줘.”
-- “방금 해결한 문제와 해결 방법을 다음에도 참고할 수 있게 남겨줘.”
-- “지금까지 진행한 내용과 다음에 할 일을 저장해줘.”
-
-### 3. 저장할 내용 확인하기
-
-결정을 분명히 확정하거나 “이 내용을 기억해줘”라고 요청하면 AI가 저장하고 결과를 알려줍니다. 저장을 위해 같은 내용을 다시 승인할 필요는 없습니다.
-
-어디에 적용할 결정인지, 기존 결정을 바꾸려는 것인지 등이 불분명하면 그 부분만 먼저 확인합니다. 아직 정하지 않은 내용은 “알겠어” 같은 맞장구만으로 저장하지 않습니다.
-
-### 4. 다음 대화에서 이어가기
-
-새 대화에서 관련 작업을 할 때 AI가 저장된 내용을 참고할 수 있습니다. 직접 이렇게 요청해도 됩니다.
-
-> 이 작업을 계속하기 전에 프로젝트에 저장된 결정을 먼저 확인해줘.
-
-프로젝트를 공유하면 다른 AI나 함께 일하는 사람도 같은 기록을 참고할 수 있습니다.
-
-기여 방법과 pull request 검증 항목은 [CONTRIBUTING.md](./CONTRIBUTING.md)를 참고하세요. 보안 문제는 [SECURITY.md](./SECURITY.md)의 비공개 경로로 알려주세요.
-
-Context Plugins는 [Apache License 2.0](./LICENSE)으로 제공됩니다.
+[마이그레이션](MIGRATION.md) · [기여 안내](CONTRIBUTING.md) ·
+[보안 정책](SECURITY.md). Apache License 2.0.

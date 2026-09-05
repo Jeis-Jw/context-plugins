@@ -1,9 +1,0 @@
-{
-  "name": "context-decision",
-  "version": "0.14.0",
-  "description": "Decision continuity with pre-decision body comparison, rationale-change and conflict notices, and approval-gated capture.",
-  "author": {
-    "name": "Jinwuk-Lee",
-    "url": "https://github.com/Jeis-Jw"
-  }
-}

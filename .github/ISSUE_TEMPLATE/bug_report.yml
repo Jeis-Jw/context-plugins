@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible Context Plugins problem
+description: Report a reproducible Bobbin problem
 title: "[Bug]: "
 labels:
   - bug

@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pytest.ini").is_file())
 INSTALLER = ROOT / "scripts/install_profile.py"
 
 
@@ -30,24 +30,24 @@ installer = load_installer()
 
 
 class ProfileInstallerTests(unittest.TestCase):
-    def test_acceptance_68_profile_installer_keeps_core_and_decision_separate(self) -> None:
+    def test_acceptance_68_profile_installer_installs_one_bobbin_package(self) -> None:
         profile = installer.load_profile()
         self.assertEqual("context-plugin-profile/v3", profile["schema"])
-        self.assertEqual("0.15.0", profile["version"])
+        self.assertEqual("1.0.0", profile["version"])
         self.assertEqual("same-major", profile["compatibility"])
-        self.assertEqual("context-plugins/0.15.0", profile["release_set"])
+        self.assertEqual("bobbin/1.0.0", profile["release_set"])
         self.assertEqual(
-            {"context-core": "0.14.0", "context-decision": "0.14.0"},
+            {"bobbin": "1.0.0"},
             profile["minimum_versions"],
         )
         self.assertEqual(
-            ["context-core@context-plugins", "context-decision@context-plugins"],
+            ["bobbin@bobbin"],
             profile["plugins"],
         )
         installer.validate_release_surface(profile)
-        self.assertTrue((ROOT / "plugins/context-core/skills/context/scripts/context_cli.py").is_file())
-        self.assertTrue((ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py").is_file())
-        self.assertFalse((ROOT / "plugins/context-core/skills/decision").exists())
+        self.assertTrue((ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py").is_file())
+        self.assertTrue((ROOT / "plugins/bobbin/skills/decision/scripts/decision_cli.py").is_file())
+        self.assertTrue((ROOT / "plugins/bobbin/skills/decision").exists())
         with tempfile.TemporaryDirectory() as temp:
             malformed = Path(temp) / "profile.json"
             malformed.write_text(json.dumps({**profile, "plugins": None}), encoding="utf-8")
@@ -60,8 +60,7 @@ class ProfileInstallerTests(unittest.TestCase):
         self.assertEqual(
             [
                 ["codex", "plugin", "marketplace", "add", str(ROOT.resolve()), "--json"],
-                ["codex", "plugin", "add", "context-core@context-plugins", "--json"],
-                ["codex", "plugin", "add", "context-decision@context-plugins", "--json"],
+                ["codex", "plugin", "add", "bobbin@bobbin", "--json"],
             ],
             commands,
         )
@@ -72,50 +71,49 @@ class ProfileInstallerTests(unittest.TestCase):
         self.assertEqual(
             [
                 ["claude", "plugin", "marketplace", "add", str(ROOT.resolve()), "--scope", "project"],
-                ["claude", "plugin", "install", "context-core@context-plugins", "--scope", "project"],
-                ["claude", "plugin", "install", "context-decision@context-plugins", "--scope", "project"],
+                ["claude", "plugin", "install", "bobbin@bobbin", "--scope", "project"],
             ],
             commands,
         )
 
     def test_matching_local_marketplace_and_plugins_are_idempotent(self) -> None:
         profile = installer.load_profile()
-        marketplaces = [{"name": "context-plugins", "root": str(ROOT.resolve())}]
+        marketplaces = [{"name": "bobbin", "root": str(ROOT.resolve())}]
         installed = [
-            {"pluginId": "context-core@context-plugins", "version": "0.14.0", "enabled": True},
-            {"pluginId": "context-decision@context-plugins", "version": "0.14.0", "enabled": True},
+            {"pluginId": "bobbin@bobbin", "version": "1.0.0", "enabled": True},
         ]
         self.assertEqual([], installer.build_install_plan(profile, "codex", "user", marketplaces, installed))
 
     def test_same_major_at_or_above_minimum_is_accepted_and_missing_plugin_is_installed(self) -> None:
         profile = installer.load_profile()
-        marketplaces = [{"name": "context-plugins", "root": str(ROOT.resolve())}]
+        marketplaces = [{"name": "bobbin", "root": str(ROOT.resolve())}]
         installed = [
-            {"pluginId": "context-core@context-plugins", "version": "0.14.0", "enabled": True},
+            {"pluginId": "bobbin@bobbin", "version": "1.0.0", "enabled": True},
         ]
         self.assertEqual(
-            [["codex", "plugin", "add", "context-decision@context-plugins", "--json"]],
+            [],
             installer.build_install_plan(profile, "codex", "user", marketplaces, installed),
         )
 
     def test_same_major_below_release_set_minimum_fails_with_candidate_path(self) -> None:
         profile = installer.load_profile()
-        marketplaces = [{"name": "context-plugins", "root": str(ROOT.resolve())}]
+        profile["minimum_versions"]["bobbin"] = "1.1.0"
+        marketplaces = [{"name": "bobbin", "root": str(ROOT.resolve())}]
         installed = [
-            {"pluginId": "context-core@context-plugins", "version": "0.6.0", "enabled": True},
+            {"pluginId": "bobbin@bobbin", "version": "1.0.0", "enabled": True},
         ]
         with self.assertRaisesRegex(
             installer.InstallProfileError,
-            r"below compatible release-set minimum 0\.14\.0.*Compatible candidate path:.*no automatic update",
+            r"below compatible release-set minimum 1\.1\.0.*Compatible candidate path:.*no automatic update",
         ):
             installer.build_install_plan(profile, "codex", "user", marketplaces, installed)
 
     def test_different_major_or_disabled_plugin_is_rejected(self) -> None:
         profile = installer.load_profile()
-        marketplaces = [{"name": "context-plugins", "root": str(ROOT.resolve())}]
+        marketplaces = [{"name": "bobbin", "root": str(ROOT.resolve())}]
         for installed, message in (
-            ([{"pluginId": "context-core@context-plugins", "version": "1.0.0", "enabled": True}], "incompatible major"),
-            ([{"pluginId": "context-core@context-plugins", "version": "0.7.1", "enabled": False}], "disabled"),
+            ([{"pluginId": "bobbin@bobbin", "version": "2.0.0", "enabled": True}], "incompatible major"),
+            ([{"pluginId": "bobbin@bobbin", "version": "0.7.1", "enabled": False}], "disabled"),
         ):
             with self.subTest(message=message), self.assertRaisesRegex(installer.InstallProfileError, message):
                 installer.build_install_plan(profile, "codex", "user", marketplaces, installed)
@@ -126,12 +124,12 @@ class ProfileInstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(installer.InstallProfileError, "legacy"):
             installer.build_install_plan(profile, "codex", "user", [], legacy)
         with tempfile.TemporaryDirectory() as temp:
-            marketplaces = [{"name": "context-plugins", "root": temp}]
+            marketplaces = [{"name": "bobbin", "root": temp}]
             with self.assertRaisesRegex(installer.InstallProfileError, "another directory"):
                 installer.build_install_plan(profile, "codex", "user", marketplaces, [])
 
     def test_dry_run_prints_commands_without_spawning_host_processes(self) -> None:
-        commands = [["codex", "plugin", "add", "context-core@context-plugins", "--json"]]
+        commands = [["codex", "plugin", "add", "bobbin@bobbin", "--json"]]
         with mock.patch.object(installer.subprocess, "run") as run, mock.patch("builtins.print") as output:
             installer.run_plan(commands, dry_run=True)
         run.assert_not_called()
@@ -139,7 +137,7 @@ class ProfileInstallerTests(unittest.TestCase):
 
     def test_host_failure_stops_without_automatic_rollback(self) -> None:
         commands = [
-            ["codex", "plugin", "add", "context-core@context-plugins"],
+            ["codex", "plugin", "add", "bobbin@bobbin"],
             ["codex", "plugin", "add", "context-decision@context-plugins"],
         ]
         failed = mock.Mock(returncode=1)
@@ -190,12 +188,11 @@ class ProfileInstallerTests(unittest.TestCase):
                 capture_output=True,
             )
             self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
-            self.assertIn("Installed the core-decision profile", completed.stdout)
+            self.assertIn("Installed the bobbin profile", completed.stdout)
             self.assertEqual(
                 [
                     f"plugin marketplace add {distribution.resolve()} --json",
-                    "plugin add context-core@context-plugins --json",
-                    "plugin add context-decision@context-plugins --json",
+                    "plugin add bobbin@bobbin --json",
                 ],
                 log.read_text(encoding="utf-8").splitlines(),
             )

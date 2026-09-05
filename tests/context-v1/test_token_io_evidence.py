@@ -10,8 +10,8 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
-CLI_PATH = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pytest.ini").is_file())
+CLI_PATH = ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py"
 SPEC = importlib.util.spec_from_file_location("context_cli_token", CLI_PATH)
 assert SPEC and SPEC.loader
 context_cli = importlib.util.module_from_spec(SPEC)
@@ -461,8 +461,8 @@ class TokenIOEvidenceTests(unittest.TestCase):
     def test_stdlib_only_imports(self) -> None:
         allowed = set(sys.stdlib_module_names) | {"__future__"}
         for path in (
-            ROOT / "plugins/context-core/skills/context/scripts/context_cli.py",
-            ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py",
+            ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py",
+            ROOT / "plugins/bobbin/skills/decision/scripts/decision_cli.py",
         ):
             import ast
 

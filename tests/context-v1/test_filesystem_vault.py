@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 
 
-ROOT = Path(__file__).resolve().parents[2]
-CORE = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
-WORKFLOW = ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pytest.ini").is_file())
+CORE = ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py"
+WORKFLOW = ROOT / "plugins/bobbin/skills/decision/scripts/decision_workflow.py"
 OWNERS = ("decision", "assumption", "term", "intent", "document")
 
 
@@ -49,7 +49,7 @@ def files(root):
 
 
 def owner_init(owner):
-    return ROOT / f"plugins/context-{owner}/skills/init/scripts/{owner}_init.py"
+    return ROOT / f"plugins/bobbin/skills/init/scripts/{owner}_init.py"
 
 
 def test_core_discovers_nearest_vault_and_honors_explicit_selection(tmp_path, no_git):
@@ -97,14 +97,14 @@ def test_addon_init_and_reads_select_explicit_vault_from_another_project(tmp_pat
 
     preflight = []
     if owner != "decision":
-        inventory = {"plugins": [{"marketplace": "context-plugins", "plugin": "context-core", "source": "Jeis-Jw/context-plugins", "enabled": True, "protocols": ["context-common/v2"], "entrypoint": str(CORE)}]}
+        inventory = {"plugins": [{"marketplace": "bobbin", "plugin": "bobbin", "source": "Jeis-Jw/context-plugins", "enabled": True, "protocols": ["context-common/v2"], "entrypoint": str(CORE)}]}
         (caller / "inventory.json").write_text(json.dumps(inventory))
         (caller / "doctor.json").write_text(json.dumps(invoke(CORE, caller, no_git, "--vault", vault, "doctor")))
         preflight = ["--host", "codex", "--core-inventory", "@inventory.json", "--core-doctor", "@doctor.json"]
         signal = {"assumption": "assumption-relevant", "term": "term-encountered"}.get(owner)
         if signal:
             preflight = ["--signal", signal, *preflight]
-    cli = ROOT / f"plugins/context-{owner}/skills/{owner}/scripts/{owner}_cli.py"
+    cli = ROOT / f"plugins/bobbin/skills/{owner}/scripts/{owner}_cli.py"
     invoke(cli, caller, no_git, "--vault", vault, "search", "--query", "absent fixture", *preflight)
     missing = invoke(
         cli,
@@ -181,7 +181,7 @@ def test_capture_uses_caller_inputs_and_vault_approval_without_git(tmp_path, no_
 @pytest.mark.parametrize("owner", OWNERS)
 def test_addon_rejects_core_without_vault_capability_before_storage(tmp_path, no_git, owner):
     plugin = tmp_path / "older/context-core"
-    shutil.copytree(ROOT / "plugins/context-core", plugin, ignore=shutil.ignore_patterns("tests", "__pycache__"))
+    shutil.copytree(ROOT / "plugins/bobbin", plugin, ignore=shutil.ignore_patterns("tests", "__pycache__"))
     old_core = plugin / "skills/context/scripts/context_cli.py"
     old_core.write_text(old_core.read_text().replace(', "filesystem-vault/v1"', ''))
     vault = tmp_path / "vault"

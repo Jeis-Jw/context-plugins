@@ -1,10 +1,10 @@
 {
-  "marketplace": "context-plugins",
-  "plugin": "context-core",
-  "selector": "context-core@context-plugins",
+  "marketplace": "bobbin",
+  "plugin": "bobbin",
+  "selector": "bobbin@bobbin",
   "source": "Jeis-Jw/context-plugins",
   "provider": "Jinwuk-Lee (Jeis-Jw)",
   "required_protocol": "context-common/v2",
   "entrypoint": "skills/context/scripts/context_cli.py",
-  "compatible_major": 0
+  "compatible_major": 1
 }

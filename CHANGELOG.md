@@ -1,6 +1,21 @@
 # Changelog
 
-All notable changes to Context Plugins are documented here. The project uses release-set versions; individual plugin versions may differ within one compatible set. Older entries marked as developer previews were sometimes prepared without a public tag.
+Bobbin has one public package version. Historical 0.x entries describe Context Plugins release sets, whose component versions could differ. Source preparation, tags and publication remain separate states.
+
+
+## 1.0.0 — Bobbin — 2026-09-05
+
+- One Bobbin package and version for Codex and Claude Code; semantic owners remain
+  internal modules around the same sole-writer core.
+- Project-local feature selection and idempotent `$bobbin:init` with legacy-area
+  import, shared-vault isolation and non-destructive feature toggles.
+- `explicit`, `auto` and LLM-assessed `adaptive` recording policies, enforced at
+  the common apply boundary with frozen project-policy bindings.
+- Existing Markdown artifact schemas and lifecycle are preserved. The source
+  repository remains `Jeis-Jw/context-plugins`; the Bobbin product name does not
+  imply a GitHub repository rename. Host installation, tags and marketplace
+  publication remain separate actions.
+- Added reproducible before/after runtime measurements; see [BENCHMARKS.md](./BENCHMARKS.md).
 
 ## 0.15.0 - 2026-09-04
 

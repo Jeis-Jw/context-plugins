@@ -5,7 +5,7 @@
   "observed_at": "2026-08-20",
   "collection_surface": "active_session_inventory",
   "inventory_scope": "installed plugin capabilities exposed to this Codex session",
-  "target_selector": "context-core@context-plugins",
+  "target_selector": "bobbin@bobbin",
   "target_available": false,
   "claim_limit": "This proves only that the exact target is not exposed to the active session; it does not inspect host caches or another runtime.",
   "alternate_runtime_used": false,

@@ -1,108 +1,75 @@
-# Context Plugins
+# Bobbin
 
-[![test](https://github.com/Jeis-Jw/context-plugins/actions/workflows/test.yml/badge.svg)](https://github.com/Jeis-Jw/context-plugins/actions/workflows/test.yml)
+Keep the thread.
 
-[한국어](./README.ko.md)
-
-Context Plugins helps Codex and Claude Code remember your project. It keeps the choices you've made, the reasons behind them, and where you left off, so you can carry them into a new conversation.
+[한국어](README.ko.md)
 
 ## What is it?
 
-When you build with AI, a new conversation can mean explaining your project all over again. Context Plugins keeps the important parts with your project:
-
-- **Decisions** — what you chose and why
-- **Project direction** — who you're building for and what you want to achieve
-- **Lessons learned** — what worked and how you solved a problem
-- **Reference material** — original documents you may want to revisit
-- **Project documents** — plans and guides you update as the project grows
-- **Work in progress** — where you stopped and what to do next
-
-By default, saved notes live in your project's `context/` folder as readable Markdown documents. You can open them yourself or share them with someone working on the project.
-
-Context Plugins does not automatically save your entire conversation. It saves only content you clearly confirm or ask it to remember.
+Bobbin keeps durable project context across AI coding sessions: decisions and their
+reasons, verified observations, unfinished work, assumptions, terminology, intent
+and living documents. Records are local Markdown files in `context/`; Git is
+optional. No hosted service, database or API key is required.
 
 ## Why use it?
 
-- Spend less time explaining the same decisions in every new conversation.
-- Reduce repeated suggestions of ideas you've already ruled out.
-- Help the AI check with you when a new request conflicts with an earlier decision.
-- Pick up unfinished work using the results and next steps you've saved.
+Keep the reasoning behind a choice, recall it when it matters, and continue work
+without repeating the whole conversation. One plugin contains all features; each
+project chooses which semantic features participate.
 
 ## Install
 
-You need Codex or Claude Code, a project folder on macOS or Linux, and Python 3.11 or newer.
-
-Choose your tool below. Paste each command into a terminal and run it one line at a time.
-
-### Codex
+Bobbin 1.0.0 requires Python 3.11+ and Codex or Claude Code. The source repository
+remains `Jeis-Jw/context-plugins`; a GitHub rename is not required to use Bobbin.
+To install from a checkout, register its actual path:
 
 ```bash
-codex plugin marketplace add Jeis-Jw/context-plugins
-codex plugin add context-core@context-plugins
-codex plugin add context-decision@context-plugins
+# Codex
+codex plugin marketplace add /path/to/checkout
+codex plugin add bobbin@bobbin
+
+# Claude Code
+claude plugin marketplace add /path/to/checkout --scope user
+claude plugin install bobbin@bobbin --scope user
 ```
 
-### Claude Code
-
-```bash
-claude plugin marketplace add Jeis-Jw/context-plugins --scope user
-claude plugin install context-core@context-plugins --scope user
-claude plugin install context-decision@context-plugins --scope user
-```
-
-If you've already added this marketplace, skip the first command. After installation, restart Codex or Claude Code, or open a new session.
-
-`context-core` and `context-decision` are all you need to get started.
-
-<details>
-<summary>Optional: remember project direction, documents, assumptions, and terminology</summary>
-
-Choose only the features you need. Each optional feature requires `context-core`, but optional features do not require one another. Install a feature using the command for your tool, then send the command in the last column in the AI chat.
-
-| What to remember | Codex install | Claude Code install | Set up once in the AI chat |
-| --- | --- | --- | --- |
-| Project direction | `codex plugin add context-intent@context-plugins` | `claude plugin install context-intent@context-plugins --scope user` | `$context-intent:init` |
-| Plans and guides | `codex plugin add context-document@context-plugins` | `claude plugin install context-document@context-plugins --scope user` | `$context-document:init` |
-| Assumptions to check | `codex plugin add context-assumption@context-plugins` | `claude plugin install context-assumption@context-plugins --scope user` | `$context-assumption:init` |
-| Project terminology | `codex plugin add context-term@context-plugins` | `claude plugin install context-term@context-plugins --scope user` | `$context-term:init` |
-
-</details>
+Disable old `context-*` providers first; do not run both generations together.
+Reload the host or start a new session after installation.
 
 ## How to use it
 
-### 1. Set up your project
+Run `$bobbin:init` in your project and choose features and a recording mode.
+Init configures the already-installed plugin; it does not install anything.
 
-Open your project in Codex or Claude Code and send this message in the AI chat:
+| Setting | Choices |
+|---|---|
+| Semantic features | Decision, Assumption, Term, Intent, Document |
+| Always available | Observation, Snapshot, Archive |
+| Recording mode | `explicit`, `auto`, `adaptive` |
 
-```text
-$context-decision:init
-```
+Fresh setup defaults to Decision and `explicit`. Existing projects retain
+explicit authorization and import their registered features. Re-running init
+preserves omitted choices. Disabling a feature preserves its records and
+explicit historical reads, but stops automatic participation and new writes.
 
-Run it once for each project. The plugin prepares the folders and instructions the AI needs.
+- **explicit**: Your clear decision or request to remember is already approval.
+  Bobbin asks only when the meaning, scope or lifecycle is unresolved.
+- **auto**: Eligible durable context is recorded without per-record questions.
+- **adaptive**: The LLM records directly or asks when confirmation matters,
+  considering ambiguity, evidence, scope, existing conflicts and consequences.
 
-### 2. Talk to the AI normally
+Auto is not a transcript recorder. In every mode, a proposal remains a proposal;
+the model cannot invent a user commitment or label its own preference as a DEC.
+The recording mode does not authorize unrelated code changes or external actions.
 
-You don't need to memorize commands for everyday use. Just ask:
+Project settings live in `.bobbin/config.json`, separate from generated
+`AGENTS.md`/`CLAUDE.md` guidance and the record index. Projects may share a vault
+while retaining independent feature and approval settings.
 
-- “We've decided people can use the first version without signing up. Remember this decision.”
-- “Before adding a login feature, check whether we've already made a related decision.”
-- “Save the problem we just solved and how we fixed it, so we can refer to it later.”
-- “Save where we stopped and what should be done next.”
+Use natural requests such as “Why did we choose this?”, “Keep this decision”,
+or “Save where we stopped.” Bobbin uses relevant records without loading the
+entire vault. Exact-payload validation and write integrity remain active in
+every approval mode.
 
-### 3. Confirm what to remember
-
-When you clearly confirm a decision or say “remember this,” the AI saves it and lets you know. You don't need to approve the same content again just to save it.
-
-If something is unclear, such as where a decision applies or whether it replaces an earlier one, the AI asks about that point first. A casual “got it” does not confirm content you haven't settled yet.
-
-### 4. Continue in a later conversation
-
-When saved notes are relevant to your work, the AI can refer to them in a new conversation. You can also ask directly:
-
-> Check the project’s saved decisions before continuing this work.
-
-Sharing the project lets another AI or someone working with you refer to the same notes.
-
-Contributions are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development and pull-request checks, and use [SECURITY.md](./SECURITY.md) for private vulnerability reports.
-
-Context Plugins is available under the [Apache License 2.0](./LICENSE).
+See [migration](MIGRATION.md), [contributing](CONTRIBUTING.md) and
+[security](SECURITY.md). Licensed under the Apache License 2.0.

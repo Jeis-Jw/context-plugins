@@ -19,10 +19,10 @@ import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-CORE = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
-DECISION_INIT = ROOT / "plugins/context-decision/skills/init/scripts/decision_init.py"
-WORKFLOW = ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
-CHECK = ROOT / "plugins/context-decision/skills/decision/scripts/decision_cli.py"
+CORE = ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py"
+DECISION_INIT = ROOT / "plugins/bobbin/skills/init/scripts/decision_init.py"
+WORKFLOW = ROOT / "plugins/bobbin/skills/decision/scripts/decision_workflow.py"
+CHECK = ROOT / "plugins/bobbin/skills/decision/scripts/decision_cli.py"
 INDEX = "context/decision/decision.index.md"
 GIT_IDENT = ["-c", "user.name=w3", "-c", "user.email=w3@example.invalid"]
 BEGIN = "<!-- BEGIN CONTEXT GENERATED:current -->"

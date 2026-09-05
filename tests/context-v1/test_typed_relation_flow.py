@@ -10,9 +10,9 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
-CORE_CLI = ROOT / "plugins/context-core/skills/context/scripts/context_cli.py"
-DECISION_WORKFLOW = ROOT / "plugins/context-decision/skills/decision/scripts/decision_workflow.py"
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pytest.ini").is_file())
+CORE_CLI = ROOT / "plugins/bobbin/skills/context/scripts/context_cli.py"
+DECISION_WORKFLOW = ROOT / "plugins/bobbin/skills/decision/scripts/decision_workflow.py"
 
 
 def load(name: str, relative: str):
@@ -25,10 +25,10 @@ def load(name: str, relative: str):
     return module
 
 
-core_cli = load("context_core_typed_relation_flow", "plugins/context-core/skills/context/scripts/context_cli.py")
-intent_cli = load("context_intent_typed_relation_flow", "plugins/context-intent/skills/intent/scripts/intent_cli.py")
-document_cli = load("context_document_typed_relation_flow", "plugins/context-document/skills/document/scripts/document_cli.py")
-decision_cli = load("context_decision_typed_relation_flow", "plugins/context-decision/skills/decision/scripts/decision_cli.py")
+core_cli = load("context_core_typed_relation_flow", "plugins/bobbin/skills/context/scripts/context_cli.py")
+intent_cli = load("context_intent_typed_relation_flow", "plugins/bobbin/skills/intent/scripts/intent_cli.py")
+document_cli = load("context_document_typed_relation_flow", "plugins/bobbin/skills/document/scripts/document_cli.py")
+decision_cli = load("context_decision_typed_relation_flow", "plugins/bobbin/skills/decision/scripts/decision_cli.py")
 
 
 def tree_digest(root: Path) -> str:

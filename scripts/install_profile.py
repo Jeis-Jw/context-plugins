@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install an explicit Context Plugins profile without merging plugin packages."""
+"""Install the single Bobbin package after checking for conflicting providers."""
 
 from __future__ import annotations
 
@@ -15,11 +15,10 @@ from typing import Any
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PROFILE_PATH = ROOT / "profiles/core-decision.json"
+PROFILE_PATH = ROOT / "profiles/bobbin.json"
 PROFILE_SCHEMA = "context-plugin-profile/v3"
 EXPECTED_PLUGINS = (
-    "context-core@context-plugins",
-    "context-decision@context-plugins",
+    "bobbin@bobbin",
 )
 HOSTS = ("codex", "claude-code")
 CLAUDE_SCOPES = ("user", "project", "local")
@@ -59,19 +58,19 @@ def load_profile(path: pathlib.Path = PROFILE_PATH) -> dict[str, Any]:
     }
     if set(profile) != expected_keys:
         raise InstallProfileError("The install profile fields do not match context-plugin-profile/v3.")
-    if profile["schema"] != PROFILE_SCHEMA or profile["name"] != "core-decision":
+    if profile["schema"] != PROFILE_SCHEMA or profile["name"] != "bobbin":
         raise InstallProfileError("The install profile identity is invalid.")
-    if profile["marketplace"] != "context-plugins":
+    if profile["marketplace"] != "bobbin":
         raise InstallProfileError("The install profile marketplace is invalid.")
     if profile["compatibility"] != "same-major":
         raise InstallProfileError("The install profile compatibility policy is invalid.")
-    if profile["release_set"] != f"context-plugins/{profile['version']}":
+    if profile["release_set"] != f"bobbin/{profile['version']}":
         raise InstallProfileError("The install profile release set is invalid.")
     plugins = profile["plugins"]
     if not isinstance(plugins, list) or not all(isinstance(selector, str) for selector in plugins):
         raise InstallProfileError("The install profile plugin list is invalid.")
     if tuple(plugins) != EXPECTED_PLUGINS:
-        raise InstallProfileError("The supported profile must keep core and decision as separate plugins.")
+        raise InstallProfileError("The supported profile must install Bobbin exactly once.")
     expected_names = {selector.split("@", 1)[0] for selector in plugins}
     minimum_versions = profile["minimum_versions"]
     if not isinstance(minimum_versions, dict) or set(minimum_versions) != expected_names:
@@ -79,7 +78,7 @@ def load_profile(path: pathlib.Path = PROFILE_PATH) -> dict[str, Any]:
     for name, minimum in minimum_versions.items():
         if _version_parts(minimum)[0] != _version_parts(profile["version"])[0]:
             raise InstallProfileError(f"{name} minimum version uses a different major.")
-    if profile["init"] != "$context-decision:init":
+    if profile["init"] != "$bobbin:init":
         raise InstallProfileError("The install profile init selector is invalid.")
     _version_parts(profile["version"])
     return profile
@@ -123,7 +122,7 @@ def validate_release_surface(profile: dict[str, Any], root: pathlib.Path = ROOT)
         expected_release_set = {
             "schema": "context-plugin-release-set/v1",
             "version": profile_version,
-            "runtime_compatibility": "same-major-plus-runtime-handshake",
+            "runtime_compatibility": "single-package",
             "automatic_update": False,
         }
         if (
@@ -233,8 +232,8 @@ def build_install_plan(
         {
             f"{_entry_name(entry)}@{_entry_marketplace(entry)}"
             for entry in installed
-            if _entry_name(entry) in expected_names
-            and _entry_marketplace(entry) not in (None, marketplace)
+            if (_entry_name(entry) in {"context-core", "context-decision", "context-assumption", "context-term", "context-intent", "context-document"}
+                or (_entry_name(entry) in expected_names and _entry_marketplace(entry) not in (None, marketplace)))
             and entry.get("enabled", True) is not False
         }
     )
@@ -319,7 +318,7 @@ def run_plan(commands: Sequence[Sequence[str]], *, dry_run: bool = False) -> Non
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Install missing core-decision plugins and fail closed below the release-set minimum."
+        description="Install Bobbin once; refuse conflicting legacy providers or an incompatible version."
     )
     parser.add_argument("--host", choices=HOSTS, required=True)
     parser.add_argument("--scope", default="user", help="Claude Code scope: user, project, or local. Codex uses user.")

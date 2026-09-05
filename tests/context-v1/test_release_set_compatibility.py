@@ -11,27 +11,12 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
-CORE_ROOT = ROOT / "plugins/context-core"
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pytest.ini").is_file())
+CORE_ROOT = ROOT / "plugins/bobbin"
 CORE_CLI = CORE_ROOT / "skills/context/scripts/context_cli.py"
-PLUGIN_NAMES = (
-    "context-core",
-    "context-decision",
-    "context-assumption",
-    "context-term",
-    "context-intent",
-    "context-document",
-)
-RELEASE_SET_VERSION = "0.15.0"
-PLUGIN_VERSIONS = {
-    "context-core": "0.14.0",
-    "context-decision": "0.14.0",
-    "context-assumption": "0.12.0",
-    "context-term": "0.12.0",
-    "context-intent": "0.12.0",
-    "context-document": "0.13.0",
-}
-CORE_VERSION = PLUGIN_VERSIONS["context-core"]
+RELEASE_SET_VERSION = "1.0.0"
+PLUGIN_VERSIONS = {"bobbin": "1.0.0"}
+CORE_VERSION = "1.0.0"
 
 
 def load(name: str, path: Path):
@@ -57,13 +42,13 @@ def set_plugin_version(root: Path, version: str) -> None:
 class ReleaseSetCompatibilityTests(unittest.TestCase):
     def test_all_semantic_adapters_share_the_same_candidate_discovery_contract(self) -> None:
         helpers = {
-            (ROOT / f"plugins/context-{owner}/skills/{owner}/scripts/core_compatibility.py").read_bytes()
+            (ROOT / f"plugins/bobbin/skills/{owner}/scripts/core_compatibility.py").read_bytes()
             for owner in ("decision", "assumption", "term", "intent", "document")
         }
         self.assertEqual(1, len(helpers))
 
-    def test_release_set_declares_component_versions_independently(self) -> None:
-        self.assertGreater(len(set(PLUGIN_VERSIONS.values())), 1)
+    def test_release_set_has_one_package_version(self) -> None:
+        self.assertEqual({"bobbin": "1.0.0"}, PLUGIN_VERSIONS)
         for catalog_path in (
             ROOT / ".claude-plugin/marketplace.json",
             ROOT / ".agents/plugins/marketplace.json",
@@ -72,17 +57,17 @@ class ReleaseSetCompatibilityTests(unittest.TestCase):
             release_set = catalog["metadata"]["release_set"]
             self.assertEqual("context-plugin-release-set/v1", release_set["schema"])
             self.assertEqual(RELEASE_SET_VERSION, release_set["version"])
-            self.assertEqual("same-major-plus-runtime-handshake", release_set["runtime_compatibility"])
+            self.assertEqual("single-package", release_set["runtime_compatibility"])
             self.assertFalse(release_set["automatic_update"])
             self.assertEqual(PLUGIN_VERSIONS, release_set["members"])
 
-    def test_mixed_pin_handshake_fails_with_a_compatible_candidate_path(self) -> None:
+    def test_foreign_runtime_fails_and_only_embedded_writer_is_suggested(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             cache = Path(temp) / "cache"
-            intent_root = cache / "context-intent/0.10.0"
-            old_core = cache / "context-core/0.6.0"
-            compatible_core = cache / f"context-core/{CORE_VERSION}"
-            shutil.copytree(ROOT / "plugins/context-intent", intent_root)
+            intent_root = cache / "bobbin/1.0.0"
+            old_core = cache / "legacy/0.6.0"
+            compatible_core = cache / f"unrelated/{CORE_VERSION}"
+            shutil.copytree(ROOT / "plugins/bobbin", intent_root)
             shutil.copytree(CORE_ROOT, old_core)
             shutil.copytree(CORE_ROOT, compatible_core)
             set_plugin_version(old_core, "0.6.0")
@@ -114,14 +99,15 @@ class ReleaseSetCompatibilityTests(unittest.TestCase):
             )
             self.assertEqual(5, completed.returncode, completed.stdout + completed.stderr)
             error = json.loads(completed.stdout)["error"]
-            self.assertEqual("core_incompatible", error["code"])
+            self.assertEqual("core_surface_mismatch", error["code"])
             candidates = error["details"]["compatible_core_candidates"]
             candidate_paths = {item["entrypoint"] for item in candidates}
             self.assertIn(
-                str((compatible_core / "skills/context/scripts/context_cli.py").resolve()),
+                str((intent_root / "skills/context/scripts/context_cli.py").resolve()),
                 candidate_paths,
             )
             self.assertNotIn(str(old_entrypoint.resolve()), candidate_paths)
+            self.assertNotIn(str((compatible_core / "skills/context/scripts/context_cli.py").resolve()), candidate_paths)
             self.assertTrue(all("runtime handshake required" in item["basis"] for item in candidates))
             self.assertEqual(
                 "diagnostic_only_no_automatic_substitution",
@@ -131,14 +117,14 @@ class ReleaseSetCompatibilityTests(unittest.TestCase):
 
     def test_doctor_warns_when_same_major_cache_latest_is_newer(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            container = Path(temp) / "context-core"
-            old_core = container / "0.10.0"
-            current_core = container / CORE_VERSION
-            future_major = container / "1.0.0"
+            container = Path(temp) / "bobbin"
+            old_core = container / "1.0.0"
+            current_core = container / "1.1.0"
+            future_major = container / "2.0.0"
             for root, version in (
-                (old_core, "0.10.0"),
-                (current_core, CORE_VERSION),
-                (future_major, "1.0.0"),
+                (old_core, "1.0.0"),
+                (current_core, "1.1.0"),
+                (future_major, "2.0.0"),
             ):
                 shutil.copytree(CORE_ROOT, root)
                 set_plugin_version(root, version)
@@ -148,8 +134,8 @@ class ReleaseSetCompatibilityTests(unittest.TestCase):
             )
             self.assertEqual(1, len(warnings))
             self.assertEqual("catalog_pin_behind_cache", warnings[0]["code"])
-            self.assertEqual("0.10.0", warnings[0]["catalog_version"])
-            self.assertEqual(CORE_VERSION, warnings[0]["cache_latest_version"])
+            self.assertEqual("1.0.0", warnings[0]["catalog_version"])
+            self.assertEqual("1.1.0", warnings[0]["cache_latest_version"])
             self.assertEqual(
                 str((current_core / "skills/context/scripts/context_cli.py").resolve()),
                 warnings[0]["compatible_candidate"],

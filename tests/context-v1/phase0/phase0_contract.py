@@ -222,7 +222,7 @@ def _manual_actions(code, required):
     selector = required["selector"]
     provider = required["marketplace"]
     source = required["source"]
-    retry = "Reload the host or start a new session, then run context-decision:init again."
+    retry = "Reload the host or start a new session, then run bobbin:init again."
     actions = {
         "core_missing": [
             f"Install {selector} explicitly from provider marketplace {provider} (source {source}).",
@@ -243,7 +243,7 @@ def _manual_actions(code, required):
             retry,
         ],
         "core_uninitialized": [
-            "context-decision:init calls the installed context-core public bootstrap surface.",
+            "bobbin:init calls the installed Bobbin core public bootstrap surface.",
             "The same explicit invocation continues with decision-area registration after core init.",
         ],
         "ready": [],
